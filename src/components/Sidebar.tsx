@@ -10,7 +10,6 @@ import {
   FileBarChart,
   Settings,
   ChevronDown,
-  ChevronUp,
   Menu,
   X,
   Users,
@@ -21,6 +20,7 @@ import {
   Layers,
   GitBranch,
   ListChecks,
+  LogOut,
 } from 'lucide-react';
 
 interface ChildItem {
@@ -85,46 +85,7 @@ const menuItems: MenuItem[] = [
   },
 ];
 
-// Leather hide SVG icon component - organic animal skin shape
-function LeatherIcon() {
-  return (
-    <svg
-      width="36"
-      height="36"
-      viewBox="0 0 48 48"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="shrink-0"
-    >
-      {/* Animal hide/skin outline shape */}
-      <path
-        d="M24 3C20 3 17 5 15 7C12 5 9 4 7 6C5 8 5 11 6 14C4 16 3 19 3 22C3 25 4 28 6 30C5 33 5 36 7 38C9 40 12 40 15 39C17 41 20 43 24 43C28 43 31 41 33 39C36 40 39 40 41 38C43 36 43 33 42 30C44 28 45 25 45 22C45 19 44 16 42 14C43 11 43 8 41 6C39 4 36 5 33 7C31 5 28 3 24 3Z"
-        stroke="white"
-        strokeWidth="2"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* Small leaf/plant detail inside */}
-      <path
-        d="M24 18C24 18 20 22 20 26C20 29 22 31 24 31C26 31 28 29 28 26C28 22 24 18 24 18Z"
-        stroke="white"
-        strokeWidth="1.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M24 18V31"
-        stroke="white"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean; setMobileOpen: (open: boolean) => void }) {
+export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setCollapsed }: { mobileOpen: boolean; setMobileOpen: (open: boolean) => void; collapsed: boolean; setCollapsed: (collapsed: boolean) => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
@@ -150,39 +111,59 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
     <>
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-[#0a1628] text-white z-40 transition-all duration-300 flex flex-col w-64 ${
+        className={`fixed top-0 left-0 h-full bg-gradient-to-b from-[#0b1a30] via-[#0a1628] to-[#071020] text-white z-40 transition-all duration-300 flex flex-col shadow-2xl shadow-black/50 ${
+          collapsed ? 'w-16' : 'w-64'
+        } ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
         {/* Header with Logo */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <LeatherIcon />
-            <div className="min-w-0">
-              <div className="text-sm font-bold leading-tight text-white">Leather Finishing</div>
-              <div className="text-sm font-bold leading-tight text-white">Tannery</div>
+        <div className={`flex items-center ${collapsed ? 'flex-col gap-2 py-4 px-2' : 'justify-between px-4 py-5'} border-b border-white/[0.06]`}>
+          {!collapsed && (
+            <div className="flex items-center gap-3">
+              <img
+                src="/images/product-logo-white.png"
+                alt="Corix"
+                className="h-12 w-12 object-contain shrink-0 brightness-[5] drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]"
+              />
+              <div className="min-w-0">
+                <div className="text-base font-bold leading-tight text-white tracking-wide">Corix</div>
+                <div className="text-[10px] leading-tight text-blue-300/80 font-medium tracking-wider uppercase mt-0.5">
+                  Powering Modern Tanneries
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+          {collapsed && (
+            <img
+              src="/images/product-logo-white.png"
+              alt="Corix"
+              className="h-8 w-8 object-contain brightness-[5] drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]"
+            />
+          )}
           <button
             onClick={() => setMobileOpen(false)}
-            className="lg:hidden text-slate-400 hover:text-white"
+            className="lg:hidden text-slate-400 hover:text-white transition-colors"
           >
             <X size={18} />
           </button>
-          <button className="hidden lg:block text-slate-400 hover:text-white">
-            <Menu size={18} />
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="hidden lg:block text-slate-400 hover:text-white transition-colors"
+          >
+            {collapsed ? <Menu size={18} /> : <X size={18} />}
           </button>
         </div>
 
         {/* Menu */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           {menuItems.map((item) => {
             const hasChildren = !!item.children;
             const active = isActive(item.path);
@@ -191,28 +172,33 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
 
             if (hasChildren) {
               return (
-                <div key={item.label}>
+                <div key={item.label} className="mb-0.5">
                   {/* Parent group button */}
                   <button
-                    onClick={() => toggleExpand(item.label)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-[13px] rounded-lg transition-colors ${
+                    onClick={() => collapsed ? (item.children?.[0] && navigate(item.children[0].path)) : toggleExpand(item.label)}
+                    className={`group w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 text-[13px] rounded-lg transition-all duration-200 ${
                       parentActive
-                        ? 'text-white'
-                        : 'text-white/90 hover:bg-white/5 hover:text-white'
+                        ? 'text-white bg-white/[0.04]'
+                        : 'text-white hover:bg-white/[0.06]'
                     }`}
+                    title={collapsed ? item.label : undefined}
                   >
-                    <span className="shrink-0 text-white/80">{item.icon}</span>
-                    <span className="flex-1 text-left font-medium">{item.label}</span>
-                    {isExpanded ? (
-                      <ChevronUp size={14} className="text-slate-500" />
-                    ) : (
-                      <ChevronDown size={14} className="text-slate-500" />
+                    <span className={`shrink-0 transition-colors duration-200 ${parentActive ? 'text-blue-400' : 'text-white/70 group-hover:text-white'}`}>
+                      {item.icon}
+                    </span>
+                    {!collapsed && (
+                      <span className="flex-1 text-left font-medium">{item.label}</span>
+                    )}
+                    {!collapsed && (
+                      <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                        <ChevronDown size={14} className="text-slate-500" />
+                      </span>
                     )}
                   </button>
 
-                  {/* Children */}
-                  {isExpanded && (
-                    <div className="mt-1 ml-5 space-y-0.5">
+                  {/* Children with animated expand */}
+                  {!collapsed && isExpanded && (
+                    <div className="mt-1 ml-4 pl-3 border-l border-white/[0.06] space-y-0.5">
                       {item.children!.map((child) => (
                         <button
                           key={child.label}
@@ -220,13 +206,15 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
                             navigate(child.path);
                             setMobileOpen(false);
                           }}
-                          className={`w-full flex items-center gap-3 text-left px-3 py-2 text-[13px] rounded-lg transition-colors ${
+                          className={`group w-full flex items-center gap-3 text-left px-3 py-2 text-[13px] rounded-lg transition-all duration-200 ${
                             isActive(child.path)
-                              ? 'bg-blue-600 text-white font-medium shadow-lg shadow-blue-600/20'
-                              : 'text-white/90 hover:bg-white/5 hover:text-white'
+                              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium shadow-lg shadow-blue-600/25'
+                              : 'text-white hover:bg-white/[0.06]'
                           }`}
                         >
-                          <span className="shrink-0">{child.icon}</span>
+                          <span className={`shrink-0 transition-colors ${isActive(child.path) ? 'text-white' : 'text-white/70 group-hover:text-white'}`}>
+                            {child.icon}
+                          </span>
                           <span className="truncate">{child.label}</span>
                         </button>
                       ))}
@@ -246,33 +234,42 @@ export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boo
                     setMobileOpen(false);
                   }
                 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 text-[13px] rounded-lg transition-colors ${
+                className={`group w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 text-[13px] rounded-lg transition-all duration-200 ${
                   active
-                    ? 'bg-blue-600 text-white font-medium shadow-lg shadow-blue-600/20'
-                    : 'text-white/90 hover:bg-white/5 hover:text-white'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium shadow-lg shadow-blue-600/25'
+                    : 'text-white hover:bg-white/[0.06]'
                 }`}
+                title={collapsed ? item.label : undefined}
               >
-                <span className="shrink-0">{item.icon}</span>
-                <span className="text-left">{item.label}</span>
+                <span className={`shrink-0 transition-colors duration-200 ${active ? 'text-white' : 'text-white/70 group-hover:text-white'}`}>
+                  {item.icon}
+                </span>
+                {!collapsed && <span className="text-left">{item.label}</span>}
               </button>
             );
           })}
         </nav>
 
         {/* User footer */}
-        <div className="border-t border-white/10 p-3">
-          <div className="flex items-center gap-3">
+        <div className="border-t border-white/[0.06] p-3">
+          <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} group`}>
             <div className="relative shrink-0">
-              <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-xs font-semibold text-white">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-md shadow-blue-500/20 ring-2 ring-white/10">
                 AU
               </div>
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-[#0a1628] rounded-full"></span>
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-[#0a1628] rounded-full shadow-sm shadow-emerald-400/50"></span>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate text-white">Admin User</div>
-              <div className="text-xs text-slate-400 truncate">Administrator</div>
-            </div>
-            <ChevronDown size={14} className="text-slate-400" />
+            {!collapsed && (
+              <>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate text-white/90">Admin User</div>
+                  <div className="text-[11px] text-slate-400/80 truncate">Administrator</div>
+                </div>
+                <button className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition-all duration-200" title="Logout">
+                  <LogOut size={14} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </aside>
