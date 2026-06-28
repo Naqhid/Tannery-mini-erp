@@ -47,49 +47,35 @@ export default function Layout() {
   };
 
   const breadcrumbs = getBreadcrumbs();
-  const pageTitle = breadcrumbMap[path] || 'Page';
 
   return (
     <div className="flex h-screen bg-[#f0f4f8]">
       <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
       <div className={`flex-1 min-w-0 transition-all duration-300 overflow-y-auto ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
         {/* Top Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200/60 flex items-center justify-between px-3 sm:px-5 lg:px-6 shadow-sm">
-          {/* Left section */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button
-              onClick={() => setMobileOpen(true)}
-              className="lg:hidden p-2 -ml-1 text-gray-500 hover:text-gray-900 rounded-xl hover:bg-gray-100 transition-all duration-200 active:scale-95"
-            >
-              <Menu size={20} />
-            </button>
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 truncate">{pageTitle}</h1>
-              <div className="flex items-center gap-1 text-[11px] sm:text-xs text-gray-400">
-                {breadcrumbs.map((crumb, i) => (
-                  <span key={i} className="flex items-center gap-1">
-                    {i > 0 && <ChevronRight size={10} className="text-gray-300" />}
-                    <span className={`truncate ${i === breadcrumbs.length - 1 ? 'text-gray-600 font-medium' : 'hover:text-gray-600 cursor-pointer transition-colors'}`}>
-                      {crumb.label}
-                    </span>
-                  </span>
-                ))}
+        <header className="bg-white border-b border-gray-200/60 shadow-sm">
+          {/* First row - Title, Logo, Actions */}
+          <div className="h-14 sm:h-16 flex items-center justify-between px-2 sm:px-4 lg:px-6">
+            {/* Left section - Hamburger + Logo */}
+            <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+              <button
+                onClick={() => setMobileOpen(true)}
+                className="lg:hidden p-2 -ml-1 text-gray-600 hover:text-blue-600 rounded-xl hover:bg-blue-50 transition-all duration-200 active:scale-95"
+              >
+                <Menu size={20} />
+              </button>
+              <div className="flex items-center shrink-0">
+                <img src="/images/company-logo.png" alt="AKM Leather" className="h-[50px] sm:h-[80px] lg:h-[120px] object-contain" />
               </div>
             </div>
-          </div>
 
-          {/* Center - Company Logo */}
-          <div className="hidden lg:flex items-center absolute left-1/2 -translate-x-1/2">
-            <img src="/images/company-logo.png" alt="AKM Leather" className="h-[140px] object-contain opacity-90" />
-          </div>
-
-          {/* Right section */}
-          <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3">
+            {/* Right section */}
+            <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3">
             {/* Search */}
             <div className={`hidden md:flex items-center rounded-xl px-3 py-2 transition-all duration-300 ${
               searchFocused
-                ? 'bg-white border border-blue-300 shadow-md shadow-blue-100 w-64'
-                : 'bg-gray-50 border border-gray-200/80 w-48 hover:border-gray-300'
+                ? 'bg-white border border-blue-400 shadow-md shadow-blue-100/50 w-64'
+                : 'bg-gray-50 border border-gray-200 w-48 hover:border-gray-300'
             }`}>
               <Search size={15} className={`shrink-0 transition-colors ${searchFocused ? 'text-blue-500' : 'text-gray-400'}`} />
               <input
@@ -102,20 +88,20 @@ export default function Layout() {
             </div>
 
             {/* Mobile search button */}
-            <button className="md:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">
+            <button className="md:hidden p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
               <Search size={18} />
             </button>
 
             {/* Notifications */}
-            <button className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all duration-200 active:scale-95">
+            <button className="relative p-2 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all duration-200 active:scale-95">
               <Bell size={19} />
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold leading-none ring-2 ring-white px-1 animate-pulse">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-gradient-to-r from-red-500 to-rose-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold leading-none ring-2 ring-white px-1 animate-pulse">
                 4
               </span>
             </button>
 
             {/* Divider */}
-            <div className="hidden sm:block h-8 w-px bg-gray-200/80 mx-1"></div>
+            <div className="hidden sm:block h-8 w-px bg-gray-200 mx-1"></div>
 
             {/* User profile */}
             <button className="flex items-center gap-2 sm:gap-2.5 p-1.5 sm:pl-2 sm:pr-3 rounded-xl hover:bg-gray-50 transition-all duration-200 active:scale-[0.98]">
@@ -132,10 +118,29 @@ export default function Layout() {
               <ChevronDown size={13} className="hidden sm:block text-gray-400" />
             </button>
           </div>
+          </div>
         </header>
 
         {/* Main Content */}
         <main className="flex-1 p-3 sm:p-4 lg:p-6">
+          {/* Breadcrumbs */}
+          <div className="flex items-center gap-1.5 mb-4 text-xs sm:text-sm">
+            <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-600 font-medium">
+              🏠
+            </span>
+            {breadcrumbs.map((crumb, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                <ChevronRight size={12} className="text-indigo-300" />
+                <span className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                  i === breadcrumbs.length - 1
+                    ? 'bg-indigo-100 text-indigo-700 font-semibold'
+                    : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer'
+                }`}>
+                  {crumb.label}
+                </span>
+              </span>
+            ))}
+          </div>
           <Outlet />
         </main>
       </div>

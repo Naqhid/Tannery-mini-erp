@@ -111,21 +111,21 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
     <>
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-gradient-to-b from-[#0b1a30] via-[#0a1628] to-[#071020] text-white z-40 transition-all duration-300 flex flex-col shadow-2xl shadow-black/50 ${
-          collapsed ? 'w-16' : 'w-64'
+        className={`fixed top-0 left-0 h-full bg-gradient-to-b from-[#0b1a30] via-[#0a1628] to-[#071020] text-white z-50 transition-all duration-300 flex flex-col shadow-2xl shadow-black/50 w-64 ${
+          collapsed ? 'lg:w-16' : 'lg:w-64'
         } ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
         {/* Header with Logo */}
-        <div className={`flex items-center ${collapsed ? 'flex-col gap-2 py-4 px-2' : 'justify-between px-4 py-5'} border-b border-white/[0.06]`}>
+        <div className={`flex items-center ${collapsed ? 'lg:flex-col lg:gap-2 lg:py-4 lg:px-2 justify-between px-4 py-5' : 'justify-between px-4 py-5'} border-b border-white/[0.06]`}>
           {!collapsed && (
             <div className="flex items-center gap-3">
               <img
@@ -142,11 +142,27 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
             </div>
           )}
           {collapsed && (
-            <img
-              src="/images/product-logo-white.png"
-              alt="Corix"
-              className="h-8 w-8 object-contain brightness-[5] drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]"
-            />
+            <>
+              {/* On mobile show full, on lg show collapsed */}
+              <div className="flex items-center gap-3 lg:hidden">
+                <img
+                  src="/images/product-logo-white.png"
+                  alt="Corix"
+                  className="h-10 w-10 object-contain shrink-0 brightness-[5] drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]"
+                />
+                <div className="min-w-0">
+                  <div className="text-sm font-bold leading-tight text-white tracking-wide">Corix</div>
+                  <div className="text-[9px] leading-tight text-blue-300/80 font-medium tracking-wider uppercase mt-0.5">
+                    Powering Modern Tanneries
+                  </div>
+                </div>
+              </div>
+              <img
+                src="/images/product-logo-white.png"
+                alt="Corix"
+                className="hidden lg:block h-8 w-8 object-contain brightness-[5] drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]"
+              />
+            </>
           )}
           <button
             onClick={() => setMobileOpen(false)}
@@ -176,7 +192,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
                   {/* Parent group button */}
                   <button
                     onClick={() => collapsed ? (item.children?.[0] && navigate(item.children[0].path)) : toggleExpand(item.label)}
-                    className={`group w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 text-[13px] rounded-lg transition-all duration-200 ${
+                    className={`group w-full flex items-center ${collapsed ? 'gap-3 lg:justify-center lg:gap-0' : 'gap-3'} px-3 py-2.5 text-[13px] rounded-lg transition-all duration-200 ${
                       parentActive
                         ? 'text-white bg-white/[0.04]'
                         : 'text-white hover:bg-white/[0.06]'
@@ -189,16 +205,24 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
                     {!collapsed && (
                       <span className="flex-1 text-left font-medium">{item.label}</span>
                     )}
+                    {collapsed && (
+                      <span className="flex-1 text-left font-medium lg:hidden">{item.label}</span>
+                    )}
                     {!collapsed && (
                       <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                        <ChevronDown size={14} className="text-slate-500" />
+                      </span>
+                    )}
+                    {collapsed && (
+                      <span className={`transition-transform duration-200 lg:hidden ${isExpanded ? 'rotate-180' : ''}`}>
                         <ChevronDown size={14} className="text-slate-500" />
                       </span>
                     )}
                   </button>
 
                   {/* Children with animated expand */}
-                  {!collapsed && isExpanded && (
-                    <div className="mt-1 ml-4 pl-3 border-l border-white/[0.06] space-y-0.5">
+                  {(!collapsed || true) && isExpanded && (
+                    <div className={`mt-1 ml-4 pl-3 border-l border-white/[0.06] space-y-0.5 ${collapsed ? 'lg:hidden' : ''}`}>
                       {item.children!.map((child) => (
                         <button
                           key={child.label}
@@ -234,7 +258,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
                     setMobileOpen(false);
                   }
                 }}
-                className={`group w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 text-[13px] rounded-lg transition-all duration-200 ${
+                className={`group w-full flex items-center ${collapsed ? 'gap-3 lg:justify-center lg:gap-0' : 'gap-3'} px-3 py-2.5 text-[13px] rounded-lg transition-all duration-200 ${
                   active
                     ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium shadow-lg shadow-blue-600/25'
                     : 'text-white hover:bg-white/[0.06]'
@@ -245,6 +269,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
                   {item.icon}
                 </span>
                 {!collapsed && <span className="text-left">{item.label}</span>}
+                {collapsed && <span className="text-left lg:hidden">{item.label}</span>}
               </button>
             );
           })}
@@ -252,7 +277,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
 
         {/* User footer */}
         <div className="border-t border-white/[0.06] p-3">
-          <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} group`}>
+          <div className={`flex items-center ${collapsed ? 'gap-3 lg:justify-center lg:gap-0' : 'gap-3'} group`}>
             <div className="relative shrink-0">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-md shadow-blue-500/20 ring-2 ring-white/10">
                 AU
@@ -269,6 +294,17 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
                   <LogOut size={14} />
                 </button>
               </>
+            )}
+            {collapsed && (
+              <div className="flex-1 min-w-0 lg:hidden flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate text-white/90">Admin User</div>
+                  <div className="text-[11px] text-slate-400/80 truncate">Administrator</div>
+                </div>
+                <button className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition-all duration-200" title="Logout">
+                  <LogOut size={14} />
+                </button>
+              </div>
             )}
           </div>
         </div>

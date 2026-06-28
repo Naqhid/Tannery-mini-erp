@@ -88,8 +88,8 @@ export default function CustomerMaster() {
             <Users size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-700 via-purple-600 to-pink-600 bg-clip-text text-transparent">Customer Master</h1>
-            <p className="text-xs text-purple-400 font-medium mt-0.5">Manage your customer database</p>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Customer Master</h1>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">Manage your customer database</p>
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
@@ -150,13 +150,13 @@ export default function CustomerMaster() {
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-blue-100/50">
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider">Code</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider">Customer Name</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider">Contact Person</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider hidden lg:table-cell">Phone</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider hidden xl:table-cell">Email</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider hidden lg:table-cell">City</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider">Status</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider w-[90px]">Actions</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-500 uppercase tracking-wider">Customer Name</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-500 uppercase tracking-wider">Contact Person</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider hidden lg:table-cell">Phone</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider hidden xl:table-cell">Email</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell">City</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider">Status</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-rose-500 uppercase tracking-wider w-[90px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -302,7 +302,7 @@ export default function CustomerMaster() {
           >
             {/* Panel */}
             <div
-              className="w-full max-w-[560px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-4"
+              className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-3"
               onClick={(e) => e.stopPropagation()}
             >
             {/* Panel Header */}
@@ -356,12 +356,14 @@ export default function CustomerMaster() {
             <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/50">
               {activeTab === 'basic' && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="relative">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 size={10} /> Customer Identity
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
                       <Input label="Customer Code" required defaultValue={selectedCustomer?.code || ''} placeholder="Auto-generated" />
-                      <span className="absolute top-0 right-0 text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-bl-lg rounded-tr-lg font-semibold">Auto</span>
+                      <Input label="Customer Name" required defaultValue={selectedCustomer?.name || ''} placeholder="Enter name" />
                     </div>
-                    <Input label="Customer Name" required defaultValue={selectedCustomer?.name || ''} placeholder="Enter name" />
                   </div>
                   <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
                     <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -402,13 +404,15 @@ export default function CustomerMaster() {
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-900 mb-1">Notes</label>
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-wider flex items-center gap-1.5">
+                      📝 Notes & Remarks
+                    </p>
                     <textarea
                       rows={3}
                       defaultValue={selectedCustomer?.notes || ''}
                       placeholder="Any additional notes..."
-                      className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all resize-none placeholder-gray-400"
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white"
                     />
                   </div>
                 </div>
@@ -446,8 +450,8 @@ export default function CustomerMaster() {
                       />
                     </div>
                   </div>
-                  <div className="p-3 rounded-xl bg-gradient-to-r from-orange-50/80 to-amber-50/80 border border-orange-100/50 space-y-3">
-                    <p className="text-[10px] font-semibold text-orange-600 uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border border-indigo-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
                       <MapPin size={10} /> Location
                     </p>
                     <div className="grid grid-cols-2 gap-3">
@@ -481,8 +485,8 @@ export default function CustomerMaster() {
 
               {activeTab === 'financial' && (
                 <div className="space-y-4">
-                  <div className="p-3 rounded-xl bg-gradient-to-r from-pink-50/80 to-rose-50/80 border border-pink-100/50 space-y-3">
-                    <p className="text-[10px] font-semibold text-pink-600 uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                       <CreditCard size={10} /> Tax Details
                     </p>
                     <div className="grid grid-cols-2 gap-3">
