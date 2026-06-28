@@ -8,9 +8,11 @@ import ProductMaster from './pages/ProductMaster';
 import CustomerMaster from './pages/CustomerMaster';
 import PlaceholderPage from './pages/PlaceholderPage';
 
+const basename = import.meta.env.BASE_URL;
+
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
