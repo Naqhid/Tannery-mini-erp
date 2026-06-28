@@ -64,7 +64,7 @@ export default function ProductMaster() {
       </div>
 
       {/* Main Content - Split Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,5fr)] gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,5fr)] gap-5">
         {/* Left - Product Details Form */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="px-4 py-2.5 border-b border-gray-100">
@@ -174,7 +174,7 @@ export default function ProductMaster() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+              <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-gray-100">
                 <Button variant="teal">Save</Button>
                 <Button variant="outline" icon={<RotateCcw size={14} />}>Reset</Button>
                 <Button variant="danger" icon={<Trash2 size={14} />}>Delete</Button>

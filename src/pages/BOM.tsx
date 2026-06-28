@@ -64,24 +64,24 @@ export default function BOM() {
   return (
     <div className="space-y-5">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Bill of Materials (BOM)</h1>
           <p className="text-xs text-gray-500 mt-0.5">BOM / Recipe &gt; BOM</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" icon={<History size={14} />}>Revision History</Button>
           <Button variant="teal" size="sm" icon={<Plus size={14} />}>New Revision</Button>
         </div>
       </div>
 
       {/* BOM Header + Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-5">
         {/* BOM Header Form */}
         <Card title="BOM Header">
           <div className="space-y-3">
             {/* Row 1 */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <Input label="BOM / Recipe Code" required defaultValue="BOM-00037" />
               <Input label="BOM / Recipe Name" required defaultValue="Black Finish - Cow (1.2-1.4mm)" />
               <Input label="Product / Leather" required defaultValue="Finished Leather - Black (1.2-1.4mm)" />
@@ -96,7 +96,7 @@ export default function BOM() {
               />
             </div>
             {/* Row 2 */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Select
                 label="Process Type"
                 required
@@ -125,7 +125,7 @@ export default function BOM() {
               />
             </div>
             {/* Row 3 */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input label="Valid From" required type="date" defaultValue="2024-05-01" />
               <Input label="Valid To" type="date" defaultValue="2024-12-31" />
               <div>
@@ -179,9 +179,9 @@ export default function BOM() {
 
       {/* BOM Items Table */}
       <Card>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h3 className="text-sm font-semibold text-gray-900">BOM Items</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="teal" icon={<Plus size={14} />}>Add Item</Button>
             <Button size="sm" variant="outline" icon={<Upload size={14} />}>Import from Template</Button>
             <Button size="sm" variant="danger" icon={<Trash2 size={14} />}>Remove</Button>
@@ -191,10 +191,9 @@ export default function BOM() {
         <Table columns={itemColumns} data={items} />
 
         {/* Total Row */}
-        <div className="flex items-center border-t border-gray-200 mt-1 pt-2 text-xs font-semibold text-gray-900">
-          <span className="pl-[310px]">Total</span>
-          <span className="pl-[135px]">{totalQty.toFixed(3)}</span>
-          <span className="pl-[195px]">{totalAmount.toFixed(2)}</span>
+        <div className="flex items-center justify-end gap-6 border-t border-gray-200 mt-1 pt-2 text-xs font-semibold text-gray-900">
+          <span>Total Qty: {totalQty.toFixed(3)}</span>
+          <span>Total Amount: ₹{totalAmount.toFixed(2)}</span>
         </div>
 
         {/* Footer note */}

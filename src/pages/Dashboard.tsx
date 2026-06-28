@@ -114,7 +114,7 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mt-4 pt-3 border-t border-gray-100">
             <span className="text-xs text-gray-500">Showing 1-5 of 124 orders</span>
             <div className="flex items-center gap-1">
               <button className="p-1 rounded hover:bg-gray-100 text-gray-400"><ChevronLeft size={14} /></button>
@@ -146,8 +146,8 @@ export default function Dashboard() {
       <Card title="Production Schedule" subtitle="Active batches in progress">
         <div className="space-y-4">
           {productionSchedule.map((batch) => (
-            <div key={batch.batch} className="flex items-center gap-4">
-              <div className="w-32 shrink-0">
+            <div key={batch.batch} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="sm:w-32 shrink-0">
                 <p className="text-sm font-medium text-gray-900">{batch.batch}</p>
                 <p className="text-xs text-gray-500">{batch.recipe}</p>
               </div>
@@ -163,7 +163,7 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              <div className="w-20 text-right">
+              <div className="sm:w-20 sm:text-right">
                 <span className="text-xs text-gray-500">ETA: {batch.eta}</span>
               </div>
             </div>

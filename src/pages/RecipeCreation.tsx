@@ -109,7 +109,7 @@ export default function RecipeCreation() {
           </div>
           <Table columns={processStagesColumns} data={stages} />
           {/* Bottom Actions */}
-          <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
             <Button variant="outline" size="sm" icon={<ChevronUp size={14} />}>Move Up</Button>
             <Button variant="outline" size="sm" icon={<ChevronDown size={14} />}>Move Down</Button>
             <Button variant="outline" size="sm" icon={<Copy size={14} />}>Copy Stage</Button>
@@ -150,12 +150,12 @@ export default function RecipeCreation() {
   return (
     <div className="space-y-5">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Recipe - RC-00037</h1>
           <p className="text-xs text-gray-500 mt-0.5">BOM / Recipe &gt; Recipe Creation &gt; RC-00037</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline">Save as Draft</Button>
           <Button variant="outline" icon={<X size={14} />}>Cancel</Button>
           <Button variant="teal" icon={<Save size={14} />}>Save Recipe</Button>
