@@ -152,7 +152,7 @@ export default function Sidebar() {
       {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-[#0a1628] text-white rounded-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-[#0a1628] text-white rounded-lg shadow-lg"
       >
         <Menu size={20} />
       </button>
