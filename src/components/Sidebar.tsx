@@ -129,7 +129,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
           {!collapsed && (
             <div className="flex items-center gap-3">
               <img
-                src="/images/product-logo-white.png"
+                src={`${import.meta.env.BASE_URL}images/product-logo-white.png`}
                 alt="Corix"
                 className="h-12 w-12 object-contain shrink-0 brightness-[5] drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]"
               />
@@ -146,7 +146,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
               {/* On mobile show full, on lg show collapsed */}
               <div className="flex items-center gap-3 lg:hidden">
                 <img
-                  src="/images/product-logo-white.png"
+                  src={`${import.meta.env.BASE_URL}images/product-logo-white.png`}
                   alt="Corix"
                   className="h-10 w-10 object-contain shrink-0 brightness-[5] drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]"
                 />
@@ -158,7 +158,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
                 </div>
               </div>
               <img
-                src="/images/product-logo-white.png"
+                src={`${import.meta.env.BASE_URL}images/product-logo-white.png`}
                 alt="Corix"
                 className="hidden lg:block h-8 w-8 object-contain brightness-[5] drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]"
               />

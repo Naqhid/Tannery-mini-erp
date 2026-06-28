@@ -65,7 +65,7 @@ export default function Layout() {
                 <Menu size={20} />
               </button>
               <div className="flex items-center shrink-0">
-                <img src="/images/company-logo.png" alt="AKM Leather" className="h-[50px] sm:h-[80px] lg:h-[120px] object-contain" />
+                <img src={`${import.meta.env.BASE_URL}images/company-logo.png`} alt="AKM Leather" className="h-[50px] sm:h-[80px] lg:h-[120px] object-contain" />
               </div>
             </div>
 
