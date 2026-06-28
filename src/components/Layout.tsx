@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Search, Bell, ChevronDown } from 'lucide-react';
+import { Search, Bell, ChevronDown, Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 
 const breadcrumbMap: Record<string, string> = {
@@ -33,6 +34,7 @@ const parentMap: Record<string, string> = {
 export default function Layout() {
   const location = useLocation();
   const path = location.pathname;
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const getBreadcrumbs = () => {
     const crumbs: { label: string }[] = [];
@@ -47,21 +49,29 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-[#f1f5f9]">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
       <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 shrink-0 relative z-30">
-          <div className="ml-10 lg:ml-0">
-            <h1 className="text-base sm:text-lg font-semibold text-gray-900">{pageTitle}</h1>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
-              {breadcrumbs.map((crumb, i) => (
-                <span key={i} className="flex items-center gap-1.5">
-                  {i > 0 && <span className="text-gray-300">›</span>}
-                  <span className={i === breadcrumbs.length - 1 ? 'text-gray-700' : ''}>
-                    {crumb.label}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="lg:hidden p-2 -ml-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+            >
+              <Menu size={20} />
+            </button>
+            <div>
+              <h1 className="text-base sm:text-lg font-semibold text-gray-900">{pageTitle}</h1>
+              <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                {breadcrumbs.map((crumb, i) => (
+                  <span key={i} className="flex items-center gap-1.5">
+                    {i > 0 && <span className="text-gray-300">›</span>}
+                    <span className={i === breadcrumbs.length - 1 ? 'text-gray-700' : ''}>
+                      {crumb.label}
+                    </span>
                   </span>
-                </span>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 

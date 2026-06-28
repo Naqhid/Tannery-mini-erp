@@ -124,14 +124,13 @@ function LeatherIcon() {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean; setMobileOpen: (open: boolean) => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     Masters: true,
     'BOM / Recipe': true,
   });
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   const toggleExpand = (label: string) => {
     setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -149,15 +148,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-[#0a1628] text-white rounded-lg shadow-lg"
-      >
-        <Menu size={20} />
-      </button>
-
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-40"
