@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   ShoppingCart,
   Package,
@@ -15,12 +16,24 @@ import {
   Eye,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
+import api from '../lib/api';
 
-const stats = [
-  { label: 'Total Sales Orders', value: '124', change: '+12%', up: true, icon: <ShoppingCart size={22} />, color: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50', textColor: 'text-blue-600' },
-  { label: 'Active Products', value: '86', change: '+5%', up: true, icon: <Package size={22} />, color: 'from-emerald-500 to-emerald-600', bgLight: 'bg-emerald-50', textColor: 'text-emerald-600' },
-  { label: 'Production Batches', value: '42', change: '-3%', up: false, icon: <Factory size={22} />, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
-  { label: 'Inventory Value', value: '₹2.4M', change: '+8%', up: true, icon: <TrendingUp size={22} />, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
+interface DashboardStat {
+  label: string;
+  value: string;
+  change: string;
+  up: boolean;
+  icon: React.ReactNode;
+  color: string;
+  bgLight: string;
+  textColor: string;
+}
+
+const defaultStats: DashboardStat[] = [
+  { label: 'Total Customers', value: '--', change: '+12%', up: true, icon: <ShoppingCart size={22} />, color: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50', textColor: 'text-blue-600' },
+  { label: 'Active Products', value: '--', change: '+5%', up: true, icon: <Package size={22} />, color: 'from-emerald-500 to-emerald-600', bgLight: 'bg-emerald-50', textColor: 'text-emerald-600' },
+  { label: 'Total Suppliers', value: '--', change: '+3%', up: true, icon: <Factory size={22} />, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
+  { label: 'Active Recipes', value: '--', change: '+8%', up: true, icon: <TrendingUp size={22} />, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
 ];
 
 const recentOrders = [
@@ -63,6 +76,22 @@ const statusBadge = (status: string) => {
 };
 
 export default function Dashboard() {
+  const [stats, setStats] = useState<DashboardStat[]>(defaultStats);
+
+  useEffect(() => {
+    api<{ data: { stats: DashboardStat[] } }>('/dashboard/stats')
+      .then((res) => {
+        const s = res.data.stats;
+        setStats([
+          { label: 'Total Customers', value: s[0].value, change: '+12%', up: true, icon: <ShoppingCart size={22} />, color: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50', textColor: 'text-blue-600' },
+          { label: 'Active Products', value: s[1].value, change: '+5%', up: true, icon: <Package size={22} />, color: 'from-emerald-500 to-emerald-600', bgLight: 'bg-emerald-50', textColor: 'text-emerald-600' },
+          { label: 'Total Suppliers', value: s[2].value, change: '+3%', up: true, icon: <Factory size={22} />, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
+          { label: 'Active Recipes', value: s[3].value, change: '+8%', up: true, icon: <TrendingUp size={22} />, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
+        ]);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="space-y-5 sm:space-y-6">
       {/* Stats Grid */}

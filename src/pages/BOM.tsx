@@ -1,35 +1,57 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Upload, History } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Table from '../components/ui/Table';
+import api from '../lib/api';
 
 interface BOMItemRow {
   id: number;
-  materialCode: string;
-  materialName: string;
+  material_code: string;
+  material_name: string;
   type: string;
   uom: string;
   qty: number;
-  unitCost: number;
+  unit_cost: number;
   amount: number;
   remarks: string;
 }
 
-const bomItems: BOMItemRow[] = [
-  { id: 1, materialCode: 'MAT-00052', materialName: 'Chrome Powder 33%', type: 'Chemical', uom: 'Kg', qty: 0.110, unitCost: 76.00, amount: 8.36, remarks: 'High quality chrome' },
-  { id: 2, materialCode: 'MAT-00051', materialName: 'Sodium Sulphide (60%)', type: 'Chemical', uom: 'Kg', qty: 0.075, unitCost: 62.00, amount: 4.65, remarks: '--' },
-  { id: 3, materialCode: 'MAT-00050', materialName: 'Formic Acid', type: 'Chemical', uom: 'Ltr', qty: 0.050, unitCost: 28.00, amount: 1.40, remarks: '--' },
-  { id: 4, materialCode: 'MAT-00049', materialName: 'Syntan A 10%', type: 'Chemical', uom: 'Kg', qty: 0.100, unitCost: 95.00, amount: 9.50, remarks: '--' },
-  { id: 5, materialCode: 'MAT-00047', materialName: 'Fatliquor DP', type: 'Chemical', uom: 'Ltr', qty: 0.140, unitCost: 140.00, amount: 19.60, remarks: '--' },
-  { id: 6, materialCode: 'MAT-00007', materialName: 'Dye - Black', type: 'Chemical', uom: 'Kg', qty: 0.020, unitCost: 120.00, amount: 2.40, remarks: '--' },
-  { id: 7, materialCode: 'MAT-00046', materialName: 'Acrylic Finishing Resin', type: 'Chemical', uom: 'Kg', qty: 0.030, unitCost: 110.00, amount: 3.30, remarks: 'Gloss & finish' },
-];
+interface BOM {
+  id?: number;
+  code: string;
+  name: string;
+  leather_type: string;
+  process_type: string;
+  thickness: string;
+  uom: string;
+  valid_from: string;
+  valid_to: string;
+  status: string;
+  description: string;
+}
 
 export default function BOM() {
-  const [items] = useState<BOMItemRow[]>(bomItems);
+  const [items, setItems] = useState<BOMItemRow[]>([]);
+  const [bom, setBom] = useState<BOM | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchBOM = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api<{ data: BOM & { items: BOMItemRow[] } }>('/boms/1');
+      setBom(res.data);
+      setItems(res.data.items || []);
+    } catch {
+      // Fallback if API not available
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchBOM(); }, [fetchBOM]);
 
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
   const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
@@ -39,15 +61,15 @@ export default function BOM() {
       <input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" />
     )},
     { key: 'id', header: '#', width: '35px' },
-    { key: 'materialCode', header: 'Material Code', width: '110px' },
-    { key: 'materialName', header: 'Material Name', width: '180px' },
+    { key: 'material_code', header: 'Material Code', width: '110px' },
+    { key: 'material_name', header: 'Material Name', width: '180px' },
     { key: 'type', header: 'Type', width: '80px' },
     { key: 'uom', header: 'UOM', width: '55px' },
     { key: 'qty', header: 'Qty / Sq. Ft.', width: '95px', render: (row: BOMItemRow) => (
       <span>{row.qty.toFixed(3)}</span>
     )},
-    { key: 'unitCost', header: 'Unit Cost (Rs)', width: '100px', render: (row: BOMItemRow) => (
-      <span>{row.unitCost.toFixed(2)}</span>
+    { key: 'unit_cost', header: 'Unit Cost (Rs)', width: '100px', render: (row: BOMItemRow) => (
+      <span>{row.unit_cost.toFixed(2)}</span>
     )},
     { key: 'amount', header: 'Amount (Rs)', width: '95px', render: (row: BOMItemRow) => (
       <span>{row.amount.toFixed(2)}</span>
@@ -60,6 +82,8 @@ export default function BOM() {
       </div>
     )},
   ];
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading BOM...</div>;
 
   return (
     <div className="space-y-5">
@@ -82,9 +106,9 @@ export default function BOM() {
           <div className="space-y-3">
             {/* Row 1 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Input label="BOM / Recipe Code" required defaultValue="BOM-00037" />
-              <Input label="BOM / Recipe Name" required defaultValue="Black Finish - Cow (1.2-1.4mm)" />
-              <Input label="Product / Leather" required defaultValue="Finished Leather - Black (1.2-1.4mm)" />
+              <Input label="BOM / Recipe Code" required defaultValue={bom?.code || ''} />
+              <Input label="BOM / Recipe Name" required defaultValue={bom?.name || ''} />
+              <Input label="Product / Leather" required defaultValue={bom?.name || ''} />
               <Select
                 label="Leather Type"
                 options={[
@@ -92,7 +116,7 @@ export default function BOM() {
                   { value: 'buffalo', label: 'Buffalo' },
                   { value: 'goat', label: 'Goat' },
                 ]}
-                defaultValue="cow"
+                defaultValue={bom?.leather_type || 'cow'}
               />
             </div>
             {/* Row 2 */}
@@ -105,7 +129,7 @@ export default function BOM() {
                   { value: 'tanning', label: 'Tanning' },
                   { value: 'dyeing', label: 'Dyeing' },
                 ]}
-                defaultValue="finishing"
+                defaultValue={bom?.process_type || 'finishing'}
               />
               <Select
                 label="Thickness"
@@ -113,7 +137,7 @@ export default function BOM() {
                   { value: '1.2-1.4', label: '1.2 - 1.4 mm' },
                   { value: '1.4-1.6', label: '1.4 - 1.6 mm' },
                 ]}
-                defaultValue="1.2-1.4"
+                defaultValue={bom?.thickness || '1.2-1.4'}
               />
               <Select
                 label="UOM"
@@ -121,13 +145,13 @@ export default function BOM() {
                   { value: 'sqft', label: 'Sq. Ft.' },
                   { value: 'sqm', label: 'Sq. M.' },
                 ]}
-                defaultValue="sqft"
+                defaultValue={bom?.uom || 'sqft'}
               />
             </div>
             {/* Row 3 */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Input label="Valid From" required type="date" defaultValue="2024-05-01" />
-              <Input label="Valid To" type="date" defaultValue="2024-12-31" />
+              <Input label="Valid From" required type="date" defaultValue={bom?.valid_from || ''} />
+              <Input label="Valid To" type="date" defaultValue={bom?.valid_to || ''} />
               <div>
                 <label className="block text-xs font-medium text-gray-900 mb-1">Status</label>
                 <span className="inline-flex px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">Active</span>
@@ -138,7 +162,7 @@ export default function BOM() {
               <label className="block text-xs font-medium text-gray-900 mb-1">Description / Notes</label>
               <textarea
                 rows={2}
-                defaultValue="Standard finishing recipe for black finished leather. Suitable for cow leather thickness 1.2-1.4 mm. Provides smooth finish and good color fastness."
+                defaultValue={bom?.description || ''}
                 className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
               />
             </div>

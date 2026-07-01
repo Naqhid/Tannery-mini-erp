@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -21,57 +21,115 @@ import {
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import api from '../lib/api';
 
 interface Product {
+  id?: number;
   code: string;
   name: string;
   category: string;
-  leatherType: string;
+  leather_type: string;
   uom: string;
   thickness: string;
   status: string;
   color?: string;
-  finishType?: string;
+  finish_type?: string;
   description?: string;
-  standardSize?: string;
+  standard_size?: string;
   grade?: string;
-  salesPrice?: string;
-  hsnCode?: string;
+  sales_price?: string;
+  hsn_code?: string;
 }
 
-const initialProducts: Product[] = [
-  { code: 'PRD-00018', name: 'Finished Leather - Black', category: 'Finished Leather', leatherType: 'Cow', uom: 'Sq. Ft.', thickness: '1.2 - 1.4 mm', status: 'Active', color: 'Black', finishType: 'semi-aniline', description: 'Semi aniline finished leather, Black color', standardSize: 'As per Customer Requirement', grade: 'a', salesPrice: '125.00', hsnCode: '4107' },
-  { code: 'PRD-00017', name: 'Finished Leather - Brown', category: 'Finished Leather', leatherType: 'Cow', uom: 'Sq. Ft.', thickness: '1.2 - 1.4 mm', status: 'Active', color: 'Brown', finishType: 'full-grain', salesPrice: '130.00', hsnCode: '4107', grade: 'a' },
-  { code: 'PRD-00016', name: 'Finished Leather - Tan', category: 'Finished Leather', leatherType: 'Cow', uom: 'Sq. Ft.', thickness: '1.0 - 1.2 mm', status: 'Active', color: 'Tan', finishType: 'nappa', salesPrice: '140.00', hsnCode: '4107', grade: 'a' },
-  { code: 'PRD-00015', name: 'Suede Leather - Grey', category: 'Finished Leather', leatherType: 'Goat', uom: 'Sq. Ft.', thickness: '1.0 - 1.2 mm', status: 'Active', color: 'Grey', finishType: 'suede', salesPrice: '110.00', hsnCode: '4107', grade: 'b' },
-  { code: 'PRD-00014', name: 'Nubuck Leather - Brown', category: 'Finished Leather', leatherType: 'Buffalo', uom: 'Sq. Ft.', thickness: '1.2 - 1.4 mm', status: 'Active', color: 'Brown', finishType: 'full-grain', salesPrice: '150.00', hsnCode: '4107', grade: 'a' },
-  { code: 'PRD-00013', name: 'Patent Leather - Black', category: 'Finished Leather', leatherType: 'Cow', uom: 'Sq. Ft.', thickness: '1.0 - 1.2 mm', status: 'Inactive', color: 'Black', finishType: 'full-grain', salesPrice: '160.00', hsnCode: '4107', grade: 'a' },
-  { code: 'PRD-00012', name: 'Pull Up Leather - Dark Brown', category: 'Finished Leather', leatherType: 'Cow', uom: 'Sq. Ft.', thickness: '1.2 - 1.4 mm', status: 'Active', color: 'Dark Brown', finishType: 'pull-up', salesPrice: '135.00', hsnCode: '4107', grade: 'a' },
-  { code: 'PRD-00011', name: 'Crust Leather', category: 'Semi Finished', leatherType: 'Cow', uom: 'Sq. Ft.', thickness: '1.4 - 1.6 mm', status: 'Active', color: 'Natural', finishType: 'semi-aniline', salesPrice: '85.00', hsnCode: '4104', grade: 'b' },
-  { code: 'PRD-00010', name: 'Wet Blue', category: 'Semi Finished', leatherType: 'Cow', uom: 'Sq. Ft.', thickness: '1.4 - 1.6 mm', status: 'Active', color: 'Blue', salesPrice: '60.00', hsnCode: '4104', grade: 'b' },
-  { code: 'PRD-00009', name: 'Split Leather', category: 'Semi Finished', leatherType: 'Buffalo', uom: 'Sq. Ft.', thickness: '1.0 - 1.2 mm', status: 'Active', color: 'Natural', salesPrice: '45.00', hsnCode: '4104', grade: 'c' },
-];
+const emptyProduct: Product = {
+  code: '', name: '', category: 'Finished Leather', leather_type: 'cow', uom: 'Sq. Ft.',
+  thickness: '', status: 'Active', color: '', finish_type: '', description: '',
+  standard_size: '', grade: 'a', sales_price: '', hsn_code: '',
+};
 
 export default function ProductMaster() {
-  const [products] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stats, setStats] = useState({ total: 0, active: 0 });
+  const [loading, setLoading] = useState(true);
   const [statusToggle, setStatusToggle] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [formData, setFormData] = useState<Product>(emptyProduct);
   const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'pricing'>('basic');
   const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
+      const res = await api<{ data: Product[]; total: number }>(`/products${params}`);
+      setProducts(res.data || []);
+    } catch {
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await api<{ data: { total: number; active: number } }>('/products/stats');
+      setStats(res.data);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const openPanel = (product?: Product) => {
-    setSelectedProduct(product || null);
-    setStatusToggle(product ? product.status === 'Active' : true);
+    if (product) {
+      setSelectedProduct(product);
+      setFormData({ ...emptyProduct, ...product });
+      setStatusToggle(product.status === 'Active');
+    } else {
+      setSelectedProduct(null);
+      setFormData(emptyProduct);
+      setStatusToggle(true);
+    }
     setActiveTab('basic');
     setShowPanel(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name) return;
+    setSaving(true);
+    try {
+      const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
+      if (selectedProduct?.id) {
+        await api(`/products/${selectedProduct.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        await api('/products', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      setShowPanel(false);
+      fetchProducts();
+      fetchStats();
+    } catch (err) {
+      alert('Failed to save product: ' + (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this product?')) return;
+    try {
+      await api(`/products/${id}`, { method: 'DELETE' });
+      setShowPanel(false);
+      fetchProducts();
+      fetchStats();
+    } catch (err) {
+      alert('Failed to delete: ' + (err as Error).message);
+    }
+  };
+
+  const updateField = (field: keyof Product, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -93,12 +151,12 @@ export default function ProductMaster() {
               <Package size={12} className="text-teal-600" />
             </div>
             <span className="text-xs text-teal-600 font-medium">Total:</span>
-            <span className="text-sm font-bold text-teal-800">32</span>
+            <span className="text-sm font-bold text-teal-800">{stats.total}</span>
           </div>
           <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg border border-emerald-100 shadow-sm">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs text-emerald-600 font-medium">Active:</span>
-            <span className="text-sm font-bold text-emerald-800">29</span>
+            <span className="text-sm font-bold text-emerald-800">{stats.active}</span>
           </div>
         </div>
       </div>
@@ -149,7 +207,11 @@ export default function ProductMaster() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredProducts.map((p, index) => (
+              {loading ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+              ) : products.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No products found</td></tr>
+              ) : products.map((p, index) => (
                 <tr key={p.code} className={`hover:bg-teal-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(p)}>
                   <td className="py-3 px-4 relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${p.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
@@ -171,7 +233,7 @@ export default function ProductMaster() {
                     </span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
-                    <span className="text-amber-700 font-medium text-xs">{p.leatherType}</span>
+                    <span className="text-amber-700 font-medium text-xs">{p.leather_type}</span>
                   </td>
                   <td className="py-3 px-4 hidden xl:table-cell">
                     <span className="text-sky-600 text-xs font-medium">{p.thickness}</span>
@@ -191,7 +253,7 @@ export default function ProductMaster() {
                       <button onClick={(e) => { e.stopPropagation(); openPanel(p); }} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-100 transition-all">
                         <Edit2 size={14} />
                       </button>
-                      <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all">
+                      <button onClick={(e) => { e.stopPropagation(); p.id && handleDelete(p.id); }} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -204,7 +266,7 @@ export default function ProductMaster() {
 
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
-          {filteredProducts.map((p) => (
+          {products.map((p) => (
             <div key={p.code} className="p-4 hover:bg-teal-50/30 transition-colors active:bg-teal-50" onClick={() => openPanel(p)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -220,7 +282,7 @@ export default function ProductMaster() {
                   <p className="text-sm font-semibold text-gray-900 mt-1.5">{p.name}</p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 rounded text-blue-600 text-[10px] font-medium">{p.category}</span>
-                    <span className="text-amber-600 font-medium">{p.leatherType}</span>
+                    <span className="text-amber-600 font-medium">{p.leather_type}</span>
                     <span className="text-sky-600">{p.thickness}</span>
                   </div>
                 </div>
@@ -228,7 +290,7 @@ export default function ProductMaster() {
                   <button onClick={(e) => { e.stopPropagation(); openPanel(p); }} className="p-2 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
                     <Edit2 size={14} />
                   </button>
-                  <button onClick={(e) => e.stopPropagation()} className="p-2 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all">
+                  <button onClick={(e) => { e.stopPropagation(); p.id && handleDelete(p.id); }} className="p-2 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -315,8 +377,8 @@ export default function ProductMaster() {
                         <Package size={10} /> Product Identity
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Product Code" required defaultValue={selectedProduct?.code || ''} placeholder="Auto-generated" />
-                        <Input label="Product Name" required defaultValue={selectedProduct?.name || ''} placeholder="Enter product name" />
+                        <Input label="Product Code" required defaultValue={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                        <Input label="Product Name" required defaultValue={formData.name || ''} placeholder="Enter product name" onChange={(e) => updateField('name', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
@@ -329,14 +391,14 @@ export default function ProductMaster() {
                           { value: 'finished', label: 'Finished Leather' },
                           { value: 'semi', label: 'Semi Finished' },
                           { value: 'raw', label: 'Raw Material' },
-                        ]} defaultValue={selectedProduct?.category === 'Finished Leather' ? 'finished' : selectedProduct?.category === 'Semi Finished' ? 'semi' : ''} />
+                        ]} defaultValue={formData.category === 'Finished Leather' ? 'finished' : formData.category === 'Semi Finished' ? 'semi' : ''} onChange={(e) => updateField('category', e.target.value === 'finished' ? 'Finished Leather' : e.target.value === 'semi' ? 'Semi Finished' : '')} />
                         <Select label="Leather Type" required options={[
                           { value: '', label: 'Select type' },
                           { value: 'cow', label: 'Cow' },
                           { value: 'buffalo', label: 'Buffalo' },
                           { value: 'goat', label: 'Goat' },
                           { value: 'sheep', label: 'Sheep' },
-                        ]} defaultValue={selectedProduct?.leatherType?.toLowerCase() || ''} />
+                        ]} defaultValue={formData.leather_type?.toLowerCase() || ''} onChange={(e) => updateField('leather_type', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
@@ -345,7 +407,8 @@ export default function ProductMaster() {
                       </p>
                       <textarea
                         rows={3}
-                        defaultValue={selectedProduct?.description || ''}
+                        defaultValue={formData.description || ''}
+                      onChange={(e) => updateField('description', e.target.value)}
                         placeholder="Product description..."
                         className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white"
                       />
@@ -364,22 +427,22 @@ export default function ProductMaster() {
                           { value: 'sqft', label: 'Sq. Ft.' },
                           { value: 'sqm', label: 'Sq. M.' },
                           { value: 'kg', label: 'Kg' },
-                        ]} defaultValue={selectedProduct?.uom === 'Sq. Ft.' ? 'sqft' : 'sqm'} />
+                        ]} defaultValue={formData.uom === 'Sq. Ft.' ? 'sqft' : 'sqm'} onChange={(e) => updateField('uom', e.target.value === 'sqft' ? 'Sq. Ft.' : 'Sq. M.')} />
                         <Select label="Thickness (mm)" options={[
                           { value: '1.2-1.4', label: '1.2 - 1.4 mm' },
                           { value: '1.0-1.2', label: '1.0 - 1.2 mm' },
                           { value: '1.4-1.6', label: '1.4 - 1.6 mm' },
                           { value: '0.8-1.0', label: '0.8 - 1.0 mm' },
-                        ]} defaultValue={selectedProduct?.thickness?.includes('1.2') ? '1.2-1.4' : selectedProduct?.thickness?.includes('1.0') ? '1.0-1.2' : '1.4-1.6'} />
+                        ]} defaultValue={formData.thickness?.includes('1.2') ? '1.2-1.4' : formData.thickness?.includes('1.0') ? '1.0-1.2' : '1.4-1.6'} onChange={(e) => updateField('thickness', e.target.value)} />
                       </div>
-                      <Input label="Standard Size" defaultValue={selectedProduct?.standardSize || ''} placeholder="e.g. As per Customer Requirement" />
+                      <Input label="Standard Size" defaultValue={formData.standard_size || ''} placeholder="e.g. As per Customer Requirement" onChange={(e) => updateField('standard_size', e.target.value)} />
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
                         <Palette size={10} /> Finish & Appearance
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Color / Shade" defaultValue={selectedProduct?.color || ''} placeholder="e.g. Black, Brown" />
+                        <Input label="Color / Shade" defaultValue={formData.color || ''} placeholder="e.g. Black, Brown" onChange={(e) => updateField('color', e.target.value)} />
                         <Select label="Finish Type" options={[
                           { value: '', label: 'Select finish' },
                           { value: 'semi-aniline', label: 'Semi Aniline' },
@@ -387,7 +450,7 @@ export default function ProductMaster() {
                           { value: 'nappa', label: 'Nappa' },
                           { value: 'suede', label: 'Suede' },
                           { value: 'pull-up', label: 'Pull-Up' },
-                        ]} defaultValue={selectedProduct?.finishType || ''} />
+                        ]} defaultValue={formData.finish_type || ''} onChange={(e) => updateField('finish_type', e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -400,8 +463,8 @@ export default function ProductMaster() {
                         <Tag size={10} /> Pricing
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Sales Price (₹ / Sq. Ft.)" defaultValue={selectedProduct?.salesPrice || ''} placeholder="e.g. 125.00" />
-                        <Input label="HSN Code" defaultValue={selectedProduct?.hsnCode || ''} placeholder="e.g. 4107" />
+                        <Input label="Sales Price (₹ / Sq. Ft.)" defaultValue={formData.sales_price || ''} placeholder="e.g. 125.00" onChange={(e) => updateField('sales_price', e.target.value)} />
+                        <Input label="HSN Code" defaultValue={formData.hsn_code || ''} placeholder="e.g. 4107" onChange={(e) => updateField('hsn_code', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border border-indigo-100/50 space-y-3">
@@ -412,7 +475,7 @@ export default function ProductMaster() {
                         { value: 'a', label: 'A Grade (Premium)' },
                         { value: 'b', label: 'B Grade (Standard)' },
                         { value: 'c', label: 'C Grade (Economy)' },
-                      ]} defaultValue={selectedProduct?.grade || 'a'} />
+                      ]} defaultValue={formData.grade || 'a'} onChange={(e) => updateField('grade', e.target.value)} />
                     </div>
                     <div className="p-3 rounded-lg bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200">
                       <p className="text-xs text-teal-700 font-semibold flex items-center gap-1.5">💡 Info</p>
@@ -440,7 +503,7 @@ export default function ProductMaster() {
               <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-teal-50/30 shrink-0 rounded-b-2xl">
                 <div className="flex items-center justify-between">
                   {selectedProduct ? (
-                    <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95">
+                    <button onClick={() => selectedProduct?.id && handleDelete(selectedProduct.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95">
                       <Trash2 size={13} /> Delete
                     </button>
                   ) : <div />}
@@ -451,8 +514,8 @@ export default function ProductMaster() {
                     >
                       <RotateCcw size={13} /> Cancel
                     </button>
-                    <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md shadow-teal-200 hover:shadow-lg transition-all active:scale-95">
-                      <Save size={13} /> {selectedProduct ? 'Update' : 'Save'}
+                    <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md shadow-teal-200 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50">
+                      <Save size={13} /> {saving ? 'Saving...' : selectedProduct ? 'Update' : 'Save'}
                     </button>
                   </div>
                 </div>

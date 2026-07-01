@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Save, X, Edit2, Trash2, ChevronUp, ChevronDown, Copy } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -6,67 +6,76 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Tabs from '../components/ui/Tabs';
 import Table from '../components/ui/Table';
+import api from '../lib/api';
 
 interface ProcessStage {
+  id?: number;
   seq: number;
-  processStage: string;
+  process_stage: string;
   machine: string;
   duration: number;
   temperature: string;
   speed: string;
-  qcCheck: string;
+  qc_check: string;
   remarks: string;
 }
 
-const initialStages: ProcessStage[] = [
-  { seq: 1, processStage: 'Leather Inspection', machine: 'Inspection Table', duration: 10, temperature: 'Ambient', speed: '-', qcCheck: 'Visual Check', remarks: 'Check defects' },
-  { seq: 2, processStage: 'Spray Base Coat', machine: 'Spray Booth', duration: 15, temperature: '30', speed: 'Medium', qcCheck: 'Coverage', remarks: 'Even coat' },
-  { seq: 3, processStage: 'Drying', machine: 'Tunnel Dryer', duration: 20, temperature: '65', speed: '-', qcCheck: 'Dryness', remarks: 'Until required dryness' },
-  { seq: 4, processStage: 'Ironing', machine: 'Ironing Machine', duration: 10, temperature: '95', speed: 'Medium', qcCheck: 'Surface Finish', remarks: 'Smooth finish' },
-  { seq: 5, processStage: 'Top Coat', machine: 'Spray Booth', duration: 15, temperature: '30', speed: 'Medium', qcCheck: 'Colour Match', remarks: 'Match sample' },
-  { seq: 6, processStage: 'Final Drying', machine: 'Dryer', duration: 25, temperature: '70', speed: '-', qcCheck: 'Moisture', remarks: 'Final dry' },
-  { seq: 7, processStage: 'Final Inspection', machine: 'QC Table', duration: 10, temperature: 'Ambient', speed: '-', qcCheck: 'Final Approval', remarks: 'Ready for packing' },
-];
+interface RecipeItem {
+  id?: number;
+  material_id: number;
+  material_code: string;
+  material_name: string;
+  uom: string;
+  qty: number;
+}
 
-const processStagesColumns = [
-  { key: 'drag', header: '', width: '30px', render: () => (
-    <span className="text-gray-400 cursor-grab text-xs">&#8942;&#8942;</span>
-  )},
-  { key: 'seq', header: 'Seq.', width: '50px' },
-  { key: 'processStage', header: 'Process Stage', width: '140px' },
-  { key: 'machine', header: 'Machine / Equipment' },
-  { key: 'duration', header: 'Duration (Min)', width: '110px' },
-  { key: 'temperature', header: 'Temperature (\u00B0C)', width: '120px' },
-  { key: 'speed', header: 'Speed / RPM', width: '100px' },
-  { key: 'qcCheck', header: 'QC Check', width: '110px' },
-  { key: 'remarks', header: 'Remarks' },
-  { key: 'actions', header: 'Action', width: '70px', render: () => (
-    <div className="flex items-center gap-1">
-      <button className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-      <button className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
-    </div>
-  )},
-];
+interface Recipe {
+  id?: number;
+  code: string;
+  name: string;
+  leather_type: string;
+  thickness: string;
+  process_type: string;
+  color: string;
+  finish_type: string;
+  uom: string;
+  status: string;
+  valid_from: string;
+  valid_to: string;
+  version: number;
+  description: string;
+}
 
 export default function RecipeCreation() {
-  const [stages] = useState<ProcessStage[]>(initialStages);
+  const [stages, setStages] = useState<ProcessStage[]>([]);
+  const [recipeItems, setRecipeItems] = useState<RecipeItem[]>([]);
+  const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const recipeItems = [
-    { id: 1, materialCode: 'MAT-00052', materialName: 'Chrome Powder 33%', uom: 'Kg', qty: 0.110 },
-    { id: 2, materialCode: 'MAT-00051', materialName: 'Sodium Sulphide (60%)', uom: 'Kg', qty: 0.075 },
-    { id: 3, materialCode: 'MAT-00050', materialName: 'Formic Acid', uom: 'Ltr', qty: 0.050 },
-    { id: 4, materialCode: 'MAT-00049', materialName: 'Syntan A 10%', uom: 'Kg', qty: 0.100 },
-    { id: 5, materialCode: 'MAT-00047', materialName: 'Fatliquor DP', uom: 'Ltr', qty: 0.140 },
-    { id: 6, materialCode: 'MAT-00007', materialName: 'Dye - Black', uom: 'Kg', qty: 0.020 },
-    { id: 7, materialCode: 'MAT-00046', materialName: 'Acrylic Finishing Resin', uom: 'Kg', qty: 0.030 },
-  ];
+  const fetchRecipe = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api<{ data: Recipe & { items: RecipeItem[]; stages: ProcessStage[] } }>('/recipes/1');
+      setRecipe(res.data);
+      setRecipeItems(res.data.items || []);
+      setStages(res.data.stages || []);
+    } catch {
+      // Fallback to empty if API not available
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchRecipe(); }, [fetchRecipe]);
+
+  const totalQty = recipeItems.reduce((sum, item) => sum + item.qty, 0);
 
   const recipeItemColumns = [
-    { key: 'id', header: '#', width: '40px' },
-    { key: 'materialCode', header: 'Material Code', width: '130px' },
-    { key: 'materialName', header: 'Material Name', width: '200px' },
+    { key: 'id', header: '#', width: '40px', render: (_row: RecipeItem, i: number) => <span>{i + 1}</span> },
+    { key: 'material_code', header: 'Material Code', width: '130px' },
+    { key: 'material_name', header: 'Material Name', width: '200px' },
     { key: 'uom', header: 'UOM', width: '80px' },
-    { key: 'qty', header: 'Qty / Sq. Ft.', width: '120px', render: (row: { qty: number }) => (
+    { key: 'qty', header: 'Qty / Sq. Ft.', width: '120px', render: (row: RecipeItem) => (
       <span>{row.qty.toFixed(3)}</span>
     )},
     { key: 'actions', header: 'Action', width: '70px', render: () => (
@@ -77,7 +86,25 @@ export default function RecipeCreation() {
     )},
   ];
 
-  const totalQty = recipeItems.reduce((sum, item) => sum + item.qty, 0);
+  const processStagesColumns = [
+    { key: 'drag', header: '', width: '30px', render: () => (
+      <span className="text-gray-400 cursor-grab text-xs">&#8942;&#8942;</span>
+    )},
+    { key: 'seq', header: 'Seq.', width: '50px' },
+    { key: 'process_stage', header: 'Process Stage', width: '140px' },
+    { key: 'machine', header: 'Machine / Equipment' },
+    { key: 'duration', header: 'Duration (Min)', width: '110px' },
+    { key: 'temperature', header: 'Temperature (\u00B0C)', width: '120px' },
+    { key: 'speed', header: 'Speed / RPM', width: '100px' },
+    { key: 'qc_check', header: 'QC Check', width: '110px' },
+    { key: 'remarks', header: 'Remarks' },
+    { key: 'actions', header: 'Action', width: '70px', render: () => (
+      <div className="flex items-center gap-1">
+        <button className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
+        <button className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+      </div>
+    )},
+  ];
 
   const tabs = [
     {
@@ -147,13 +174,15 @@ export default function RecipeCreation() {
     },
   ];
 
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading recipe...</div>;
+
   return (
     <div className="space-y-5">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Recipe - RC-00037</h1>
-          <p className="text-xs text-gray-500 mt-0.5">BOM / Recipe &gt; Recipe Creation &gt; RC-00037</p>
+          <h1 className="text-xl font-bold text-gray-900">Recipe - {recipe?.code || 'Loading...'}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">BOM / Recipe &gt; Recipe Creation &gt; {recipe?.code || ''}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline">Save as Draft</Button>
@@ -171,8 +200,8 @@ export default function RecipeCreation() {
         <div className="space-y-4">
           {/* Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <Input label="Recipe Code" required defaultValue="RC-00037" />
-            <Input label="Recipe Name" required defaultValue="Black Finish - Cow (1.2-1.4mm)" />
+            <Input label="Recipe Code" required defaultValue={recipe?.code || ''} />
+            <Input label="Recipe Name" required defaultValue={recipe?.name || ''} />
             <Select
               label="Leather Type"
               required
@@ -183,7 +212,7 @@ export default function RecipeCreation() {
                 { value: 'goat', label: 'Goat' },
                 { value: 'sheep', label: 'Sheep' },
               ]}
-              defaultValue="cow"
+              defaultValue={recipe?.leather_type || 'cow'}
             />
             <Select
               label="Thickness"
@@ -193,7 +222,7 @@ export default function RecipeCreation() {
                 { value: '1.4-1.6', label: '1.4 - 1.6 mm' },
                 { value: '1.6-1.8', label: '1.6 - 1.8 mm' },
               ]}
-              defaultValue="1.2-1.4"
+              defaultValue={recipe?.thickness || '1.2-1.4'}
             />
           </div>
           {/* Row 2 */}
@@ -207,9 +236,9 @@ export default function RecipeCreation() {
                 { value: 'tanning', label: 'Tanning' },
                 { value: 'dyeing', label: 'Dyeing' },
               ]}
-              defaultValue="finishing"
+              defaultValue={recipe?.process_type || 'finishing'}
             />
-            <Input label="Color / Shade" defaultValue="Black" />
+            <Input label="Color / Shade" defaultValue={recipe?.color || ''} />
             <Select
               label="Finish Type"
               options={[
@@ -219,7 +248,7 @@ export default function RecipeCreation() {
                 { value: 'nappa', label: 'Nappa' },
                 { value: 'suede', label: 'Suede' },
               ]}
-              defaultValue="semi-aniline"
+              defaultValue={recipe?.finish_type || 'semi-aniline'}
             />
             <Select
               label="UOM"
@@ -229,13 +258,13 @@ export default function RecipeCreation() {
                 { value: 'sqm', label: 'Sq. M.' },
                 { value: 'kg', label: 'Kg' },
               ]}
-              defaultValue="sqft"
+              defaultValue={recipe?.uom || 'sqft'}
             />
             <div className="w-full">
               <label className="block text-xs font-medium text-gray-900 mb-1">Status</label>
               <select
                 className="w-full px-2.5 py-2 text-xs text-emerald-600 font-medium border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white appearance-none cursor-pointer"
-                defaultValue="active"
+                defaultValue={recipe?.status || 'active'}
               >
                 <option value="active">Active</option>
                 <option value="draft">Draft</option>
@@ -245,16 +274,16 @@ export default function RecipeCreation() {
           </div>
           {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Input label="Valid From" required type="date" defaultValue="2024-05-01" />
-            <Input label="Valid To" type="date" defaultValue="2024-12-31" />
-            <Input label="Version No." defaultValue="1" />
+            <Input label="Valid From" required type="date" defaultValue={recipe?.valid_from || ''} />
+            <Input label="Valid To" type="date" defaultValue={recipe?.valid_to || ''} />
+            <Input label="Version No." defaultValue={recipe?.version?.toString() || '1'} />
           </div>
           {/* Row 4 - Description */}
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">Description / Notes</label>
             <textarea
               rows={3}
-              defaultValue="Standard black finishing recipe for cow leather (1.2-1.4 mm). Provides even color, soft handle and good fastness."
+              defaultValue={recipe?.description || ''}
               className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder-gray-400 resize-none"
             />
           </div>

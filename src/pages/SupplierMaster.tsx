@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -23,81 +23,145 @@ import {
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import api from '../lib/api';
 
 interface Supplier {
+  id?: number;
   code: string;
   name: string;
-  contactPerson: string;
+  contact_person: string;
   phone: string;
   email: string;
   city: string;
   state: string;
   status: string;
   category?: string;
-  supplyType?: string;
+  supply_type?: string;
   address?: string;
-  altPhone?: string;
+  alt_phone?: string;
   pincode?: string;
   website?: string;
   gstin?: string;
   pan?: string;
-  paymentTerms?: string;
-  bankName?: string;
-  bankAccount?: string;
-  ifscCode?: string;
+  payment_terms?: string;
+  bank_name?: string;
+  bank_account?: string;
+  ifsc_code?: string;
   notes?: string;
 }
 
-const initialSuppliers: Supplier[] = [
-  { code: 'SUP-00021', name: 'Indian Chemical Co.', contactPerson: 'Mr. Suresh', phone: '+91 98410 54321', email: 'suresh@indchem.com', city: 'Chennai', state: 'Tamil Nadu', status: 'Active', category: 'chemical', supplyType: 'chemical', address: 'No.45, Chemical Complex, Chennai', altPhone: '+91 98700 11223', pincode: '600001', website: 'www.indchem.com', gstin: '33AAACI2345C1Z1', pan: 'AAACI2345C', paymentTerms: '30', bankName: 'HDFC Bank', bankAccount: '50200012345678', ifscCode: 'HDFC0001234', notes: 'Preferred supplier for chemicals.' },
-  { code: 'SUP-00020', name: 'Sri Traders', contactPerson: 'Mr. Ravi', phone: '+91 97900 11223', email: 'ravi@sritraders.com', city: 'Coimbatore', state: 'Tamil Nadu', status: 'Active', category: 'raw', supplyType: 'raw', address: '12, Industrial Area, Coimbatore', pincode: '641001', gstin: '33BBBST5678D2Z2', pan: 'BBBST5678D', paymentTerms: '45' },
-  { code: 'SUP-00019', name: 'Global Suppliers', contactPerson: 'Mr. Vignesh', phone: '+91 96000 33445', email: 'vignesh@globalsup.com', city: 'Mumbai', state: 'Maharashtra', status: 'Active', category: 'finishing', supplyType: 'finishing', address: '78, Andheri East, Mumbai', pincode: '400069', gstin: '27CCCGS9012E3Z3', pan: 'CCCGS9012E', paymentTerms: '30' },
-  { code: 'SUP-00018', name: 'Value Chemicals', contactPerson: 'Mr. Karthik', phone: '+91 94400 66778', email: 'karthik@valuechem.com', city: 'Chennai', state: 'Tamil Nadu', status: 'Inactive', category: 'chemical', supplyType: 'chemical', address: '34, Ambattur Ind. Estate, Chennai', pincode: '600058', gstin: '33DDDVC3456F4Z4', pan: 'DDDVC3456F', paymentTerms: '15' },
-  { code: 'SUP-00017', name: 'Star Enterprises', contactPerson: 'Mr. Mohan', phone: '+91 96000 77554', email: 'mohan@starent.com', city: 'Erode', state: 'Tamil Nadu', status: 'Active', category: 'dye', supplyType: 'dye', address: '56, Textile Park, Erode', pincode: '638001', gstin: '33EEESE7890G5Z5', pan: 'EEESE7890G', paymentTerms: '30' },
-  { code: 'SUP-00016', name: 'Ambur Hides Corp', contactPerson: 'Mr. Arjun', phone: '+91 97500 88991', email: 'arjun@amburhides.com', city: 'Ambur', state: 'Tamil Nadu', status: 'Active', category: 'raw', supplyType: 'raw', address: '23, Leather Complex, Ambur', pincode: '635802', gstin: '33FFFAH1234H6Z6', pan: 'FFFAH1234H', paymentTerms: '45' },
-  { code: 'SUP-00015', name: 'Ranipet Chemicals', contactPerson: 'Mr. Dinesh', phone: '+91 98420 22334', email: 'dinesh@ranipetchem.com', city: 'Ranipet', state: 'Tamil Nadu', status: 'Active', category: 'chemical', supplyType: 'chemical', address: '99, SIPCOT, Ranipet', pincode: '632401', gstin: '33GGGRC5678I7Z7', pan: 'GGGRC5678I', paymentTerms: '30' },
-  { code: 'SUP-00014', name: 'Vellore Dye Works', contactPerson: 'Mr. Kumar', phone: '+91 94400 55667', email: 'kumar@velloredye.com', city: 'Vellore', state: 'Tamil Nadu', status: 'Active', category: 'dye', supplyType: 'dye', address: '67, Sathuvachari, Vellore', pincode: '632009', gstin: '33HHHVD9012J8Z8', pan: 'HHHVD9012J', paymentTerms: '30' },
-];
-
 interface PricingEntry {
-  materialCode: string;
-  materialName: string;
+  id: number;
+  material_code: string;
+  material_name: string;
   uom: string;
   price: number;
-  validFrom: string;
-  validTo: string;
+  valid_from: string;
+  valid_to: string;
   status: string;
 }
 
-const pricingData: PricingEntry[] = [
-  { materialCode: 'MAT-00052', materialName: 'Chrome Powder 33%', uom: 'Kg', price: 76.00, validFrom: '01-05-2024', validTo: '31-05-2024', status: 'Approved' },
-  { materialCode: 'MAT-00051', materialName: 'Sodium Sulphide (60%)', uom: 'Kg', price: 62.00, validFrom: '01-05-2024', validTo: '31-05-2024', status: 'Approved' },
-  { materialCode: 'MAT-00050', materialName: 'Formic Acid', uom: 'Ltr', price: 28.00, validFrom: '01-05-2024', validTo: '31-05-2024', status: 'Approved' },
-  { materialCode: 'MAT-00049', materialName: 'Syntan A 10%', uom: 'Kg', price: 85.00, validFrom: '01-05-2024', validTo: '31-05-2024', status: 'Pending' },
-  { materialCode: 'MAT-00047', materialName: 'Fatliquor DP', uom: 'Ltr', price: 140.00, validFrom: '15-04-2024', validTo: '30-04-2024', status: 'Approved' },
-  { materialCode: 'MAT-00046', materialName: 'Acrylic Finishing Resin', uom: 'Kg', price: 120.00, validFrom: '15-04-2024', validTo: '30-04-2024', status: 'Approved' },
-];
+const emptySupplier: Supplier = {
+  code: '', name: '', contact_person: '', phone: '', email: '', city: '', state: '',
+  status: 'Active', category: 'chemical', supply_type: 'chemical', address: '',
+  alt_phone: '', pincode: '', website: '', gstin: '', pan: '', payment_terms: '30',
+  bank_name: '', bank_account: '', ifsc_code: '', notes: '',
+};
 
 export default function SupplierMaster() {
-  const [suppliers] = useState<Supplier[]>(initialSuppliers);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [stats, setStats] = useState({ total: 0, active: 0 });
+  const [pricingData, setPricingData] = useState<PricingEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [statusToggle, setStatusToggle] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [formData, setFormData] = useState<Supplier>(emptySupplier);
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
   const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const filteredSuppliers = suppliers.filter(
-    (s) =>
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.contactPerson.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const fetchSuppliers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
+      const res = await api<{ data: Supplier[]; total: number }>(`/suppliers${params}`);
+      setSuppliers(res.data || []);
+    } catch {
+      setSuppliers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await api<{ data: { total: number; active: number } }>('/suppliers/stats');
+      setStats(res.data);
+    } catch {}
+  }, []);
+
+  const fetchPricing = useCallback(async () => {
+    try {
+      const res = await api<{ data: PricingEntry[] }>('/suppliers/pricing');
+      setPricingData(res.data || []);
+    } catch {
+      setPricingData([]);
+    }
+  }, []);
+
+  useEffect(() => { fetchSuppliers(); }, [fetchSuppliers]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { fetchPricing(); }, [fetchPricing]);
 
   const openPanel = (supplier?: Supplier) => {
-    setSelectedSupplier(supplier || null);
-    setStatusToggle(supplier ? supplier.status === 'Active' : true);
+    if (supplier) {
+      setSelectedSupplier(supplier);
+      setFormData({ ...emptySupplier, ...supplier });
+      setStatusToggle(supplier.status === 'Active');
+    } else {
+      setSelectedSupplier(null);
+      setFormData(emptySupplier);
+      setStatusToggle(true);
+    }
     setActiveTab('basic');
     setShowPanel(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name) return;
+    setSaving(true);
+    try {
+      const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
+      if (selectedSupplier?.id) {
+        await api(`/suppliers/${selectedSupplier.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        await api('/suppliers', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      setShowPanel(false);
+      fetchSuppliers();
+      fetchStats();
+    } catch (err) {
+      alert('Failed to save supplier: ' + (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this supplier?')) return;
+    try {
+      await api(`/suppliers/${id}`, { method: 'DELETE' });
+      setShowPanel(false);
+      fetchSuppliers();
+      fetchStats();
+    } catch (err) {
+      alert('Failed to delete: ' + (err as Error).message);
+    }
+  };
+
+  const updateField = (field: keyof Supplier, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -119,12 +183,12 @@ export default function SupplierMaster() {
               <Truck size={12} className="text-orange-600" />
             </div>
             <span className="text-xs text-orange-600 font-medium">Total:</span>
-            <span className="text-sm font-bold text-orange-800">18</span>
+            <span className="text-sm font-bold text-orange-800">{stats.total}</span>
           </div>
           <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg border border-emerald-100 shadow-sm">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs text-emerald-600 font-medium">Active:</span>
-            <span className="text-sm font-bold text-emerald-800">15</span>
+            <span className="text-sm font-bold text-emerald-800">{stats.active}</span>
           </div>
         </div>
       </div>
@@ -176,7 +240,11 @@ export default function SupplierMaster() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredSuppliers.map((s, index) => (
+              {loading ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+              ) : suppliers.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No suppliers found</td></tr>
+              ) : suppliers.map((s, index) => (
                 <tr key={s.code} className={`hover:bg-orange-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(s)}>
                   <td className="py-3 px-4 relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${s.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
@@ -195,7 +263,7 @@ export default function SupplierMaster() {
                   <td className="py-3 px-4">
                     <span className="text-teal-700 font-medium text-xs flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
-                      {s.contactPerson}
+                      {s.contact_person}
                     </span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
@@ -220,7 +288,7 @@ export default function SupplierMaster() {
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1">
                       <button onClick={(e) => { e.stopPropagation(); openPanel(s); }} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-100 transition-all"><Edit2 size={14} /></button>
-                      <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all"><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); s.id && handleDelete(s.id); }} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -231,7 +299,7 @@ export default function SupplierMaster() {
 
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
-          {filteredSuppliers.map((s) => (
+          {suppliers.map((s) => (
             <div key={s.code} className="p-4 hover:bg-orange-50/30 transition-colors" onClick={() => openPanel(s)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -246,14 +314,14 @@ export default function SupplierMaster() {
                   </div>
                   <p className="text-sm font-semibold text-gray-900 mt-1.5">{s.name}</p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
-                    <span className="flex items-center gap-1"><Users size={11} className="text-teal-400" />{s.contactPerson}</span>
+                    <span className="flex items-center gap-1"><Users size={11} className="text-teal-400" />{s.contact_person}</span>
                     <span className="flex items-center gap-1"><Phone size={11} className="text-blue-400" />{s.phone}</span>
                     <span className="text-sky-600">{s.city}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={(e) => { e.stopPropagation(); openPanel(s); }} className="p-2 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"><Edit2 size={14} /></button>
-                  <button onClick={(e) => e.stopPropagation()} className="p-2 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={14} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); s.id && handleDelete(s.id); }} className="p-2 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={14} /></button>
                 </div>
               </div>
             </div>
@@ -310,13 +378,13 @@ export default function SupplierMaster() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {pricingData.map((p, i) => (
-                <tr key={p.materialCode + i} className={`hover:bg-amber-50/30 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/20'}`}>
-                  <td className="py-2.5 px-4 font-mono text-xs text-amber-600 font-medium">{p.materialCode}</td>
-                  <td className="py-2.5 px-4 text-gray-900 font-medium text-xs">{p.materialName}</td>
+                <tr key={p.material_code + i} className={`hover:bg-amber-50/30 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/20'}`}>
+                  <td className="py-2.5 px-4 font-mono text-xs text-amber-600 font-medium">{p.material_code}</td>
+                  <td className="py-2.5 px-4 text-gray-900 font-medium text-xs">{p.material_name}</td>
                   <td className="py-2.5 px-4 text-gray-500 text-xs">{p.uom}</td>
                   <td className="py-2.5 px-4 text-emerald-700 font-bold text-xs">₹{p.price.toFixed(2)}</td>
-                  <td className="py-2.5 px-4 text-gray-500 text-xs hidden lg:table-cell">{p.validFrom}</td>
-                  <td className="py-2.5 px-4 text-gray-500 text-xs hidden lg:table-cell">{p.validTo}</td>
+                  <td className="py-2.5 px-4 text-gray-500 text-xs hidden lg:table-cell">{p.valid_from}</td>
+                  <td className="py-2.5 px-4 text-gray-500 text-xs hidden lg:table-cell">{p.valid_to}</td>
                   <td className="py-2.5 px-4">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                       p.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
@@ -330,16 +398,16 @@ export default function SupplierMaster() {
         {/* Mobile pricing cards */}
         <div className="md:hidden divide-y divide-gray-50">
           {pricingData.map((p, i) => (
-            <div key={p.materialCode + i} className="p-3 space-y-1">
+            <div key={p.material_code + i} className="p-3 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">{p.materialCode}</span>
+                <span className="text-[10px] font-mono text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">{p.material_code}</span>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                   p.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                 }`}>{p.status}</span>
               </div>
-              <p className="text-xs font-semibold text-gray-900">{p.materialName}</p>
+              <p className="text-xs font-semibold text-gray-900">{p.material_name}</p>
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-gray-500">{p.uom} | {p.validFrom} – {p.validTo}</span>
+                <span className="text-gray-500">{p.uom} | {p.valid_from} – {p.valid_to}</span>
                 <span className="text-emerald-700 font-bold">₹{p.price.toFixed(2)}</span>
               </div>
             </div>
@@ -389,8 +457,8 @@ export default function SupplierMaster() {
                     <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><Truck size={10} /> Supplier Identity</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Supplier Code" required defaultValue={selectedSupplier?.code || ''} placeholder="Auto-generated" />
-                        <Input label="Supplier Name" required defaultValue={selectedSupplier?.name || ''} placeholder="Enter name" />
+                        <Input label="Supplier Code" required defaultValue={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                        <Input label="Supplier Name" required defaultValue={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-orange-50/80 to-amber-50/80 border border-orange-100/50 space-y-3">
@@ -402,25 +470,25 @@ export default function SupplierMaster() {
                           { value: 'raw', label: 'Raw Material Supplier' },
                           { value: 'dye', label: 'Dye Supplier' },
                           { value: 'finishing', label: 'Finishing Supplier' },
-                        ]} defaultValue={selectedSupplier?.category || ''} />
+                        ]} defaultValue={formData.category || ''} onChange={(e) => updateField('category', e.target.value)} />
                         <Select label="Type of Supply" options={[
                           { value: '', label: 'Select type' },
                           { value: 'raw', label: 'Raw Material' },
                           { value: 'chemical', label: 'Chemical' },
                           { value: 'dye', label: 'Dye' },
                           { value: 'finishing', label: 'Finishing Material' },
-                        ]} defaultValue={selectedSupplier?.supplyType || ''} />
+                        ]} defaultValue={formData.supply_type || ''} onChange={(e) => updateField('supply_type', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider flex items-center gap-1.5"><Phone size={10} /> Contact</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Contact Person" defaultValue={selectedSupplier?.contactPerson || ''} placeholder="Contact name" />
-                        <Input label="Phone" defaultValue={selectedSupplier?.phone || ''} placeholder="+91 XXXXX XXXXX" />
+                        <Input label="Contact Person" defaultValue={formData.contact_person || ''} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
+                        <Input label="Phone" defaultValue={formData.phone || ''} placeholder="+91 XXXXX XXXXX" onChange={(e) => updateField('phone', e.target.value)} />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Email" defaultValue={selectedSupplier?.email || ''} placeholder="email@domain.com" />
-                        <Input label="Alternate Phone" defaultValue={selectedSupplier?.altPhone || ''} placeholder="Optional" />
+                        <Input label="Email" defaultValue={formData.email || ''} placeholder="email@domain.com" onChange={(e) => updateField('email', e.target.value)} />
+                        <Input label="Alternate Phone" defaultValue={formData.alt_phone || ''} placeholder="Optional" onChange={(e) => updateField('alt_phone', e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -430,19 +498,19 @@ export default function SupplierMaster() {
                   <div className="space-y-4">
                     <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5"><MapPin size={10} /> Address</p>
-                      <textarea rows={3} defaultValue={selectedSupplier?.address || ''} placeholder="Enter full address..." className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all resize-none placeholder-gray-400 bg-white" />
+                      <textarea rows={3} defaultValue={formData.address || ''} placeholder="Enter full address..." onChange={(e) => updateField('address', e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all resize-none placeholder-gray-400 bg-white" />
                       <div className="grid grid-cols-3 gap-3">
-                        <Input label="City" defaultValue={selectedSupplier?.city || ''} placeholder="City" />
-                        <Input label="State" defaultValue={selectedSupplier?.state || ''} placeholder="State" />
-                        <Input label="Pincode" defaultValue={selectedSupplier?.pincode || ''} placeholder="Pincode" />
+                        <Input label="City" defaultValue={formData.city || ''} placeholder="City" onChange={(e) => updateField('city', e.target.value)} />
+                        <Input label="State" defaultValue={formData.state || ''} placeholder="State" onChange={(e) => updateField('state', e.target.value)} />
+                        <Input label="Pincode" defaultValue={formData.pincode || ''} placeholder="Pincode" onChange={(e) => updateField('pincode', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-wider flex items-center gap-1.5"><Globe size={10} /> Web & Notes</p>
-                      <Input label="Website" defaultValue={selectedSupplier?.website || ''} placeholder="www.example.com" />
+                      <Input label="Website" defaultValue={formData.website || ''} placeholder="www.example.com" onChange={(e) => updateField('website', e.target.value)} />
                       <div>
                         <label className="block text-xs font-medium text-gray-900 mb-1">Notes</label>
-                        <textarea rows={2} defaultValue={selectedSupplier?.notes || ''} placeholder="Any notes..." className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white" />
+                        <textarea rows={2} defaultValue={formData.notes || ''} placeholder="Any notes..." onChange={(e) => updateField('notes', e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white" />
                       </div>
                     </div>
                   </div>
@@ -453,23 +521,23 @@ export default function SupplierMaster() {
                     <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={10} /> Tax Details</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="GSTIN" defaultValue={selectedSupplier?.gstin || ''} placeholder="e.g. 33AAACI2345C1Z1" />
-                        <Input label="PAN" defaultValue={selectedSupplier?.pan || ''} placeholder="e.g. AAACI2345C" />
+                        <Input label="GSTIN" defaultValue={formData.gstin || ''} placeholder="e.g. 33AAACI2345C1Z1" onChange={(e) => updateField('gstin', e.target.value)} />
+                        <Input label="PAN" defaultValue={formData.pan || ''} placeholder="e.g. AAACI2345C" onChange={(e) => updateField('pan', e.target.value)} />
                       </div>
                       <Select label="Payment Terms" options={[
                         { value: '15', label: '15 Days' },
                         { value: '30', label: '30 Days' },
                         { value: '45', label: '45 Days' },
                         { value: '60', label: '60 Days' },
-                      ]} defaultValue={selectedSupplier?.paymentTerms || '30'} />
+                      ]} defaultValue={formData.payment_terms || '30'} onChange={(e) => updateField('payment_terms', e.target.value)} />
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5"><Building2 size={10} /> Bank Details</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Bank Name" defaultValue={selectedSupplier?.bankName || ''} placeholder="Enter bank name" />
-                        <Input label="Account No." defaultValue={selectedSupplier?.bankAccount || ''} placeholder="Enter account no." />
+                        <Input label="Bank Name" defaultValue={formData.bank_name || ''} placeholder="Enter bank name" onChange={(e) => updateField('bank_name', e.target.value)} />
+                        <Input label="Account No." defaultValue={formData.bank_account || ''} placeholder="Enter account no." onChange={(e) => updateField('bank_account', e.target.value)} />
                       </div>
-                      <Input label="IFSC Code" defaultValue={selectedSupplier?.ifscCode || ''} placeholder="e.g. HDFC0001234" />
+                      <Input label="IFSC Code" defaultValue={formData.ifsc_code || ''} placeholder="e.g. HDFC0001234" onChange={(e) => updateField('ifsc_code', e.target.value)} />
                     </div>
                   </div>
                 )}
@@ -488,11 +556,11 @@ export default function SupplierMaster() {
               <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-orange-50/30 shrink-0 rounded-b-2xl">
                 <div className="flex items-center justify-between">
                   {selectedSupplier ? (
-                    <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95"><Trash2 size={13} /> Delete</button>
+                    <button onClick={() => selectedSupplier?.id && handleDelete(selectedSupplier.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95"><Trash2 size={13} /> Delete</button>
                   ) : <div />}
                   <div className="flex items-center gap-2">
                     <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all active:scale-95" onClick={() => setShowPanel(false)}><RotateCcw size={13} /> Cancel</button>
-                    <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 rounded-lg shadow-md shadow-orange-200 hover:shadow-lg transition-all active:scale-95"><Save size={13} /> {selectedSupplier ? 'Update' : 'Save'}</button>
+                    <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 rounded-lg shadow-md shadow-orange-200 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50"><Save size={13} /> {saving ? 'Saving...' : selectedSupplier ? 'Update' : 'Save'}</button>
                   </div>
                 </div>
               </div>

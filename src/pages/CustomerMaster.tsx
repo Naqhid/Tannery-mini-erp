@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -18,65 +18,122 @@ import {
   X,
   Download,
 } from 'lucide-react';
-import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import api from '../lib/api';
 
 interface Customer {
+  id?: number;
   code: string;
   name: string;
-  contactPerson: string;
+  contact_person: string;
   phone: string;
   email: string;
   city: string;
   status: string;
-  alternatePhone?: string;
+  alt_phone?: string;
   category?: string;
   currency?: string;
   notes?: string;
-  billingAddress?: string;
-  shippingAddress?: string;
+  billing_address?: string;
+  shipping_address?: string;
   state?: string;
-  pinCode?: string;
+  pin_code?: string;
   gstin?: string;
   pan?: string;
-  paymentTerms?: string;
-  creditLimit?: string;
+  payment_terms?: string;
+  credit_limit?: string;
 }
 
-const initialCustomers: Customer[] = [
-  { code: 'CUST-00045', name: 'ABC Leather Exports', contactPerson: 'Mr. Rajesh Kumar', phone: '+91 98400 12345', email: 'rajesh@abcleather.com', city: 'Vellore', status: 'Active', alternatePhone: '+91 98700 56789', category: 'export', currency: 'inr', notes: 'Regular customer. High quality finishing required.', billingAddress: 'No.12, Industrial Estate, Vellore - 632001, Tamil Nadu, India', shippingAddress: 'No.12, Industrial Estate, Vellore - 632001, Tamil Nadu, India', state: 'tamilnadu', pinCode: '632001', gstin: '33AAACA1234A1Z5', pan: 'AAACA1234A', paymentTerms: '30', creditLimit: '5,00,000' },
-  { code: 'CUST-00044', name: 'Global Leathers', contactPerson: 'Mr. Suresh Babu', phone: '+91 97900 56789', email: 'suresh@globalleathers.com', city: 'Chennai', status: 'Active', category: 'domestic', currency: 'inr', billingAddress: '45, Anna Salai, Chennai - 600002', state: 'tamilnadu', gstin: '33BBBCA5678B2Z3', pan: 'BBBCA5678B', paymentTerms: '45', creditLimit: '3,00,000' },
-  { code: 'CUST-00043', name: 'Metro Footwear Pvt Ltd', contactPerson: 'Mr. Prakash M.', phone: '+91 97100 11122', email: 'prakash@metrofootwear.com', city: 'Ambur', status: 'Active', category: 'export', currency: 'usd', billingAddress: '78, Leather Complex, Ambur', state: 'tamilnadu', gstin: '33CCCDA9012C3Z4', pan: 'CCCDA9012C', paymentTerms: '60', creditLimit: '8,00,000' },
-  { code: 'CUST-00042', name: 'Premium Leathers', contactPerson: 'Mr. Karthik R.', phone: '+91 94400 54321', email: 'karthik@premiumleathers.com', city: 'Ranipet', status: 'Active', category: 'wholesale', currency: 'inr', billingAddress: '22, Industrial Area, Ranipet', state: 'tamilnadu', paymentTerms: '30', creditLimit: '4,00,000' },
-  { code: 'CUST-00041', name: 'Style Shoes Co.', contactPerson: 'Mr. Imran Khan', phone: '+91 98800 22233', email: 'imran@styleshoes.com', city: 'Mumbai', status: 'Inactive', category: 'domestic', currency: 'inr', billingAddress: '15, Dharavi Leather Market, Mumbai', state: 'maharashtra', paymentTerms: '15', creditLimit: '2,00,000' },
-  { code: 'CUST-00040', name: 'Star Exports', contactPerson: 'Mr. Mohan Raj', phone: '+91 96000 33344', email: 'mohan@starexports.com', city: 'Bangalore', status: 'Active', category: 'export', currency: 'eur', billingAddress: '99, Peenya Industrial Area, Bangalore', state: 'karnataka', paymentTerms: '45', creditLimit: '6,00,000' },
-  { code: 'CUST-00039', name: 'Royal Footwears', contactPerson: 'Mr. Vignesh', phone: '+91 97500 44455', email: 'vignesh@royalfootwears.com', city: 'Vellore', status: 'Active', category: 'domestic', currency: 'inr', billingAddress: '34, Sathuvachari, Vellore', state: 'tamilnadu', paymentTerms: '30', creditLimit: '3,50,000' },
-  { code: 'CUST-00038', name: 'Classic Leathers', contactPerson: 'Mr. Arvind', phone: '+91 97890 55566', email: 'arvind@classicleathers.com', city: 'Chennai', status: 'Active', category: 'export', currency: 'usd', billingAddress: '56, Chromepet, Chennai', state: 'tamilnadu', paymentTerms: '60', creditLimit: '7,00,000' },
-  { code: 'CUST-00037', name: 'Leather World', contactPerson: 'Mr. Naveen', phone: '+91 97901 66677', email: 'naveen@leatherworld.com', city: 'Ambur', status: 'Active', category: 'wholesale', currency: 'inr', billingAddress: '11, Main Road, Ambur', state: 'tamilnadu', paymentTerms: '30', creditLimit: '2,50,000' },
-  { code: 'CUST-00036', name: 'National Exports', contactPerson: 'Mr. Ramesh', phone: '+91 98420 77788', email: 'ramesh@nationalexports.com', city: 'Ranipet', status: 'Active', category: 'export', currency: 'inr', billingAddress: '67, SIPCOT, Ranipet', state: 'tamilnadu', paymentTerms: '45', creditLimit: '5,50,000' },
-];
+const emptyCustomer: Customer = {
+  code: '', name: '', contact_person: '', phone: '', email: '', city: '', status: 'Active',
+  alt_phone: '', category: 'domestic', currency: 'inr', notes: '', billing_address: '',
+  shipping_address: '', state: '', pin_code: '', gstin: '', pan: '', payment_terms: '30', credit_limit: '',
+};
 
 export default function CustomerMaster() {
-  const [customers] = useState<Customer[]>(initialCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0 });
+  const [loading, setLoading] = useState(true);
   const [statusToggle, setStatusToggle] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [formData, setFormData] = useState<Customer>(emptyCustomer);
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
   const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const filteredCustomers = customers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.contactPerson.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const fetchCustomers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
+      const res = await api<{ data: Customer[]; total: number }>(`/customers${params}`);
+      setCustomers(res.data || []);
+    } catch {
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await api<{ data: { total: number; active: number; inactive: number } }>('/customers/stats');
+      setStats(res.data);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const openPanel = (customer?: Customer) => {
-    setSelectedCustomer(customer || null);
-    setStatusToggle(customer ? customer.status === 'Active' : true);
+    if (customer) {
+      setSelectedCustomer(customer);
+      setFormData({ ...emptyCustomer, ...customer });
+      setStatusToggle(customer.status === 'Active');
+    } else {
+      setSelectedCustomer(null);
+      setFormData(emptyCustomer);
+      setStatusToggle(true);
+    }
     setActiveTab('basic');
     setShowPanel(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name || !formData.phone) return;
+    setSaving(true);
+    try {
+      const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
+      if (selectedCustomer?.id) {
+        await api(`/customers/${selectedCustomer.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        await api('/customers', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      setShowPanel(false);
+      fetchCustomers();
+      fetchStats();
+    } catch (err) {
+      alert('Failed to save customer: ' + (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this customer?')) return;
+    try {
+      await api(`/customers/${id}`, { method: 'DELETE' });
+      setShowPanel(false);
+      fetchCustomers();
+      fetchStats();
+    } catch (err) {
+      alert('Failed to delete: ' + (err as Error).message);
+    }
+  };
+
+  const updateField = (field: keyof Customer, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -98,17 +155,17 @@ export default function CustomerMaster() {
               <Users size={12} className="text-blue-600" />
             </div>
             <span className="text-xs text-blue-600 font-medium">Total:</span>
-            <span className="text-sm font-bold text-blue-800">45</span>
+            <span className="text-sm font-bold text-blue-800">{stats.total}</span>
           </div>
           <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-100 shadow-sm">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs text-emerald-600 font-medium">Active:</span>
-            <span className="text-sm font-bold text-emerald-800">42</span>
+            <span className="text-sm font-bold text-emerald-800">{stats.active}</span>
           </div>
           <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-100 shadow-sm">
             <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
             <span className="text-xs text-red-600 font-medium">Inactive:</span>
-            <span className="text-sm font-bold text-red-800">3</span>
+            <span className="text-sm font-bold text-red-800">{stats.inactive}</span>
           </div>
         </div>
       </div>
@@ -160,7 +217,11 @@ export default function CustomerMaster() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredCustomers.map((c, index) => (
+              {loading ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+              ) : customers.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No customers found</td></tr>
+              ) : customers.map((c, index) => (
                 <tr key={c.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(c)}>
                   <td className="py-3 px-4 font-mono text-xs text-indigo-500 font-medium relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${c.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
@@ -179,7 +240,7 @@ export default function CustomerMaster() {
                   <td className="py-3 px-4">
                     <span className="text-teal-700 font-medium text-xs flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
-                      {c.contactPerson}
+                      {c.contact_person}
                     </span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
@@ -212,7 +273,7 @@ export default function CustomerMaster() {
                         <Edit2 size={14} />
                       </button>
                       <button
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); c.id && handleDelete(c.id); }}
                         className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all"
                       >
                         <Trash2 size={14} />
@@ -227,7 +288,7 @@ export default function CustomerMaster() {
 
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
-          {filteredCustomers.map((c) => (
+          {customers.map((c) => (
             <div key={c.code} className="p-4 hover:bg-gray-50/50 transition-colors active:bg-gray-100" onClick={() => openPanel(c)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -246,7 +307,7 @@ export default function CustomerMaster() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-500">
                     <span className="flex items-center gap-1">
                       <Users size={11} className="text-gray-400" />
-                      {c.contactPerson}
+                      {c.contact_person}
                     </span>
                     <span className="flex items-center gap-1">
                       <Phone size={11} className="text-gray-400" />
@@ -262,7 +323,7 @@ export default function CustomerMaster() {
                     <Edit2 size={14} />
                   </button>
                   <button
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); c.id && handleDelete(c.id); }}
                     className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all"
                   >
                     <Trash2 size={14} />
@@ -361,8 +422,8 @@ export default function CustomerMaster() {
                       <Building2 size={10} /> Customer Identity
                     </p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="Customer Code" required defaultValue={selectedCustomer?.code || ''} placeholder="Auto-generated" />
-                      <Input label="Customer Name" required defaultValue={selectedCustomer?.name || ''} placeholder="Enter name" />
+                      <Input label="Customer Code" required defaultValue={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                      <Input label="Customer Name" required defaultValue={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
@@ -370,12 +431,12 @@ export default function CustomerMaster() {
                       <Phone size={10} /> Contact Information
                     </p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="Contact Person" defaultValue={selectedCustomer?.contactPerson || ''} placeholder="Contact name" />
-                      <Input label="Phone" required defaultValue={selectedCustomer?.phone || ''} placeholder="+91 XXXXX XXXXX" />
+                      <Input label="Contact Person" defaultValue={formData.contact_person || ''} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
+                      <Input label="Phone" required defaultValue={formData.phone || ''} placeholder="+91 XXXXX XXXXX" onChange={(e) => updateField('phone', e.target.value)} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="Email" defaultValue={selectedCustomer?.email || ''} placeholder="email@domain.com" />
-                      <Input label="Alternate Phone" defaultValue={selectedCustomer?.alternatePhone || ''} placeholder="Optional" />
+                      <Input label="Email" defaultValue={formData.email || ''} placeholder="email@domain.com" onChange={(e) => updateField('email', e.target.value)} />
+                      <Input label="Alternate Phone" defaultValue={formData.alt_phone || ''} placeholder="Optional" onChange={(e) => updateField('alt_phone', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
@@ -391,7 +452,8 @@ export default function CustomerMaster() {
                           { value: 'domestic', label: 'Domestic Customer' },
                           { value: 'wholesale', label: 'Wholesale' },
                         ]}
-                        defaultValue={selectedCustomer?.category || ''}
+                        defaultValue={formData.category || ''}
+                        onChange={(e) => updateField('category', e.target.value)}
                       />
                       <Select
                         label="Currency"
@@ -400,7 +462,8 @@ export default function CustomerMaster() {
                           { value: 'usd', label: 'USD - US Dollar' },
                           { value: 'eur', label: 'EUR - Euro' },
                         ]}
-                        defaultValue={selectedCustomer?.currency || 'inr'}
+                        defaultValue={formData.currency || 'inr'}
+                        onChange={(e) => updateField('currency', e.target.value)}
                       />
                     </div>
                   </div>
@@ -410,7 +473,8 @@ export default function CustomerMaster() {
                     </p>
                     <textarea
                       rows={3}
-                      defaultValue={selectedCustomer?.notes || ''}
+                      defaultValue={formData.notes || ''}
+                      onChange={(e) => updateField('notes', e.target.value)}
                       placeholder="Any additional notes..."
                       className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white"
                     />
@@ -430,7 +494,8 @@ export default function CustomerMaster() {
                       </label>
                       <textarea
                         rows={3}
-                        defaultValue={selectedCustomer?.billingAddress || ''}
+                        defaultValue={formData.billing_address || ''}
+                      onChange={(e) => updateField('billing_address', e.target.value)}
                         placeholder="Enter billing address..."
                         className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all resize-none placeholder-gray-400"
                       />
@@ -444,7 +509,8 @@ export default function CustomerMaster() {
                       <label className="block text-xs font-medium text-gray-900 mb-1">Shipping Address</label>
                       <textarea
                         rows={3}
-                        defaultValue={selectedCustomer?.shippingAddress || ''}
+                        defaultValue={formData.shipping_address || ''}
+                      onChange={(e) => updateField('shipping_address', e.target.value)}
                         placeholder="Enter shipping address (or same as billing)..."
                         className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all resize-none placeholder-gray-400"
                       />
@@ -464,7 +530,8 @@ export default function CustomerMaster() {
                           { value: 'maharashtra', label: 'Maharashtra' },
                           { value: 'kerala', label: 'Kerala' },
                         ]}
-                        defaultValue={selectedCustomer?.state || ''}
+                        defaultValue={formData.state || ''}
+                        onChange={(e) => updateField('state', e.target.value)}
                       />
                       <Select
                         label="City"
@@ -475,10 +542,11 @@ export default function CustomerMaster() {
                           { value: 'ranipet', label: 'Ranipet' },
                           { value: 'ambur', label: 'Ambur' },
                         ]}
-                        defaultValue={selectedCustomer?.city?.toLowerCase() || ''}
+                        defaultValue={formData.city?.toLowerCase() || ''}
+                        onChange={(e) => updateField('city', e.target.value)}
                       />
                     </div>
-                    <Input label="Pin Code" defaultValue={selectedCustomer?.pinCode || ''} placeholder="Enter pin code" />
+                    <Input label="Pin Code" defaultValue={formData.pin_code || ''} placeholder="Enter pin code" onChange={(e) => updateField('pin_code', e.target.value)} />
                   </div>
                 </div>
               )}
@@ -490,8 +558,8 @@ export default function CustomerMaster() {
                       <CreditCard size={10} /> Tax Details
                     </p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="GSTIN" defaultValue={selectedCustomer?.gstin || ''} placeholder="e.g. 33AAACA1234A1Z5" />
-                      <Input label="PAN" defaultValue={selectedCustomer?.pan || ''} placeholder="e.g. AAACA1234A" />
+                      <Input label="GSTIN" defaultValue={formData.gstin || ''} placeholder="e.g. 33AAACA1234A1Z5" onChange={(e) => updateField('gstin', e.target.value)} />
+                      <Input label="PAN" defaultValue={formData.pan || ''} placeholder="e.g. AAACA1234A" onChange={(e) => updateField('pan', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-gradient-to-r from-teal-50/80 to-cyan-50/80 border border-teal-100/50 space-y-3">
@@ -507,9 +575,10 @@ export default function CustomerMaster() {
                           { value: '45', label: '45 Days' },
                           { value: '60', label: '60 Days' },
                         ]}
-                        defaultValue={selectedCustomer?.paymentTerms || '30'}
+                        defaultValue={formData.payment_terms || '30'}
+                        onChange={(e) => updateField('payment_terms', e.target.value)}
                       />
-                      <Input label="Credit Limit (₹)" defaultValue={selectedCustomer?.creditLimit || ''} placeholder="e.g. 5,00,000" />
+                      <Input label="Credit Limit (₹)" defaultValue={formData.credit_limit || ''} placeholder="e.g. 5,00,000" onChange={(e) => updateField('credit_limit', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200">
@@ -538,7 +607,7 @@ export default function CustomerMaster() {
             <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/30 shrink-0 rounded-b-2xl">
               <div className="flex items-center justify-between">
                 {selectedCustomer ? (
-                  <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95">
+                  <button onClick={() => selectedCustomer?.id && handleDelete(selectedCustomer.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95">
                     <Trash2 size={13} /> Delete
                   </button>
                 ) : (
@@ -551,8 +620,8 @@ export default function CustomerMaster() {
                   >
                     <RotateCcw size={13} /> Cancel
                   </button>
-                  <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all active:scale-95">
-                    <Save size={13} /> {selectedCustomer ? 'Update' : 'Save'}
+                  <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50">
+                    <Save size={13} /> {saving ? 'Saving...' : selectedCustomer ? 'Update' : 'Save'}
                   </button>
                 </div>
               </div>
