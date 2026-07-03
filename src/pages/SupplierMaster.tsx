@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'react-toastify';
 import {
   Plus,
   Search,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import api from '../lib/api';
 
 interface Supplier {
@@ -80,6 +82,7 @@ export default function SupplierMaster() {
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
 
   const fetchSuppliers = useCallback(async () => {
     try {
@@ -134,34 +137,85 @@ export default function SupplierMaster() {
     try {
       const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
       if (selectedSupplier?.id) {
-        await api(`/suppliers/${selectedSupplier.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        const res = await api(`/suppliers/${selectedSupplier.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Supplier updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
       } else {
-        await api('/suppliers', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await api('/suppliers', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Supplier created successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
       }
       setShowPanel(false);
+      setSearchQuery(''); // Clear search to see all records including the updated one
       fetchSuppliers();
       fetchStats();
     } catch (err) {
-      alert('Failed to save supplier: ' + (err as Error).message);
+      toast.error('Failed to save supplier: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this supplier?')) return;
+    setDeleteConfirm({ open: true, id });
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
     try {
-      await api(`/suppliers/${id}`, { method: 'DELETE' });
+      const res = await api(`/suppliers/${id}`, { method: 'DELETE' });
+      toast.success(res.message || 'Supplier deleted successfully!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
       setShowPanel(false);
+      setSearchQuery('');
       fetchSuppliers();
       fetchStats();
     } catch (err) {
-      alert('Failed to delete: ' + (err as Error).message);
+      toast.error('Failed to delete supplier: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     }
   };
 
   const updateField = (field: keyof Supplier, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Tab Validation Functions
+  const isBasicInfoComplete = () => formData.code && formData.name && formData.contact_person && formData.phone;
+  const isAddressComplete = () => formData.address && formData.city && formData.state && formData.postal_code;
+  const isFinancialComplete = () => formData.bank_name && formData.bank_account && formData.ifsc_code;
+  
+  const canAccessTab = (tab: 'basic' | 'address' | 'financial') => {
+    // When editing, allow access to all tabs
+    if (selectedSupplier) return true;
+    // When adding, restrict tabs step-by-step
+    if (tab === 'basic') return true;
+    if (tab === 'address') return isBasicInfoComplete();
+    if (tab === 'financial') return isBasicInfoComplete() && isAddressComplete();
+    return false;
+  };
+
+  const goToNextTab = () => {
+    if (activeTab === 'basic' && canAccessTab('address')) setActiveTab('address');
+    else if (activeTab === 'address' && canAccessTab('financial')) setActiveTab('financial');
+  };
+
+  const goToPreviousTab = () => {
+    if (activeTab === 'address') setActiveTab('basic');
+    else if (activeTab === 'financial') setActiveTab('address');
   };
 
   return (
@@ -245,7 +299,7 @@ export default function SupplierMaster() {
               ) : suppliers.length === 0 ? (
                 <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No suppliers found</td></tr>
               ) : suppliers.map((s, index) => (
-                <tr key={s.code} className={`hover:bg-orange-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(s)}>
+                <tr key={s.id || s.code} className={`hover:bg-orange-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(s)}>
                   <td className="py-3 px-4 relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${s.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
                     <span className="font-mono text-xs text-orange-600 font-medium">{s.code}</span>
@@ -300,7 +354,7 @@ export default function SupplierMaster() {
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
           {suppliers.map((s) => (
-            <div key={s.code} className="p-4 hover:bg-orange-50/30 transition-colors" onClick={() => openPanel(s)}>
+            <div key={s.id || s.code} className="p-4 hover:bg-orange-50/30 transition-colors" onClick={() => openPanel(s)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -440,13 +494,25 @@ export default function SupplierMaster() {
                     { id: 'basic' as const, label: 'Basic Info', icon: <Building2 size={13} />, color: 'from-orange-500 to-amber-600' },
                     { id: 'address' as const, label: 'Address & Contact', icon: <MapPin size={13} />, color: 'from-violet-500 to-purple-600' },
                     { id: 'financial' as const, label: 'Financial', icon: <CreditCard size={13} />, color: 'from-emerald-500 to-teal-600' },
-                  ].map((tab) => (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
-                      activeTab === tab.id ? `bg-gradient-to-r ${tab.color} text-white shadow-md` : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
-                    }`}>
-                      {tab.icon}{tab.label}
-                    </button>
-                  ))}
+                  ].map((tab) => {
+                    const isAccessible = canAccessTab(tab.id);
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => isAccessible && setActiveTab(tab.id)}
+                        disabled={!isAccessible}
+                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
+                          !isAccessible
+                            ? 'opacity-40 cursor-not-allowed text-gray-400'
+                            : activeTab === tab.id
+                            ? `bg-gradient-to-r ${tab.color} text-white shadow-md`
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+                        }`}
+                      >
+                        {tab.icon}{tab.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -457,8 +523,8 @@ export default function SupplierMaster() {
                     <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><Truck size={10} /> Supplier Identity</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Supplier Code" required defaultValue={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
-                        <Input label="Supplier Name" required defaultValue={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
+                        <Input label="Supplier Code" required value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                        <Input label="Supplier Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-orange-50/80 to-amber-50/80 border border-orange-100/50 space-y-3">
@@ -470,25 +536,25 @@ export default function SupplierMaster() {
                           { value: 'raw', label: 'Raw Material Supplier' },
                           { value: 'dye', label: 'Dye Supplier' },
                           { value: 'finishing', label: 'Finishing Supplier' },
-                        ]} defaultValue={formData.category || ''} onChange={(e) => updateField('category', e.target.value)} />
+                        ]} value={formData.category || ''} onChange={(e) => updateField('category', e.target.value)} />
                         <Select label="Type of Supply" options={[
                           { value: '', label: 'Select type' },
                           { value: 'raw', label: 'Raw Material' },
                           { value: 'chemical', label: 'Chemical' },
                           { value: 'dye', label: 'Dye' },
                           { value: 'finishing', label: 'Finishing Material' },
-                        ]} defaultValue={formData.supply_type || ''} onChange={(e) => updateField('supply_type', e.target.value)} />
+                        ]} value={formData.supply_type || ''} onChange={(e) => updateField('supply_type', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider flex items-center gap-1.5"><Phone size={10} /> Contact</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Contact Person" defaultValue={formData.contact_person || ''} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
-                        <Input label="Phone" defaultValue={formData.phone || ''} placeholder="+91 XXXXX XXXXX" onChange={(e) => updateField('phone', e.target.value)} />
+                        <Input label="Contact Person" value={formData.contact_person || ''} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
+                        <Input label="Phone" value={formData.phone || ''} placeholder="+91 XXXXX XXXXX" onChange={(e) => updateField('phone', e.target.value)} />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Email" defaultValue={formData.email || ''} placeholder="email@domain.com" onChange={(e) => updateField('email', e.target.value)} />
-                        <Input label="Alternate Phone" defaultValue={formData.alt_phone || ''} placeholder="Optional" onChange={(e) => updateField('alt_phone', e.target.value)} />
+                        <Input label="Email" value={formData.email || ''} placeholder="email@domain.com" onChange={(e) => updateField('email', e.target.value)} />
+                        <Input label="Alternate Phone" value={formData.alt_phone || ''} placeholder="Optional" onChange={(e) => updateField('alt_phone', e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -498,19 +564,19 @@ export default function SupplierMaster() {
                   <div className="space-y-4">
                     <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5"><MapPin size={10} /> Address</p>
-                      <textarea rows={3} defaultValue={formData.address || ''} placeholder="Enter full address..." onChange={(e) => updateField('address', e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all resize-none placeholder-gray-400 bg-white" />
+                      <textarea rows={3} value={formData.address || ''} placeholder="Enter full address..." onChange={(e) => updateField('address', e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all resize-none placeholder-gray-400 bg-white" />
                       <div className="grid grid-cols-3 gap-3">
-                        <Input label="City" defaultValue={formData.city || ''} placeholder="City" onChange={(e) => updateField('city', e.target.value)} />
-                        <Input label="State" defaultValue={formData.state || ''} placeholder="State" onChange={(e) => updateField('state', e.target.value)} />
-                        <Input label="Pincode" defaultValue={formData.pincode || ''} placeholder="Pincode" onChange={(e) => updateField('pincode', e.target.value)} />
+                        <Input label="City" value={formData.city || ''} placeholder="City" onChange={(e) => updateField('city', e.target.value)} />
+                        <Input label="State" value={formData.state || ''} placeholder="State" onChange={(e) => updateField('state', e.target.value)} />
+                        <Input label="Pincode" value={formData.pincode || ''} placeholder="Pincode" onChange={(e) => updateField('pincode', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-wider flex items-center gap-1.5"><Globe size={10} /> Web & Notes</p>
-                      <Input label="Website" defaultValue={formData.website || ''} placeholder="www.example.com" onChange={(e) => updateField('website', e.target.value)} />
+                      <Input label="Website" value={formData.website || ''} placeholder="www.example.com" onChange={(e) => updateField('website', e.target.value)} />
                       <div>
                         <label className="block text-xs font-medium text-gray-900 mb-1">Notes</label>
-                        <textarea rows={2} defaultValue={formData.notes || ''} placeholder="Any notes..." onChange={(e) => updateField('notes', e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white" />
+                        <textarea rows={2} value={formData.notes || ''} placeholder="Any notes..." onChange={(e) => updateField('notes', e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white" />
                       </div>
                     </div>
                   </div>
@@ -521,26 +587,46 @@ export default function SupplierMaster() {
                     <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={10} /> Tax Details</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="GSTIN" defaultValue={formData.gstin || ''} placeholder="e.g. 33AAACI2345C1Z1" onChange={(e) => updateField('gstin', e.target.value)} />
-                        <Input label="PAN" defaultValue={formData.pan || ''} placeholder="e.g. AAACI2345C" onChange={(e) => updateField('pan', e.target.value)} />
+                        <Input label="GSTIN" value={formData.gstin || ''} placeholder="e.g. 33AAACI2345C1Z1" onChange={(e) => updateField('gstin', e.target.value)} />
+                        <Input label="PAN" value={formData.pan || ''} placeholder="e.g. AAACI2345C" onChange={(e) => updateField('pan', e.target.value)} />
                       </div>
                       <Select label="Payment Terms" options={[
                         { value: '15', label: '15 Days' },
                         { value: '30', label: '30 Days' },
                         { value: '45', label: '45 Days' },
                         { value: '60', label: '60 Days' },
-                      ]} defaultValue={formData.payment_terms || '30'} onChange={(e) => updateField('payment_terms', e.target.value)} />
+                      ]} value={formData.payment_terms || '30'} onChange={(e) => updateField('payment_terms', e.target.value)} />
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5"><Building2 size={10} /> Bank Details</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Bank Name" defaultValue={formData.bank_name || ''} placeholder="Enter bank name" onChange={(e) => updateField('bank_name', e.target.value)} />
-                        <Input label="Account No." defaultValue={formData.bank_account || ''} placeholder="Enter account no." onChange={(e) => updateField('bank_account', e.target.value)} />
+                        <Input label="Bank Name" value={formData.bank_name || ''} placeholder="Enter bank name" onChange={(e) => updateField('bank_name', e.target.value)} />
+                        <Input label="Account No." value={formData.bank_account || ''} placeholder="Enter account no." onChange={(e) => updateField('bank_account', e.target.value)} />
                       </div>
-                      <Input label="IFSC Code" defaultValue={formData.ifsc_code || ''} placeholder="e.g. HDFC0001234" onChange={(e) => updateField('ifsc_code', e.target.value)} />
+                      <Input label="IFSC Code" value={formData.ifsc_code || ''} placeholder="e.g. HDFC0001234" onChange={(e) => updateField('ifsc_code', e.target.value)} />
                     </div>
                   </div>
                 )}
+
+                {/* Navigation Buttons */}
+                <div className="flex items-center gap-2 pt-4">
+                  <button
+                    onClick={goToPreviousTab}
+                    disabled={activeTab === 'basic'}
+                    className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                  >
+                    ← Previous
+                  </button>
+                  {activeTab !== 'financial' && (
+                    <button
+                      onClick={goToNextTab}
+                      disabled={!canAccessTab(activeTab === 'basic' ? 'address' : 'financial')}
+                      className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                    >
+                      Next →
+                    </button>
+                  )}
+                </div>
 
                 {/* Status Toggle */}
                 <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
@@ -569,6 +655,14 @@ export default function SupplierMaster() {
         </>,
         document.body
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        title="Delete Supplier"
+        message="Are you sure you want to delete this supplier? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm({ open: false, id: null })}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'react-toastify';
 import {
   Plus,
   Search,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import api from '../lib/api';
 
 interface Customer {
@@ -62,6 +64,7 @@ export default function CustomerMaster() {
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -106,34 +109,95 @@ export default function CustomerMaster() {
     try {
       const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
       if (selectedCustomer?.id) {
-        await api(`/customers/${selectedCustomer.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        const res = await api(`/customers/${selectedCustomer.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Customer updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
       } else {
-        await api('/customers', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await api('/customers', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Customer created successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
       }
       setShowPanel(false);
+      setSearchQuery(''); // Clear search to see all records including the updated one
       fetchCustomers();
       fetchStats();
     } catch (err) {
-      alert('Failed to save customer: ' + (err as Error).message);
+      toast.error('Failed to save customer: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this customer?')) return;
+    setDeleteConfirm({ open: true, id });
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
     try {
-      await api(`/customers/${id}`, { method: 'DELETE' });
+      const res = await api(`/customers/${id}`, { method: 'DELETE' });
+      toast.success(res.message || 'Customer deleted successfully!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
       setShowPanel(false);
+      setSearchQuery('');
       fetchCustomers();
       fetchStats();
     } catch (err) {
-      alert('Failed to delete: ' + (err as Error).message);
+      toast.error('Failed to delete customer: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     }
   };
 
   const updateField = (field: keyof Customer, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Validation helpers for step-by-step navigation
+  const isBasicInfoComplete = () => {
+    return formData.name && formData.phone;
+  };
+
+  const isAddressComplete = () => {
+    return formData.billing_address && formData.shipping_address && formData.city;
+  };
+
+  const canAccessTab = (tab: 'basic' | 'address' | 'financial') => {
+    // When editing, allow access to all tabs
+    if (selectedCustomer) return true;
+    // When adding, restrict tabs step-by-step
+    if (tab === 'basic') return true;
+    if (tab === 'address') return isBasicInfoComplete();
+    if (tab === 'financial') return isBasicInfoComplete() && isAddressComplete();
+    return false;
+  };
+
+  const goToNextTab = () => {
+    if (activeTab === 'basic' && isBasicInfoComplete()) {
+      setActiveTab('address');
+    } else if (activeTab === 'address' && isAddressComplete()) {
+      setActiveTab('financial');
+    }
+  };
+
+  const goToPreviousTab = () => {
+    if (activeTab === 'address') {
+      setActiveTab('basic');
+    } else if (activeTab === 'financial') {
+      setActiveTab('address');
+    }
   };
 
   return (
@@ -222,7 +286,7 @@ export default function CustomerMaster() {
               ) : customers.length === 0 ? (
                 <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No customers found</td></tr>
               ) : customers.map((c, index) => (
-                <tr key={c.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(c)}>
+                <tr key={c.id || c.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(c)}>
                   <td className="py-3 px-4 font-mono text-xs text-indigo-500 font-medium relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${c.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
                     {c.code}
@@ -289,7 +353,7 @@ export default function CustomerMaster() {
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
           {customers.map((c) => (
-            <div key={c.code} className="p-4 hover:bg-gray-50/50 transition-colors active:bg-gray-100" onClick={() => openPanel(c)}>
+            <div key={c.id || c.code} className="p-4 hover:bg-gray-50/50 transition-colors active:bg-gray-100" onClick={() => openPanel(c)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -396,20 +460,26 @@ export default function CustomerMaster() {
                   { id: 'basic' as const, label: 'Basic Info', icon: <Users size={13} />, color: 'from-blue-500 to-blue-600' },
                   { id: 'address' as const, label: 'Address', icon: <MapPin size={13} />, color: 'from-violet-500 to-purple-600' },
                   { id: 'financial' as const, label: 'Financial', icon: <CreditCard size={13} />, color: 'from-emerald-500 to-teal-600' },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
-                      activeTab === tab.id
-                        ? `bg-gradient-to-r ${tab.color} text-white shadow-md`
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
-                    }`}
-                  >
-                    {tab.icon}
-                    {tab.label}
-                  </button>
-                ))}
+                ].map((tab) => {
+                  const isAccessible = canAccessTab(tab.id);
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => isAccessible && setActiveTab(tab.id)}
+                      disabled={!isAccessible}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
+                        !isAccessible
+                          ? 'opacity-40 cursor-not-allowed text-gray-400'
+                          : activeTab === tab.id
+                          ? `bg-gradient-to-r ${tab.color} text-white shadow-md`
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+                      }`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -422,8 +492,8 @@ export default function CustomerMaster() {
                       <Building2 size={10} /> Customer Identity
                     </p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="Customer Code" required defaultValue={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
-                      <Input label="Customer Name" required defaultValue={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
+                      <Input label="Customer Code" required value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                      <Input label="Customer Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
@@ -431,12 +501,12 @@ export default function CustomerMaster() {
                       <Phone size={10} /> Contact Information
                     </p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="Contact Person" defaultValue={formData.contact_person || ''} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
-                      <Input label="Phone" required defaultValue={formData.phone || ''} placeholder="+91 XXXXX XXXXX" onChange={(e) => updateField('phone', e.target.value)} />
+                      <Input label="Contact Person" value={formData.contact_person || ''} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
+                      <Input label="Phone" required value={formData.phone || ''} placeholder="+91 XXXXX XXXXX" onChange={(e) => updateField('phone', e.target.value)} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="Email" defaultValue={formData.email || ''} placeholder="email@domain.com" onChange={(e) => updateField('email', e.target.value)} />
-                      <Input label="Alternate Phone" defaultValue={formData.alt_phone || ''} placeholder="Optional" onChange={(e) => updateField('alt_phone', e.target.value)} />
+                      <Input label="Email" value={formData.email || ''} placeholder="email@domain.com" onChange={(e) => updateField('email', e.target.value)} />
+                      <Input label="Alternate Phone" value={formData.alt_phone || ''} placeholder="Optional" onChange={(e) => updateField('alt_phone', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
@@ -452,7 +522,7 @@ export default function CustomerMaster() {
                           { value: 'domestic', label: 'Domestic Customer' },
                           { value: 'wholesale', label: 'Wholesale' },
                         ]}
-                        defaultValue={formData.category || ''}
+                        value={formData.category || ''}
                         onChange={(e) => updateField('category', e.target.value)}
                       />
                       <Select
@@ -462,7 +532,7 @@ export default function CustomerMaster() {
                           { value: 'usd', label: 'USD - US Dollar' },
                           { value: 'eur', label: 'EUR - Euro' },
                         ]}
-                        defaultValue={formData.currency || 'inr'}
+                        value={formData.currency || 'inr'}
                         onChange={(e) => updateField('currency', e.target.value)}
                       />
                     </div>
@@ -473,7 +543,7 @@ export default function CustomerMaster() {
                     </p>
                     <textarea
                       rows={3}
-                      defaultValue={formData.notes || ''}
+                      value={formData.notes || ''}
                       onChange={(e) => updateField('notes', e.target.value)}
                       placeholder="Any additional notes..."
                       className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white"
@@ -494,7 +564,7 @@ export default function CustomerMaster() {
                       </label>
                       <textarea
                         rows={3}
-                        defaultValue={formData.billing_address || ''}
+                        value={formData.billing_address || ''}
                       onChange={(e) => updateField('billing_address', e.target.value)}
                         placeholder="Enter billing address..."
                         className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all resize-none placeholder-gray-400"
@@ -509,7 +579,7 @@ export default function CustomerMaster() {
                       <label className="block text-xs font-medium text-gray-900 mb-1">Shipping Address</label>
                       <textarea
                         rows={3}
-                        defaultValue={formData.shipping_address || ''}
+                        value={formData.shipping_address || ''}
                       onChange={(e) => updateField('shipping_address', e.target.value)}
                         placeholder="Enter shipping address (or same as billing)..."
                         className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all resize-none placeholder-gray-400"
@@ -530,7 +600,7 @@ export default function CustomerMaster() {
                           { value: 'maharashtra', label: 'Maharashtra' },
                           { value: 'kerala', label: 'Kerala' },
                         ]}
-                        defaultValue={formData.state || ''}
+                        value={formData.state || ''}
                         onChange={(e) => updateField('state', e.target.value)}
                       />
                       <Select
@@ -542,11 +612,11 @@ export default function CustomerMaster() {
                           { value: 'ranipet', label: 'Ranipet' },
                           { value: 'ambur', label: 'Ambur' },
                         ]}
-                        defaultValue={formData.city?.toLowerCase() || ''}
+                        value={formData.city?.toLowerCase() || ''}
                         onChange={(e) => updateField('city', e.target.value)}
                       />
                     </div>
-                    <Input label="Pin Code" defaultValue={formData.pin_code || ''} placeholder="Enter pin code" onChange={(e) => updateField('pin_code', e.target.value)} />
+                    <Input label="Pin Code" value={formData.pin_code || ''} placeholder="Enter pin code" onChange={(e) => updateField('pin_code', e.target.value)} />
                   </div>
                 </div>
               )}
@@ -558,8 +628,8 @@ export default function CustomerMaster() {
                       <CreditCard size={10} /> Tax Details
                     </p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Input label="GSTIN" defaultValue={formData.gstin || ''} placeholder="e.g. 33AAACA1234A1Z5" onChange={(e) => updateField('gstin', e.target.value)} />
-                      <Input label="PAN" defaultValue={formData.pan || ''} placeholder="e.g. AAACA1234A" onChange={(e) => updateField('pan', e.target.value)} />
+                      <Input label="GSTIN" value={formData.gstin || ''} placeholder="e.g. 33AAACA1234A1Z5" onChange={(e) => updateField('gstin', e.target.value)} />
+                      <Input label="PAN" value={formData.pan || ''} placeholder="e.g. AAACA1234A" onChange={(e) => updateField('pan', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-gradient-to-r from-teal-50/80 to-cyan-50/80 border border-teal-100/50 space-y-3">
@@ -575,10 +645,10 @@ export default function CustomerMaster() {
                           { value: '45', label: '45 Days' },
                           { value: '60', label: '60 Days' },
                         ]}
-                        defaultValue={formData.payment_terms || '30'}
+                        value={formData.payment_terms || '30'}
                         onChange={(e) => updateField('payment_terms', e.target.value)}
                       />
-                      <Input label="Credit Limit (₹)" defaultValue={formData.credit_limit || ''} placeholder="e.g. 5,00,000" onChange={(e) => updateField('credit_limit', e.target.value)} />
+                      <Input label="Credit Limit (₹)" value={formData.credit_limit || ''} placeholder="e.g. 5,00,000" onChange={(e) => updateField('credit_limit', e.target.value)} />
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200">
@@ -587,6 +657,34 @@ export default function CustomerMaster() {
                   </div>
                 </div>
               )}
+
+              {/* Tab Navigation */}
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100">
+                <button
+                  onClick={goToPreviousTab}
+                  disabled={activeTab === 'basic'}
+                  className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  ← Previous
+                </button>
+                {activeTab !== 'financial' && (
+                  <button
+                    onClick={goToNextTab}
+                    disabled={!canAccessTab(activeTab === 'basic' ? 'address' : 'financial')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                      activeTab === 'basic'
+                        ? !isBasicInfoComplete()
+                          ? 'bg-red-100 text-red-600 cursor-not-allowed opacity-50'
+                          : 'bg-blue-500 text-white hover:bg-blue-600'
+                        : !isAddressComplete()
+                        ? 'bg-red-100 text-red-600 cursor-not-allowed opacity-50'
+                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
+                  >
+                    Next →
+                  </button>
+                )}
+              </div>
 
               {/* Status Toggle */}
               <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
@@ -631,6 +729,14 @@ export default function CustomerMaster() {
         </>,
         document.body
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        title="Delete Customer"
+        message="Are you sure you want to delete this customer? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm({ open: false, id: null })}
+      />
     </div>
   );
 }

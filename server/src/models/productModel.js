@@ -52,8 +52,8 @@ export async function create(data) {
 
 export async function update(id, data) {
   const [result] = await pool.query(
-    `UPDATE products SET name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, sales_price=?, hsn_code=?, status=? WHERE id=?`,
-    [data.name, data.category, data.leather_type, data.uom, data.thickness,
+    `UPDATE products SET code=?, name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, sales_price=?, hsn_code=?, status=? WHERE id=?`,
+    [data.code, data.name, data.category, data.leather_type, data.uom, data.thickness,
      data.color, data.finish_type, data.description, data.standard_size,
      data.grade, data.sales_price, data.hsn_code, data.status, id]
   );

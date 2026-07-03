@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'react-toastify';
 import {
   Plus,
   Search,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import api from '../lib/api';
 
 interface Product {
@@ -58,6 +60,7 @@ export default function ProductMaster() {
   const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'pricing'>('basic');
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -102,34 +105,95 @@ export default function ProductMaster() {
     try {
       const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
       if (selectedProduct?.id) {
-        await api(`/products/${selectedProduct.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        const res = await api(`/products/${selectedProduct.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Product updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
       } else {
-        await api('/products', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await api('/products', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Product created successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
       }
       setShowPanel(false);
+      setSearchQuery(''); // Clear search to see all records including the updated one
       fetchProducts();
       fetchStats();
     } catch (err) {
-      alert('Failed to save product: ' + (err as Error).message);
+      toast.error('Failed to save product: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this product?')) return;
+    setDeleteConfirm({ open: true, id });
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
     try {
-      await api(`/products/${id}`, { method: 'DELETE' });
+      const res = await api(`/products/${id}`, { method: 'DELETE' });
+      toast.success(res.message || 'Product deleted successfully!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
       setShowPanel(false);
+      setSearchQuery('');
       fetchProducts();
       fetchStats();
     } catch (err) {
-      alert('Failed to delete: ' + (err as Error).message);
+      toast.error('Failed to delete product: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     }
   };
 
   const updateField = (field: keyof Product, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Validation helpers for step-by-step navigation
+  const isBasicInfoComplete = () => {
+    return formData.name && formData.category && formData.leather_type;
+  };
+
+  const isSpecsComplete = () => {
+    return formData.uom && formData.thickness;
+  };
+
+  const canAccessTab = (tab: 'basic' | 'specs' | 'pricing') => {
+    // When editing, allow access to all tabs
+    if (selectedProduct) return true;
+    // When adding, restrict tabs step-by-step
+    if (tab === 'basic') return true;
+    if (tab === 'specs') return isBasicInfoComplete();
+    if (tab === 'pricing') return isBasicInfoComplete() && isSpecsComplete();
+    return false;
+  };
+
+  const goToNextTab = () => {
+    if (activeTab === 'basic' && isBasicInfoComplete()) {
+      setActiveTab('specs');
+    } else if (activeTab === 'specs' && isSpecsComplete()) {
+      setActiveTab('pricing');
+    }
+  };
+
+  const goToPreviousTab = () => {
+    if (activeTab === 'specs') {
+      setActiveTab('basic');
+    } else if (activeTab === 'pricing') {
+      setActiveTab('specs');
+    }
   };
 
   return (
@@ -212,7 +276,7 @@ export default function ProductMaster() {
               ) : products.length === 0 ? (
                 <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No products found</td></tr>
               ) : products.map((p, index) => (
-                <tr key={p.code} className={`hover:bg-teal-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(p)}>
+                <tr key={p.id || p.code} className={`hover:bg-teal-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(p)}>
                   <td className="py-3 px-4 relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${p.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
                     <span className="font-mono text-xs text-teal-600 font-medium">{p.code}</span>
@@ -267,7 +331,7 @@ export default function ProductMaster() {
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
           {products.map((p) => (
-            <div key={p.code} className="p-4 hover:bg-teal-50/30 transition-colors active:bg-teal-50" onClick={() => openPanel(p)}>
+            <div key={p.id || p.code} className="p-4 hover:bg-gray-50/50 transition-colors active:bg-gray-100" onClick={() => openPanel(p)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -351,20 +415,26 @@ export default function ProductMaster() {
                     { id: 'basic' as const, label: 'Basic Info', icon: <Box size={13} />, color: 'from-teal-500 to-emerald-600' },
                     { id: 'specs' as const, label: 'Specifications', icon: <Ruler size={13} />, color: 'from-violet-500 to-purple-600' },
                     { id: 'pricing' as const, label: 'Pricing & Grade', icon: <Tag size={13} />, color: 'from-amber-500 to-orange-600' },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
-                        activeTab === tab.id
-                          ? `bg-gradient-to-r ${tab.color} text-white shadow-md`
-                          : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
-                      }`}
-                    >
-                      {tab.icon}
-                      {tab.label}
-                    </button>
-                  ))}
+                  ].map((tab) => {
+                    const isAccessible = canAccessTab(tab.id);
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => isAccessible && setActiveTab(tab.id)}
+                        disabled={!isAccessible}
+                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
+                          !isAccessible
+                            ? 'opacity-40 cursor-not-allowed text-gray-400'
+                            : activeTab === tab.id
+                            ? `bg-gradient-to-r ${tab.color} text-white shadow-md`
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+                        }`}
+                      >
+                        {tab.icon}
+                        {tab.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -377,8 +447,8 @@ export default function ProductMaster() {
                         <Package size={10} /> Product Identity
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Product Code" required defaultValue={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
-                        <Input label="Product Name" required defaultValue={formData.name || ''} placeholder="Enter product name" onChange={(e) => updateField('name', e.target.value)} />
+                        <Input label="Product Code" required value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                        <Input label="Product Name" required value={formData.name || ''} placeholder="Enter product name" onChange={(e) => updateField('name', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
@@ -391,14 +461,14 @@ export default function ProductMaster() {
                           { value: 'finished', label: 'Finished Leather' },
                           { value: 'semi', label: 'Semi Finished' },
                           { value: 'raw', label: 'Raw Material' },
-                        ]} defaultValue={formData.category === 'Finished Leather' ? 'finished' : formData.category === 'Semi Finished' ? 'semi' : ''} onChange={(e) => updateField('category', e.target.value === 'finished' ? 'Finished Leather' : e.target.value === 'semi' ? 'Semi Finished' : '')} />
+                        ]} value={formData.category === 'Finished Leather' ? 'finished' : formData.category === 'Semi Finished' ? 'semi' : ''} onChange={(e) => updateField('category', e.target.value === 'finished' ? 'Finished Leather' : e.target.value === 'semi' ? 'Semi Finished' : '')} />
                         <Select label="Leather Type" required options={[
                           { value: '', label: 'Select type' },
                           { value: 'cow', label: 'Cow' },
                           { value: 'buffalo', label: 'Buffalo' },
                           { value: 'goat', label: 'Goat' },
                           { value: 'sheep', label: 'Sheep' },
-                        ]} defaultValue={formData.leather_type?.toLowerCase() || ''} onChange={(e) => updateField('leather_type', e.target.value)} />
+                        ]} value={formData.leather_type?.toLowerCase() || ''} onChange={(e) => updateField('leather_type', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
@@ -407,7 +477,7 @@ export default function ProductMaster() {
                       </p>
                       <textarea
                         rows={3}
-                        defaultValue={formData.description || ''}
+                        value={formData.description || ''}
                       onChange={(e) => updateField('description', e.target.value)}
                         placeholder="Product description..."
                         className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white"
@@ -427,22 +497,22 @@ export default function ProductMaster() {
                           { value: 'sqft', label: 'Sq. Ft.' },
                           { value: 'sqm', label: 'Sq. M.' },
                           { value: 'kg', label: 'Kg' },
-                        ]} defaultValue={formData.uom === 'Sq. Ft.' ? 'sqft' : 'sqm'} onChange={(e) => updateField('uom', e.target.value === 'sqft' ? 'Sq. Ft.' : 'Sq. M.')} />
+                        ]} value={formData.uom === 'Sq. Ft.' ? 'sqft' : 'sqm'} onChange={(e) => updateField('uom', e.target.value === 'sqft' ? 'Sq. Ft.' : 'Sq. M.')} />
                         <Select label="Thickness (mm)" options={[
                           { value: '1.2-1.4', label: '1.2 - 1.4 mm' },
                           { value: '1.0-1.2', label: '1.0 - 1.2 mm' },
                           { value: '1.4-1.6', label: '1.4 - 1.6 mm' },
                           { value: '0.8-1.0', label: '0.8 - 1.0 mm' },
-                        ]} defaultValue={formData.thickness?.includes('1.2') ? '1.2-1.4' : formData.thickness?.includes('1.0') ? '1.0-1.2' : '1.4-1.6'} onChange={(e) => updateField('thickness', e.target.value)} />
+                        ]} value={formData.thickness?.includes('1.2') ? '1.2-1.4' : formData.thickness?.includes('1.0') ? '1.0-1.2' : '1.4-1.6'} onChange={(e) => updateField('thickness', e.target.value)} />
                       </div>
-                      <Input label="Standard Size" defaultValue={formData.standard_size || ''} placeholder="e.g. As per Customer Requirement" onChange={(e) => updateField('standard_size', e.target.value)} />
+                      <Input label="Standard Size" value={formData.standard_size || ''} placeholder="e.g. As per Customer Requirement" onChange={(e) => updateField('standard_size', e.target.value)} />
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
                         <Palette size={10} /> Finish & Appearance
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Color / Shade" defaultValue={formData.color || ''} placeholder="e.g. Black, Brown" onChange={(e) => updateField('color', e.target.value)} />
+                        <Input label="Color / Shade" value={formData.color || ''} placeholder="e.g. Black, Brown" onChange={(e) => updateField('color', e.target.value)} />
                         <Select label="Finish Type" options={[
                           { value: '', label: 'Select finish' },
                           { value: 'semi-aniline', label: 'Semi Aniline' },
@@ -450,7 +520,7 @@ export default function ProductMaster() {
                           { value: 'nappa', label: 'Nappa' },
                           { value: 'suede', label: 'Suede' },
                           { value: 'pull-up', label: 'Pull-Up' },
-                        ]} defaultValue={formData.finish_type || ''} onChange={(e) => updateField('finish_type', e.target.value)} />
+                        ]} value={formData.finish_type || ''} onChange={(e) => updateField('finish_type', e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -463,8 +533,8 @@ export default function ProductMaster() {
                         <Tag size={10} /> Pricing
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input label="Sales Price (₹ / Sq. Ft.)" defaultValue={formData.sales_price || ''} placeholder="e.g. 125.00" onChange={(e) => updateField('sales_price', e.target.value)} />
-                        <Input label="HSN Code" defaultValue={formData.hsn_code || ''} placeholder="e.g. 4107" onChange={(e) => updateField('hsn_code', e.target.value)} />
+                        <Input label="Sales Price (₹ / Sq. Ft.)" value={formData.sales_price || ''} placeholder="e.g. 125.00" onChange={(e) => updateField('sales_price', e.target.value)} />
+                        <Input label="HSN Code" value={formData.hsn_code || ''} placeholder="e.g. 4107" onChange={(e) => updateField('hsn_code', e.target.value)} />
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border border-indigo-100/50 space-y-3">
@@ -475,7 +545,7 @@ export default function ProductMaster() {
                         { value: 'a', label: 'A Grade (Premium)' },
                         { value: 'b', label: 'B Grade (Standard)' },
                         { value: 'c', label: 'C Grade (Economy)' },
-                      ]} defaultValue={formData.grade || 'a'} onChange={(e) => updateField('grade', e.target.value)} />
+                      ]} value={formData.grade || 'a'} onChange={(e) => updateField('grade', e.target.value)} />
                     </div>
                     <div className="p-3 rounded-lg bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200">
                       <p className="text-xs text-teal-700 font-semibold flex items-center gap-1.5">💡 Info</p>
@@ -483,6 +553,26 @@ export default function ProductMaster() {
                     </div>
                   </div>
                 )}
+
+                {/* Navigation Buttons */}
+                <div className="flex items-center gap-2 pt-4">
+                  <button
+                    onClick={goToPreviousTab}
+                    disabled={activeTab === 'basic'}
+                    className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                  >
+                    ← Previous
+                  </button>
+                  {activeTab !== 'pricing' && (
+                    <button
+                      onClick={goToNextTab}
+                      disabled={!canAccessTab(activeTab === 'basic' ? 'specs' : 'pricing')}
+                      className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                    >
+                      Next →
+                    </button>
+                  )}
+                </div>
 
                 {/* Status Toggle */}
                 <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
@@ -525,6 +615,14 @@ export default function ProductMaster() {
         </>,
         document.body
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        title="Delete Product"
+        message="Are you sure you want to delete this product? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm({ open: false, id: null })}
+      />
     </div>
   );
 }
