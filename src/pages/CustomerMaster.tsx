@@ -17,11 +17,12 @@ import {
   CreditCard,
   Save,
   X,
-  Download,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ExportMenu from '../components/ui/ExportMenu';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import api from '../lib/api';
 
 interface Customer {
@@ -252,9 +253,18 @@ export default function CustomerMaster() {
             <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
               <Filter size={15} />
             </button>
-            <button className="hidden sm:flex p-2 rounded-lg border border-teal-200 text-teal-500 hover:bg-teal-50 hover:border-teal-300 transition-all">
-              <Download size={15} />
-            </button>
+            <ExportMenu
+              onPreview={() => {
+                const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
+                const rows = customers.map(c => [c.code, c.name, c.contact_person, c.phone, c.email, c.city, c.status]);
+                previewPDF({ title: 'Customer Master', subtitle: `Total: ${customers.length} customers`, columns, rows, accentColor: [79, 70, 229] });
+              }}
+              onDownload={() => {
+                const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
+                const rows = customers.map(c => [c.code, c.name, c.contact_person, c.phone, c.email, c.city, c.status]);
+                downloadPDF({ title: 'Customer Master', subtitle: `Total: ${customers.length} customers`, columns, rows, accentColor: [79, 70, 229], fileName: 'Customer_Master.pdf' });
+              }}
+            />
           </div>
           <button
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-300 transition-all active:scale-95"

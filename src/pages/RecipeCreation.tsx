@@ -13,7 +13,6 @@ import {
   FlaskConical,
   Search,
   Filter,
-  Download,
   ChevronLeft,
   ChevronRight,
   RotateCcw,
@@ -24,6 +23,8 @@ import Select from '../components/ui/Select';
 import Tabs from '../components/ui/Tabs';
 import Table from '../components/ui/Table';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ExportMenu from '../components/ui/ExportMenu';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import api from '../lib/api';
 
 interface ProcessStage {
@@ -345,9 +346,18 @@ export default function RecipeCreation() {
             <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
               <Filter size={15} />
             </button>
-            <button className="hidden sm:flex p-2 rounded-lg border border-sky-200 text-sky-500 hover:bg-sky-50 hover:border-sky-300 transition-all">
-              <Download size={15} />
-            </button>
+            <ExportMenu
+              onPreview={() => {
+                const columns = ['Code', 'Name', 'Leather Type', 'Process Type', 'Finish Type', 'Version', 'Status'];
+                const rows = recipes.map(r => [r.code, r.name, r.leather_type, r.process_type, r.finish_type, `v${r.version}`, r.status]);
+                previewPDF({ title: 'Recipe Creation', subtitle: `Total: ${recipes.length} recipes`, columns, rows, accentColor: [139, 92, 246] });
+              }}
+              onDownload={() => {
+                const columns = ['Code', 'Name', 'Leather Type', 'Process Type', 'Finish Type', 'Version', 'Status'];
+                const rows = recipes.map(r => [r.code, r.name, r.leather_type, r.process_type, r.finish_type, `v${r.version}`, r.status]);
+                downloadPDF({ title: 'Recipe Creation', subtitle: `Total: ${recipes.length} recipes`, columns, rows, accentColor: [139, 92, 246], fileName: 'Recipe_Creation.pdf' });
+              }}
+            />
           </div>
           <button
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 rounded-lg shadow-md shadow-violet-200 hover:shadow-lg hover:shadow-violet-300 transition-all active:scale-95"

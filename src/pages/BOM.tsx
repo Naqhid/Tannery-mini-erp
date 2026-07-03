@@ -9,7 +9,6 @@ import {
   History,
   Search,
   Filter,
-  Download,
   ChevronLeft,
   ChevronRight,
   Save,
@@ -23,6 +22,8 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Table from '../components/ui/Table';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ExportMenu from '../components/ui/ExportMenu';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import api from '../lib/api';
 
 interface BOMItemRow {
@@ -251,9 +252,18 @@ export default function BOM() {
             <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
               <Filter size={15} />
             </button>
-            <button className="hidden sm:flex p-2 rounded-lg border border-sky-200 text-sky-500 hover:bg-sky-50 hover:border-sky-300 transition-all">
-              <Download size={15} />
-            </button>
+            <ExportMenu
+              onPreview={() => {
+                const columns = ['Code', 'Name', 'Leather Type', 'Process Type', 'Thickness', 'UOM', 'Status'];
+                const rows = boms.map(b => [b.code, b.name, b.leather_type, b.process_type, b.thickness, b.uom, b.status]);
+                previewPDF({ title: 'Bill of Materials', subtitle: `Total: ${boms.length} BOMs`, columns, rows, accentColor: [20, 184, 166] });
+              }}
+              onDownload={() => {
+                const columns = ['Code', 'Name', 'Leather Type', 'Process Type', 'Thickness', 'UOM', 'Status'];
+                const rows = boms.map(b => [b.code, b.name, b.leather_type, b.process_type, b.thickness, b.uom, b.status]);
+                downloadPDF({ title: 'Bill of Materials', subtitle: `Total: ${boms.length} BOMs`, columns, rows, accentColor: [20, 184, 166], fileName: 'BOM_Master.pdf' });
+              }}
+            />
           </div>
           <button
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md shadow-teal-200 hover:shadow-lg hover:shadow-teal-300 transition-all active:scale-95"

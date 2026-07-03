@@ -17,7 +17,6 @@ import {
   Building2,
   Save,
   X,
-  Download,
   Users,
   Globe,
   Layers,
@@ -25,6 +24,8 @@ import {
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ExportMenu from '../components/ui/ExportMenu';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import api from '../lib/api';
 
 interface Supplier {
@@ -265,9 +266,18 @@ export default function SupplierMaster() {
             <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
               <Filter size={15} />
             </button>
-            <button className="hidden sm:flex p-2 rounded-lg border border-sky-200 text-sky-500 hover:bg-sky-50 hover:border-sky-300 transition-all">
-              <Download size={15} />
-            </button>
+            <ExportMenu
+              onPreview={() => {
+                const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
+                const rows = suppliers.map(s => [s.code, s.name, s.contact_person, s.phone, s.email, s.city, s.status]);
+                previewPDF({ title: 'Supplier Master', subtitle: `Total: ${suppliers.length} suppliers`, columns, rows, accentColor: [249, 115, 22] });
+              }}
+              onDownload={() => {
+                const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
+                const rows = suppliers.map(s => [s.code, s.name, s.contact_person, s.phone, s.email, s.city, s.status]);
+                downloadPDF({ title: 'Supplier Master', subtitle: `Total: ${suppliers.length} suppliers`, columns, rows, accentColor: [249, 115, 22], fileName: 'Supplier_Master.pdf' });
+              }}
+            />
           </div>
           <button
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 rounded-lg shadow-md shadow-orange-200 hover:shadow-lg hover:shadow-orange-300 transition-all active:scale-95"

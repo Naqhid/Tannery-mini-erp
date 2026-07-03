@@ -17,12 +17,13 @@ import {
   Ruler,
   Save,
   X,
-  Download,
   Tag,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ExportMenu from '../components/ui/ExportMenu';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import api from '../lib/api';
 
 interface Product {
@@ -243,9 +244,18 @@ export default function ProductMaster() {
             <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
               <Filter size={15} />
             </button>
-            <button className="hidden sm:flex p-2 rounded-lg border border-sky-200 text-sky-500 hover:bg-sky-50 hover:border-sky-300 transition-all">
-              <Download size={15} />
-            </button>
+            <ExportMenu
+              onPreview={() => {
+                const columns = ['Code', 'Name', 'Category', 'Leather Type', 'UOM', 'Thickness', 'Status'];
+                const rows = products.map(p => [p.code, p.name, p.category, p.leather_type, p.uom, p.thickness, p.status]);
+                previewPDF({ title: 'Product Master', subtitle: `Total: ${products.length} products`, columns, rows, accentColor: [16, 185, 129] });
+              }}
+              onDownload={() => {
+                const columns = ['Code', 'Name', 'Category', 'Leather Type', 'UOM', 'Thickness', 'Status'];
+                const rows = products.map(p => [p.code, p.name, p.category, p.leather_type, p.uom, p.thickness, p.status]);
+                downloadPDF({ title: 'Product Master', subtitle: `Total: ${products.length} products`, columns, rows, accentColor: [16, 185, 129], fileName: 'Product_Master.pdf' });
+              }}
+            />
           </div>
           <button
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md shadow-teal-200 hover:shadow-lg hover:shadow-teal-300 transition-all active:scale-95"
