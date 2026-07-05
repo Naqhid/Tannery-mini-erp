@@ -2,10 +2,11 @@ import * as model from '../models/customerModel.js';
 
 export async function list(req, res, next) {
   try {
-    const { search, status } = req.query;
+    const { search, status, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const { rows, total } = await model.getAll({ search, status, page, limit });
-    res.json({ data: rows, total, page, limit });
+    const { rows, total } = await model.getAll({ search, status, page, limit, sortBy, sortOrder });
+    const totalPages = Math.ceil(total / limit);
+    res.json({ data: rows, total, page, limit, totalPages });
   } catch (err) { next(err); }
 }
 

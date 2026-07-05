@@ -1,6 +1,6 @@
 import pool from '../config/db.js';
 
-export async function getAll({ search, status, page, limit }) {
+export async function getAll({ search, status, page, limit, sortBy, sortOrder }) {
   let where = '1=1';
   const params = [];
 
@@ -14,9 +14,14 @@ export async function getAll({ search, status, page, limit }) {
     params.push(status);
   }
 
+  // Whitelist sortable columns to prevent SQL injection
+  const allowedSortColumns = ['id', 'code', 'name', 'contact_person', 'phone', 'email', 'city', 'status', 'created_at'];
+  const column = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+  const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT * FROM customers WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    `SELECT * FROM customers WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   const [[{ total }]] = await pool.query(

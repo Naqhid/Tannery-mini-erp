@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import * as ctrl from '../controllers/bomController.js';
-import { validateId } from '../middleware/validators.js';
+import { validateId, validatePagination } from '../middleware/validators.js';
 
 const router = Router();
 
-router.get('/', ctrl.list);
+router.get('/', validatePagination, ctrl.list);
 router.get('/stats', ctrl.stats);
 router.get('/:id', validateId, ctrl.getOne);
 

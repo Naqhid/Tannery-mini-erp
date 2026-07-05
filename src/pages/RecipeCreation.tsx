@@ -16,6 +16,9 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -74,6 +77,9 @@ const emptyRecipe: Recipe = {
   version: 1, description: '',
 };
 
+type SortField = 'code' | 'name' | 'leather_type' | 'process_type' | 'status';
+type SortOrder = 'asc' | 'desc';
+
 export default function RecipeCreation() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0 });
@@ -88,18 +94,37 @@ export default function RecipeCreation() {
   const [statusToggle, setStatusToggle] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  // Sorting state
+  const [sortBy, setSortBy] = useState<SortField | ''>('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
   const fetchRecipes = useCallback(async () => {
     try {
       setLoading(true);
-      const params = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
-      const res = await api<{ data: Recipe[]; total: number }>(`/recipes${params}`);
+      const params = new URLSearchParams();
+      if (searchQuery) params.set('search', searchQuery);
+      params.set('page', String(currentPage));
+      params.set('limit', String(pageSize));
+      if (sortBy) {
+        params.set('sortBy', sortBy);
+        params.set('sortOrder', sortOrder);
+      }
+      const res = await api<{ data: Recipe[]; total: number; page: number; totalPages: number }>(`/recipes?${params.toString()}`);
       setRecipes(res.data || []);
+      setTotalRecords(res.total || 0);
+      setTotalPages(res.totalPages || 0);
     } catch {
       setRecipes([]);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -110,6 +135,25 @@ export default function RecipeCreation() {
 
   useEffect(() => { fetchRecipes(); }, [fetchRecipes]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  // Reset to page 1 when search or sort changes
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-300 group-hover:text-gray-500" />;
+    return sortOrder === 'asc'
+      ? <ArrowUp size={12} className="text-violet-600" />
+      : <ArrowDown size={12} className="text-violet-600" />;
+  };
 
   const formatDate = (dateStr: string | undefined | null): string => {
     if (!dateStr) return '';
@@ -162,6 +206,7 @@ export default function RecipeCreation() {
       }
       setShowPanel(false);
       setSearchQuery('');
+      setCurrentPage(1);
       fetchRecipes();
       fetchStats();
     } catch (err) {
@@ -184,6 +229,7 @@ export default function RecipeCreation() {
       toast.success(res.message || 'Recipe deleted successfully!', { position: 'top-right', autoClose: 3000 });
       setShowPanel(false);
       setSearchQuery('');
+      setCurrentPage(1);
       fetchRecipes();
       fetchStats();
     } catch (err) {
@@ -373,13 +419,13 @@ export default function RecipeCreation() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-violet-50/40 border-b border-violet-100/50">
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-600 uppercase tracking-wider">Code</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider">Recipe Name</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-500 uppercase tracking-wider">Leather Type</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider hidden lg:table-cell">Process Type</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">Recipe Name <SortIcon field="name" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('process_type')}><span className="inline-flex items-center gap-1">Process Type <SortIcon field="process_type" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell">Finish Type</th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-amber-500 uppercase tracking-wider hidden xl:table-cell">Version</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider">Status</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('status')}><span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-rose-500 uppercase tracking-wider w-[90px]">Actions</th>
               </tr>
             </thead>
@@ -471,11 +517,64 @@ export default function RecipeCreation() {
 
         {/* Pagination */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-violet-100/50 bg-gradient-to-r from-slate-50 to-violet-50/30">
-          <p className="text-xs text-violet-500 font-medium">Showing {recipes.length} entries</p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-violet-500 font-medium">
+              Showing {totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} entries
+            </p>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="text-xs border border-violet-200 rounded-lg px-2 py-1 text-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-300"
+            >
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+            </select>
+          </div>
           <div className="flex items-center gap-1">
-            <button className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-violet-300 border border-transparent hover:border-violet-200 transition-all"><ChevronLeft size={14} /></button>
-            <button className="w-8 h-8 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-medium shadow-md shadow-violet-200">1</button>
-            <button className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-violet-300 border border-transparent hover:border-violet-200 transition-all"><ChevronRight size={14} /></button>
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-violet-300 border border-transparent hover:border-violet-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => {
+                if (totalPages <= 5) return true;
+                if (p === 1 || p === totalPages) return true;
+                if (Math.abs(p - currentPage) <= 1) return true;
+                return false;
+              })
+              .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-violet-400">…</span>
+                ) : (
+                  <button
+                    key={item}
+                    onClick={() => setCurrentPage(item)}
+                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                      currentPage === item
+                        ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-200'
+                        : 'hover:bg-white hover:shadow-sm text-violet-600 border border-transparent hover:border-violet-200'
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-violet-300 border border-transparent hover:border-violet-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
         </div>
       </div>

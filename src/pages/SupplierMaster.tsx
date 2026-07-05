@@ -20,6 +20,9 @@ import {
   Users,
   Globe,
   Layers,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
@@ -71,6 +74,9 @@ const emptySupplier: Supplier = {
   bank_name: '', bank_account: '', ifsc_code: '', notes: '',
 };
 
+type SortField = 'code' | 'name' | 'contact_person' | 'phone' | 'email' | 'city' | 'status';
+type SortOrder = 'asc' | 'desc';
+
 export default function SupplierMaster() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0 });
@@ -85,18 +91,37 @@ export default function SupplierMaster() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  // Sorting state
+  const [sortBy, setSortBy] = useState<SortField | ''>('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
   const fetchSuppliers = useCallback(async () => {
     try {
       setLoading(true);
-      const params = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
-      const res = await api<{ data: Supplier[]; total: number }>(`/suppliers${params}`);
+      const params = new URLSearchParams();
+      if (searchQuery) params.set('search', searchQuery);
+      params.set('page', String(currentPage));
+      params.set('limit', String(pageSize));
+      if (sortBy) {
+        params.set('sortBy', sortBy);
+        params.set('sortOrder', sortOrder);
+      }
+      const res = await api<{ data: Supplier[]; total: number; page: number; totalPages: number }>(`/suppliers?${params.toString()}`);
       setSuppliers(res.data || []);
+      setTotalRecords(res.total || 0);
+      setTotalPages(res.totalPages || 0);
     } catch {
       setSuppliers([]);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -117,6 +142,25 @@ export default function SupplierMaster() {
   useEffect(() => { fetchSuppliers(); }, [fetchSuppliers]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchPricing(); }, [fetchPricing]);
+
+  // Reset to page 1 when search or sort changes
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-300 group-hover:text-gray-500" />;
+    return sortOrder === 'asc'
+      ? <ArrowUp size={12} className="text-orange-600" />
+      : <ArrowDown size={12} className="text-orange-600" />;
+  };
 
   const openPanel = (supplier?: Supplier) => {
     if (supplier) {
@@ -152,6 +196,7 @@ export default function SupplierMaster() {
       }
       setShowPanel(false);
       setSearchQuery(''); // Clear search to see all records including the updated one
+      setCurrentPage(1);
       fetchSuppliers();
       fetchStats();
     } catch (err) {
@@ -180,6 +225,7 @@ export default function SupplierMaster() {
       });
       setShowPanel(false);
       setSearchQuery('');
+      setCurrentPage(1);
       fetchSuppliers();
       fetchStats();
     } catch (err) {
@@ -293,13 +339,13 @@ export default function SupplierMaster() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-orange-50/40 border-b border-orange-100/50">
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-orange-600 uppercase tracking-wider">Code</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-500 uppercase tracking-wider">Supplier Name</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-500 uppercase tracking-wider">Contact Person</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider hidden lg:table-cell">Phone</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider hidden xl:table-cell">Email</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell">City</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider">Status</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-orange-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">Supplier Name <SortIcon field="name" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('contact_person')}><span className="inline-flex items-center gap-1">Contact Person <SortIcon field="contact_person" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('phone')}><span className="inline-flex items-center gap-1">Phone <SortIcon field="phone" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider hidden xl:table-cell cursor-pointer group select-none" onClick={() => handleSort('email')}><span className="inline-flex items-center gap-1">Email <SortIcon field="email" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('city')}><span className="inline-flex items-center gap-1">City <SortIcon field="city" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('status')}><span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-rose-500 uppercase tracking-wider w-[90px]">Actions</th>
               </tr>
             </thead>
@@ -394,13 +440,64 @@ export default function SupplierMaster() {
 
         {/* Pagination */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-orange-100/50 bg-gradient-to-r from-slate-50 to-orange-50/30">
-          <p className="text-xs text-orange-500 font-medium">Showing 1–8 of 18 entries</p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-orange-500 font-medium">
+              Showing {totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} entries
+            </p>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="text-xs border border-orange-200 rounded-lg px-2 py-1 text-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300"
+            >
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+            </select>
+          </div>
           <div className="flex items-center gap-1">
-            <button className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-orange-300 border border-transparent hover:border-orange-200 transition-all"><ChevronLeft size={14} /></button>
-            <button className="w-8 h-8 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-medium shadow-md shadow-orange-200">1</button>
-            <button className="w-8 h-8 rounded-lg hover:bg-white hover:shadow-sm text-xs text-orange-600 border border-transparent hover:border-orange-200 transition-all">2</button>
-            <button className="w-8 h-8 rounded-lg hover:bg-white hover:shadow-sm text-xs text-orange-600 border border-transparent hover:border-orange-200 transition-all">3</button>
-            <button className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-orange-300 border border-transparent hover:border-orange-200 transition-all"><ChevronRight size={14} /></button>
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-orange-300 border border-transparent hover:border-orange-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => {
+                if (totalPages <= 5) return true;
+                if (p === 1 || p === totalPages) return true;
+                if (Math.abs(p - currentPage) <= 1) return true;
+                return false;
+              })
+              .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-orange-400">…</span>
+                ) : (
+                  <button
+                    key={item}
+                    onClick={() => setCurrentPage(item)}
+                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                      currentPage === item
+                        ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md shadow-orange-200'
+                        : 'hover:bg-white hover:shadow-sm text-orange-600 border border-transparent hover:border-orange-200'
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-orange-300 border border-transparent hover:border-orange-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
         </div>
       </div>

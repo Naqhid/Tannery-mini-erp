@@ -1,6 +1,6 @@
 import pool from '../config/db.js';
 
-export async function getAll({ search, status, page, limit }) {
+export async function getAll({ search, status, page, limit, sortBy, sortOrder }) {
   let where = '1=1';
   const params = [];
 
@@ -14,9 +14,13 @@ export async function getAll({ search, status, page, limit }) {
     params.push(status);
   }
 
+  const allowedSortColumns = ['id', 'code', 'name', 'contact_person', 'phone', 'email', 'city', 'state', 'status', 'created_at'];
+  const column = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+  const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT * FROM suppliers WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    `SELECT * FROM suppliers WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   const [[{ total }]] = await pool.query(

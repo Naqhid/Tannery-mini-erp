@@ -1,6 +1,6 @@
 import pool from '../config/db.js';
 
-export async function getAll({ search, status }) {
+export async function getAll({ search, status, page, limit, sortBy, sortOrder }) {
   let where = '1=1';
   const params = [];
   if (search) {
@@ -10,11 +10,20 @@ export async function getAll({ search, status }) {
   }
   if (status) { where += ' AND r.status = ?'; params.push(status); }
 
+  const allowedSortColumns = ['id', 'code', 'name', 'leather_type', 'process_type', 'status', 'version', 'created_at'];
+  const column = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+  const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+  const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT r.* FROM recipes r WHERE ${where} ORDER BY r.id DESC`,
+    `SELECT r.* FROM recipes r WHERE ${where} ORDER BY r.${column} ${order} LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM recipes r WHERE ${where}`,
     params
   );
-  return rows;
+  return { rows, total };
 }
 
 export async function getById(id) {
