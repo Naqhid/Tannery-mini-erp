@@ -134,7 +134,7 @@ export default function BOM() {
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-300 group-hover:text-gray-500" />;
+    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-700 group-hover:text-gray-900" />;
     return sortOrder === 'asc'
       ? <ArrowUp size={12} className="text-teal-600" />
       : <ArrowDown size={12} className="text-teal-600" />;
