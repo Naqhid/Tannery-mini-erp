@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../lib/authContext';
 import {
   Home,
   FileText,
@@ -21,6 +22,7 @@ import {
   GitBranch,
   ListChecks,
   LogOut,
+  Building2,
 } from 'lucide-react';
 
 interface ChildItem {
@@ -44,17 +46,28 @@ const menuItems: MenuItem[] = [
     icon: <FolderOpen size={20} />,
     children: [
       { label: 'Customer Master', icon: <Users size={16} />, path: '/customer-master' },
+      { label: 'Supplier Master', icon: <Truck size={16} />, path: '/supplier-master' },
       { label: 'Product Master', icon: <Box size={16} />, path: '/product-master' },
       { label: 'Chemical / Material Master', icon: <FlaskConical size={16} />, path: '/chemical-master' },
-      { label: 'Suppliers Master', icon: <Truck size={16} />, path: '/supplier-master' },
+      { label: 'Product Category', icon: <Layers size={16} />, path: '/product-category' },
+      { label: 'Leather Type', icon: <Layers size={16} />, path: '/leather-type' },
+      { label: 'UOM', icon: <Layers size={16} />, path: '/uom' },
+      { label: 'Thickness', icon: <Layers size={16} />, path: '/thickness' },
+      { label: 'Standard Size', icon: <Layers size={16} />, path: '/standard-size' },
+      { label: 'Color', icon: <Layers size={16} />, path: '/color' },
+      { label: 'Finish Type', icon: <Layers size={16} />, path: '/finish-type' },
+      { label: 'Grade', icon: <Layers size={16} />, path: '/grade' },
+      { label: 'HSN Code', icon: <Layers size={16} />, path: '/hsn-code' },
+      { label: 'Process Stage', icon: <ListChecks size={16} />, path: '/process-stage' },
+      { label: 'Machine / Equipment', icon: <Factory size={16} />, path: '/machine' },
     ],
   },
   {
     label: 'BOM / Recipe',
     icon: <ClipboardList size={20} />,
     children: [
-      { label: 'Recipe Creation', icon: <PenTool size={16} />, path: '/recipe-creation' },
       { label: 'BOM (Bill of Materials)', icon: <Layers size={16} />, path: '/bom' },
+      { label: 'Recipe Creation', icon: <PenTool size={16} />, path: '/recipe-creation' },
       { label: 'BOM Revision', icon: <GitBranch size={16} />, path: '/bom-revision' },
       { label: 'Material Requirement', icon: <ListChecks size={16} />, path: '/material-requirement' },
     ],
@@ -78,9 +91,10 @@ const menuItems: MenuItem[] = [
     ],
   },
   { label: 'Settings', icon: <Settings size={20} />, children: [
-      { label: 'General', icon: <Settings size={16} />, path: '/settings' },
-      { label: 'Users & Roles', icon: <Users size={16} />, path: '/users' },
-      { label: 'Notifications', icon: <FileText size={16} />, path: '/notifications' },
+      { label: 'Users', icon: <Users size={16} />, path: '/users' },
+      { label: 'Roles', icon: <Users size={16} />, path: '/roles' },
+      { label: 'Company', icon: <Building2 size={16} />, path: '/company' },
+      { label: 'Business Units', icon: <Factory size={16} />, path: '/business-units' },
     ],
   },
 ];
@@ -88,6 +102,7 @@ const menuItems: MenuItem[] = [
 export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setCollapsed }: { mobileOpen: boolean; setMobileOpen: (open: boolean) => void; collapsed: boolean; setCollapsed: (collapsed: boolean) => void }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout, isAuthenticated } = useAuth();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     Masters: true,
     'BOM / Recipe': true,
@@ -280,17 +295,21 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
           <div className={`flex items-center ${collapsed ? 'gap-3 lg:justify-center lg:gap-0' : 'gap-3'} group`}>
             <div className="relative shrink-0">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-md shadow-blue-500/20 ring-2 ring-white/10">
-                AU
+                {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'AU'}
               </div>
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-[#0a1628] rounded-full shadow-sm shadow-emerald-400/50"></span>
             </div>
             {!collapsed && (
               <>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate text-white/90">Admin User</div>
-                  <div className="text-[11px] text-slate-400/80 truncate">Administrator</div>
+                  <div className="text-sm font-medium truncate text-white/90">{user?.full_name || 'Admin User'}</div>
+                  <div className="text-[11px] text-slate-400/80 truncate">{user?.username || 'Administrator'}</div>
                 </div>
-                <button className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition-all duration-200" title="Logout">
+                <button
+                  onClick={() => { logout(); navigate('/login'); }}
+                  className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition-all duration-200"
+                  title="Logout"
+                >
                   <LogOut size={14} />
                 </button>
               </>
@@ -298,10 +317,14 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
             {collapsed && (
               <div className="flex-1 min-w-0 lg:hidden flex items-center gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate text-white/90">Admin User</div>
-                  <div className="text-[11px] text-slate-400/80 truncate">Administrator</div>
+                  <div className="text-sm font-medium truncate text-white/90">{user?.full_name || 'Admin User'}</div>
+                  <div className="text-[11px] text-slate-400/80 truncate">{user?.username || 'Administrator'}</div>
                 </div>
-                <button className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition-all duration-200" title="Logout">
+                <button
+                  onClick={() => { logout(); navigate('/login'); }}
+                  className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition-all duration-200"
+                  title="Logout"
+                >
                   <LogOut size={14} />
                 </button>
               </div>

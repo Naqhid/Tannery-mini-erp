@@ -28,7 +28,9 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
+import AddressFields from '../components/ui/AddressFields';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 import api from '../lib/api';
 
 interface Supplier {
@@ -54,6 +56,10 @@ interface Supplier {
   bank_account?: string;
   ifsc_code?: string;
   notes?: string;
+  country_id?: number | null;
+  state_id?: number | null;
+  city_id?: number | null;
+  pin_code?: string;
 }
 
 interface PricingEntry {
@@ -72,6 +78,7 @@ const emptySupplier: Supplier = {
   status: 'Active', category: 'chemical', supply_type: 'chemical', address: '',
   alt_phone: '', pincode: '', website: '', gstin: '', pan: '', payment_terms: '30',
   bank_name: '', bank_account: '', ifsc_code: '', notes: '',
+  country_id: null, state_id: null, city_id: null, pin_code: '',
 };
 
 type SortField = 'code' | 'name' | 'contact_person' | 'phone' | 'email' | 'city' | 'status';
@@ -156,7 +163,7 @@ export default function SupplierMaster() {
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-300 group-hover:text-gray-500" />;
+    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-700 group-hover:text-gray-900" />;
     return sortOrder === 'asc'
       ? <ArrowUp size={12} className="text-orange-600" />
       : <ArrowDown size={12} className="text-orange-600" />;
@@ -242,7 +249,7 @@ export default function SupplierMaster() {
 
   // Tab Validation Functions
   const isBasicInfoComplete = () => formData.code && formData.name && formData.contact_person && formData.phone;
-  const isAddressComplete = () => formData.address && formData.city && formData.state && formData.postal_code;
+  const isAddressComplete = () => formData.address && (formData.city || formData.city_id);
   const isFinancialComplete = () => formData.bank_name && formData.bank_account && formData.ifsc_code;
   
   const canAccessTab = (tab: 'basic' | 'address' | 'financial') => {
@@ -322,6 +329,21 @@ export default function SupplierMaster() {
                 const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
                 const rows = suppliers.map(s => [s.code, s.name, s.contact_person, s.phone, s.email, s.city, s.status]);
                 downloadPDF({ title: 'Supplier Master', subtitle: `Total: ${suppliers.length} suppliers`, columns, rows, accentColor: [249, 115, 22], fileName: 'Supplier_Master.pdf' });
+              }}
+              onExcel={() => {
+                exportToExcel({
+                  data: suppliers,
+                  columns: [
+                    { key: 'code', header: 'Code' },
+                    { key: 'name', header: 'Name' },
+                    { key: 'contact_person', header: 'Contact Person' },
+                    { key: 'phone', header: 'Phone' },
+                    { key: 'email', header: 'Email' },
+                    { key: 'city', header: 'City' },
+                    { key: 'status', header: 'Status' },
+                  ],
+                  fileName: 'Supplier_Master',
+                });
               }}
             />
           </div>
@@ -670,13 +692,22 @@ export default function SupplierMaster() {
                 {activeTab === 'address' && (
                   <div className="space-y-4">
                     <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5"><MapPin size={10} /> Address</p>
-                      <textarea rows={3} value={formData.address || ''} placeholder="Enter full address..." onChange={(e) => updateField('address', e.target.value)} className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all resize-none placeholder-gray-400 bg-white" />
-                      <div className="grid grid-cols-3 gap-3">
-                        <Input label="City" value={formData.city || ''} placeholder="City" onChange={(e) => updateField('city', e.target.value)} />
-                        <Input label="State" value={formData.state || ''} placeholder="State" onChange={(e) => updateField('state', e.target.value)} />
-                        <Input label="Pincode" value={formData.pincode || ''} placeholder="Pincode" onChange={(e) => updateField('pincode', e.target.value)} />
-                      </div>
+                      <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5"><MapPin size={10} /> Address & Location</p>
+                      <AddressFields
+                        value={{
+                          country_id: formData.country_id,
+                          state_id: formData.state_id,
+                          city_id: formData.city_id,
+                          city: formData.city,
+                          state: formData.state,
+                          pin_code: formData.pin_code || formData.pincode,
+                          address: formData.address,
+                        }}
+                        onChange={(addr) => setFormData(prev => ({ ...prev, ...addr, pincode: addr.pin_code || prev.pincode }))}
+                        showBillingShipping={false}
+                        showAddressTextarea={true}
+                        addressLabel="Address"
+                      />
                     </div>
                     <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
                       <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-wider flex items-center gap-1.5"><Globe size={10} /> Web & Notes</p>

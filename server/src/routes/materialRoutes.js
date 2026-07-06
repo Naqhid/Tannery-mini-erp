@@ -4,6 +4,7 @@ import { validateId } from '../middleware/validators.js';
 
 const router = Router();
 
+router.get('/dropdown', ctrl.dropdown);
 router.get('/', ctrl.list);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', ctrl.create);

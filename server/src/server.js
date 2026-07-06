@@ -2,14 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-import customerRoutes from './routes/customerRoutes.js';
-import productRoutes from './routes/productRoutes.js';
-import supplierRoutes from './routes/supplierRoutes.js';
-import materialRoutes from './routes/materialRoutes.js';
-import recipeRoutes from './routes/recipeRoutes.js';
-import bomRoutes from './routes/bomRoutes.js';
-import dashboardRoutes from './routes/dashboardRoutes.js';
+import routes from './routes/index.js';
+import settingsRoutes from './routes/settingsRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
+import { optionalAuth } from './middleware/auth.js';
 
 dotenv.config();
 
@@ -20,14 +16,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/customers', customerRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/suppliers', supplierRoutes);
-app.use('/api/materials', materialRoutes);
-app.use('/api/recipes', recipeRoutes);
-app.use('/api/boms', bomRoutes);
+// Optional auth middleware for all routes (doesn't block if no token)
+app.use(optionalAuth);
+
+// Main API routes (includes all masters)
+app.use('/api', routes);
+
+// Settings routes (users, roles, companies, business units)
+app.use('/api/users', settingsRoutes.usersRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

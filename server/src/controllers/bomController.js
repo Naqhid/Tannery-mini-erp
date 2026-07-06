@@ -22,17 +22,19 @@ export async function getOne(req, res, next) {
 export async function create(req, res, next) {
   try {
     if (!req.body.name) return res.status(400).json({ error: 'BOM name is required' });
-    const result = await model.create(req.body);
-    res.status(201).json({ data: { id: result.id, code: result.code } });
+    const createdBy = req.user?.id || null;
+    const result = await model.create(req.body, createdBy);
+    res.status(201).json({ data: { id: result.id, code: result.code }, message: 'BOM created successfully!' });
   } catch (err) { next(err); }
 }
 
 export async function update(req, res, next) {
   try {
     if (!req.body.name) return res.status(400).json({ error: 'BOM name is required' });
-    const ok = await model.update(req.params.id, req.body);
+    const updatedBy = req.user?.id || null;
+    const ok = await model.update(req.params.id, req.body, updatedBy);
     if (!ok) return res.status(404).json({ error: 'BOM not found' });
-    res.json({ data: { id: req.params.id } });
+    res.json({ data: { id: req.params.id }, message: 'BOM updated successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -40,7 +42,7 @@ export async function remove(req, res, next) {
   try {
     const ok = await model.remove(req.params.id);
     if (!ok) return res.status(404).json({ error: 'BOM not found' });
-    res.json({ data: { id: req.params.id, deleted: true } });
+    res.json({ data: { id: req.params.id, deleted: true }, message: 'BOM deleted successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -62,16 +64,18 @@ export async function listItems(req, res, next) {
 export async function addItem(req, res, next) {
   try {
     if (!req.body.material_id) return res.status(400).json({ error: 'material_id is required' });
-    const result = await model.addItem(req.params.id, req.body);
-    res.status(201).json({ data: { id: result.id } });
+    const createdBy = req.user?.id || null;
+    const result = await model.addItem(req.params.id, req.body, createdBy);
+    res.status(201).json({ data: { id: result.id }, message: 'Item added successfully!' });
   } catch (err) { next(err); }
 }
 
 export async function updateItem(req, res, next) {
   try {
-    const ok = await model.updateItem(req.params.itemId, req.body);
+    const updatedBy = req.user?.id || null;
+    const ok = await model.updateItem(req.params.itemId, req.body, updatedBy);
     if (!ok) return res.status(404).json({ error: 'BOM item not found' });
-    res.json({ data: { id: req.params.itemId } });
+    res.json({ data: { id: req.params.itemId }, message: 'Item updated successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -79,6 +83,6 @@ export async function removeItem(req, res, next) {
   try {
     const ok = await model.removeItem(req.params.itemId);
     if (!ok) return res.status(404).json({ error: 'BOM item not found' });
-    res.json({ data: { id: req.params.itemId, deleted: true } });
+    res.json({ data: { id: req.params.itemId, deleted: true }, message: 'Item deleted successfully!' });
   } catch (err) { next(err); }
 }

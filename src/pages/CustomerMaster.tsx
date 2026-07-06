@@ -25,7 +25,9 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
+import AddressFields from '../components/ui/AddressFields';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 import api from '../lib/api';
 
 interface Customer {
@@ -49,6 +51,9 @@ interface Customer {
   pan?: string;
   payment_terms?: string;
   credit_limit?: string;
+  country_id?: number | null;
+  state_id?: number | null;
+  city_id?: number | null;
 }
 
 type SortField = 'code' | 'name' | 'contact_person' | 'phone' | 'email' | 'city' | 'status';
@@ -58,6 +63,7 @@ const emptyCustomer: Customer = {
   code: '', name: '', contact_person: '', phone: '', email: '', city: '', status: 'Active',
   alt_phone: '', category: 'domestic', currency: 'inr', notes: '', billing_address: '',
   shipping_address: '', state: '', pin_code: '', gstin: '', pan: '', payment_terms: '30', credit_limit: '',
+  country_id: null, state_id: null, city_id: null,
 };
 
 export default function CustomerMaster() {
@@ -128,7 +134,7 @@ export default function CustomerMaster() {
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-300 group-hover:text-gray-500" />;
+    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-700 group-hover:text-gray-900" />;
     return sortOrder === 'asc'
       ? <ArrowUp size={12} className="text-indigo-600" />
       : <ArrowDown size={12} className="text-indigo-600" />;
@@ -218,7 +224,7 @@ export default function CustomerMaster() {
   };
 
   const isAddressComplete = () => {
-    return formData.billing_address && formData.shipping_address && formData.city;
+    return formData.billing_address && (formData.city || formData.city_id);
   };
 
   const canAccessTab = (tab: 'basic' | 'address' | 'financial') => {
@@ -309,6 +315,21 @@ export default function CustomerMaster() {
                 const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
                 const rows = customers.map(c => [c.code, c.name, c.contact_person, c.phone, c.email, c.city, c.status]);
                 downloadPDF({ title: 'Customer Master', subtitle: `Total: ${customers.length} customers`, columns, rows, accentColor: [79, 70, 229], fileName: 'Customer_Master.pdf' });
+              }}
+              onExcel={() => {
+                exportToExcel({
+                  data: customers,
+                  columns: [
+                    { key: 'code', header: 'Code' },
+                    { key: 'name', header: 'Name' },
+                    { key: 'contact_person', header: 'Contact Person' },
+                    { key: 'phone', header: 'Phone' },
+                    { key: 'email', header: 'Email' },
+                    { key: 'city', header: 'City' },
+                    { key: 'status', header: 'Status' },
+                  ],
+                  fileName: 'Customer_Master',
+                });
               }}
             />
           </div>
@@ -671,67 +692,22 @@ export default function CustomerMaster() {
                 <div className="space-y-4">
                   <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
                     <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin size={10} /> Billing
+                      <MapPin size={10} /> Address & Location
                     </p>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-900 mb-1">
-                        Billing Address <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={formData.billing_address || ''}
-                      onChange={(e) => updateField('billing_address', e.target.value)}
-                        placeholder="Enter billing address..."
-                        className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all resize-none placeholder-gray-400"
-                      />
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-gradient-to-r from-sky-50/80 to-cyan-50/80 border border-sky-100/50 space-y-3">
-                    <p className="text-[10px] font-semibold text-sky-600 uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin size={10} /> Shipping
-                    </p>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-900 mb-1">Shipping Address</label>
-                      <textarea
-                        rows={3}
-                        value={formData.shipping_address || ''}
-                      onChange={(e) => updateField('shipping_address', e.target.value)}
-                        placeholder="Enter shipping address (or same as billing)..."
-                        className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all resize-none placeholder-gray-400"
-                      />
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border border-indigo-100/50 space-y-3">
-                    <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin size={10} /> Location
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Select
-                        label="State"
-                        options={[
-                          { value: '', label: 'Select state' },
-                          { value: 'tamilnadu', label: 'Tamil Nadu' },
-                          { value: 'karnataka', label: 'Karnataka' },
-                          { value: 'maharashtra', label: 'Maharashtra' },
-                          { value: 'kerala', label: 'Kerala' },
-                        ]}
-                        value={formData.state || ''}
-                        onChange={(e) => updateField('state', e.target.value)}
-                      />
-                      <Select
-                        label="City"
-                        options={[
-                          { value: '', label: 'Select city' },
-                          { value: 'vellore', label: 'Vellore' },
-                          { value: 'chennai', label: 'Chennai' },
-                          { value: 'ranipet', label: 'Ranipet' },
-                          { value: 'ambur', label: 'Ambur' },
-                        ]}
-                        value={formData.city?.toLowerCase() || ''}
-                        onChange={(e) => updateField('city', e.target.value)}
-                      />
-                    </div>
-                    <Input label="Pin Code" value={formData.pin_code || ''} placeholder="Enter pin code" onChange={(e) => updateField('pin_code', e.target.value)} />
+                    <AddressFields
+                      value={{
+                        country_id: formData.country_id,
+                        state_id: formData.state_id,
+                        city_id: formData.city_id,
+                        city: formData.city,
+                        state: formData.state,
+                        pin_code: formData.pin_code,
+                        billing_address: formData.billing_address,
+                        shipping_address: formData.shipping_address,
+                      }}
+                      onChange={(addr) => setFormData(prev => ({ ...prev, ...addr }))}
+                      showBillingShipping={true}
+                    />
                   </div>
                 </div>
               )}

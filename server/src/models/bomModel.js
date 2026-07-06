@@ -11,16 +11,20 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
   if (status) { where += ' AND b.status = ?'; params.push(status); }
 
   const allowedSortColumns = ['id', 'code', 'name', 'leather_type', 'process_type', 'status', 'version', 'created_at'];
-  const column = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+  const column = allowedSortColumns.includes(sortBy) ? `b.${sortBy}` : 'b.id';
   const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT b.*, p.name AS product_name
-     FROM boms b
-     LEFT JOIN products p ON b.product_id = p.id
-     WHERE ${where}
-     ORDER BY b.${column} ${order} LIMIT ? OFFSET ?`,
+    `SELECT b.*, p.name AS product_name, p.code AS product_code,
+      lt.name AS leather_type_name, u.name AS uom_name, th.name AS thickness_name
+    FROM boms b
+    LEFT JOIN products p ON b.product_id = p.id
+    LEFT JOIN leather_types lt ON b.leather_type_id = lt.id
+    LEFT JOIN uom u ON b.uom_id = u.id
+    LEFT JOIN thickness th ON b.thickness_id = th.id
+    WHERE ${where}
+    ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   const [[{ total }]] = await pool.query(
@@ -32,10 +36,14 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
 
 export async function getById(id) {
   const [rows] = await pool.query(
-    `SELECT b.*, p.name AS product_name
-     FROM boms b
-     LEFT JOIN products p ON b.product_id = p.id
-     WHERE b.id = ?`,
+    `SELECT b.*, p.name AS product_name, p.code AS product_code,
+      lt.name AS leather_type_name, u.name AS uom_name, th.name AS thickness_name
+    FROM boms b
+    LEFT JOIN products p ON b.product_id = p.id
+    LEFT JOIN leather_types lt ON b.leather_type_id = lt.id
+    LEFT JOIN uom u ON b.uom_id = u.id
+    LEFT JOIN thickness th ON b.thickness_id = th.id
+    WHERE b.id = ?`,
     [id]
   );
   return rows[0] || null;
@@ -53,24 +61,28 @@ export async function getNextCode() {
   return `BOM-${String(num).padStart(5, '0')}`;
 }
 
-export async function create(data) {
+export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
-    `INSERT INTO boms (code, name, product_id, recipe_id, leather_type, process_type, thickness, uom, valid_from, valid_to, status, description, version)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO boms (code, name, product_id, recipe_id, leather_type, process_type, thickness, uom, valid_from, valid_to, status, description, version, leather_type_id, uom_id, thickness_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.product_id, data.recipe_id, data.leather_type,
      data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
-     data.status || 'Draft', data.description, data.version || 1]
+     data.status || 'Draft', data.description, data.version || 1,
+     data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
+     createdBy]
   );
   return { id: result.insertId, code };
 }
 
-export async function update(id, data) {
+export async function update(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE boms SET code=?, name=?, product_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=? WHERE id=?`,
+    `UPDATE boms SET code=?, name=?, product_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
     [data.code, data.name, data.product_id, data.recipe_id, data.leather_type,
      data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
-     data.status, data.description, data.version, id]
+     data.status, data.description, data.version,
+     data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
+     updatedBy, id]
   );
   return result.affectedRows > 0;
 }
@@ -93,20 +105,20 @@ export async function getItems(bomId) {
   return rows;
 }
 
-export async function addItem(bomId, data) {
+export async function addItem(bomId, data, createdBy = null) {
   const [result] = await pool.query(
-    `INSERT INTO bom_items (bom_id, material_id, type, uom, qty, unit_cost, amount, remarks)
-     VALUES (?,?,?,?,?,?,?,?)`,
+    `INSERT INTO bom_items (bom_id, material_id, type, uom, qty, unit_cost, amount, remarks, supplier_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [bomId, data.material_id, data.type, data.uom, data.qty,
-     data.unit_cost, data.amount, data.remarks]
+     data.unit_cost, data.amount, data.remarks, data.supplier_id || null, createdBy]
   );
   return { id: result.insertId };
 }
 
-export async function updateItem(id, data) {
+export async function updateItem(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE bom_items SET material_id=?, type=?, uom=?, qty=?, unit_cost=?, amount=?, remarks=? WHERE id=?`,
-    [data.material_id, data.type, data.uom, data.qty, data.unit_cost, data.amount, data.remarks, id]
+    `UPDATE bom_items SET material_id=?, type=?, uom=?, qty=?, unit_cost=?, amount=?, remarks=?, supplier_id=?, updated_by=? WHERE id=?`,
+    [data.material_id, data.type, data.uom, data.qty, data.unit_cost, data.amount, data.remarks, data.supplier_id || null, updatedBy, id]
   );
   return result.affectedRows > 0;
 }

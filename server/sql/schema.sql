@@ -234,3 +234,280 @@ CREATE TABLE IF NOT EXISTS bom_items (
     REFERENCES materials(id) ON DELETE RESTRICT,
   INDEX idx_bi_bom (bom_id)
 ) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 11. countries
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS countries (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  phone_code    VARCHAR(10),
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 12. states
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS states (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  country_id    INT NOT NULL,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_state_country FOREIGN KEY (country_id)
+    REFERENCES countries(id) ON DELETE CASCADE,
+  INDEX idx_state_country (country_id)
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 13. cities
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cities (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(200)  NOT NULL,
+  state_id      INT NOT NULL,
+  country_id    INT NOT NULL,
+  pincode       VARCHAR(10),
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_city_state FOREIGN KEY (state_id)
+    REFERENCES states(id) ON DELETE CASCADE,
+  CONSTRAINT fk_city_country FOREIGN KEY (country_id)
+    REFERENCES countries(id) ON DELETE CASCADE,
+  INDEX idx_city_state (state_id),
+  INDEX idx_city_country (country_id)
+) ENGINE=InnoDB;
+
+
+-- ------------------------------------------------------------
+-- 14. product_categories
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS product_categories (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 15. leather_types
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS leather_types (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 16. uom (Unit of Measurement)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS uom (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 17. thickness
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS thickness (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  value_mm      DECIMAL(5,2),
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 18. standard_sizes
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS standard_sizes (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 19. colors
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS colors (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  hex_code      VARCHAR(10),
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 20. finish_types
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS finish_types (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 21. grades
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS grades (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  rank          INT DEFAULT 0,
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 22. hsn_codes
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS hsn_codes (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  gst_rate      DECIMAL(5,2) DEFAULT 0,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 23. process_stages
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS process_stages (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  seq           INT DEFAULT 0,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 24. machines
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS machines (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  machine_type  VARCHAR(100),
+  capacity      VARCHAR(100),
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 25. roles
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS roles (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  description   TEXT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 26. companies
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS companies (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  address       TEXT,
+  city          VARCHAR(100),
+  state         VARCHAR(100),
+  country       VARCHAR(100),
+  phone         VARCHAR(30),
+  email         VARCHAR(150),
+  gstin         VARCHAR(20),
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 27. business_units
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS business_units (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(20)   NOT NULL UNIQUE,
+  name          VARCHAR(200)  NOT NULL,
+  company_id    INT,
+  address       TEXT,
+  city          VARCHAR(100),
+  state         VARCHAR(100),
+  phone         VARCHAR(30),
+  email         VARCHAR(150),
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_bu_company FOREIGN KEY (company_id)
+    REFERENCES companies(id) ON DELETE SET NULL,
+  INDEX idx_bu_company (company_id)
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 28. users
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  username      VARCHAR(100)  NOT NULL UNIQUE,
+  password      VARCHAR(255)  NOT NULL,
+  name          VARCHAR(200)  NOT NULL,
+  email         VARCHAR(150),
+  phone         VARCHAR(30),
+  role_id       INT,
+  company_id    INT,
+  business_unit_id INT,
+  status        ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_user_role FOREIGN KEY (role_id)
+    REFERENCES roles(id) ON DELETE SET NULL,
+  CONSTRAINT fk_user_company FOREIGN KEY (company_id)
+    REFERENCES companies(id) ON DELETE SET NULL,
+  CONSTRAINT fk_user_bu FOREIGN KEY (business_unit_id)
+    REFERENCES business_units(id) ON DELETE SET NULL
+) ENGINE=InnoDB;

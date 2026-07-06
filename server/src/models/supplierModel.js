@@ -5,33 +5,46 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
   const params = [];
 
   if (search) {
-    where += ' AND (name LIKE ? OR code LIKE ? OR contact_person LIKE ?)';
+    where += ' AND (s.name LIKE ? OR s.code LIKE ? OR s.contact_person LIKE ?)';
     const term = `%${search}%`;
     params.push(term, term, term);
   }
   if (status) {
-    where += ' AND status = ?';
+    where += ' AND s.status = ?';
     params.push(status);
   }
 
   const allowedSortColumns = ['id', 'code', 'name', 'contact_person', 'phone', 'email', 'city', 'state', 'status', 'created_at'];
-  const column = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+  const column = allowedSortColumns.includes(sortBy) ? `s.${sortBy}` : 's.id';
   const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT * FROM suppliers WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
+    `SELECT s.*, co.name AS country_name, st.name AS state_name, ci.name AS city_name
+     FROM suppliers s
+     LEFT JOIN countries co ON s.country_id = co.id
+     LEFT JOIN states st ON s.state_id = st.id
+     LEFT JOIN cities ci ON s.city_id = ci.id
+     WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM suppliers WHERE ${where}`,
+    `SELECT COUNT(*) AS total FROM suppliers s WHERE ${where}`,
     params
   );
   return { rows, total };
 }
 
 export async function getById(id) {
-  const [rows] = await pool.query('SELECT * FROM suppliers WHERE id = ?', [id]);
+  const [rows] = await pool.query(
+    `SELECT s.*, co.name AS country_name, st.name AS state_name, ci.name AS city_name
+     FROM suppliers s
+     LEFT JOIN countries co ON s.country_id = co.id
+     LEFT JOIN states st ON s.state_id = st.id
+     LEFT JOIN cities ci ON s.city_id = ci.id
+     WHERE s.id = ?`,
+    [id]
+  );
   return rows[0] || null;
 }
 
@@ -42,31 +55,46 @@ export async function getNextCode() {
   return `SUP-${String(num).padStart(5, '0')}`;
 }
 
-export async function create(data) {
+export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
-    `INSERT INTO suppliers (code, name, contact_person, phone, email, alt_phone, city, state, address, pincode, website, category, supply_type, gstin, pan, payment_terms, bank_name, bank_account, ifsc_code, notes, status)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO suppliers (code, name, contact_person, phone, email, alt_phone, city, state, address, pincode, website, category, supply_type, gstin, pan, payment_terms, bank_name, bank_account, ifsc_code, notes, status, country_id, state_id, city_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
      data.city, data.state, data.address, data.pincode, data.website,
      data.category, data.supply_type, data.gstin, data.pan, data.payment_terms,
-     data.bank_name, data.bank_account, data.ifsc_code, data.notes, data.status || 'Active']
+     data.bank_name, data.bank_account, data.ifsc_code, data.notes, data.status || 'Active',
+     data.country_id || null, data.state_id || null, data.city_id || null, createdBy]
   );
   return { id: result.insertId, code };
 }
 
-export async function update(id, data) {
+export async function update(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE suppliers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, address=?, pincode=?, website=?, category=?, supply_type=?, gstin=?, pan=?, payment_terms=?, bank_name=?, bank_account=?, ifsc_code=?, notes=?, status=? WHERE id=?`,
+    `UPDATE suppliers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, address=?, pincode=?, website=?, category=?, supply_type=?, gstin=?, pan=?, payment_terms=?, bank_name=?, bank_account=?, ifsc_code=?, notes=?, status=?, country_id=?, state_id=?, city_id=?, updated_by=? WHERE id=?`,
     [data.code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
      data.city, data.state, data.address, data.pincode, data.website,
      data.category, data.supply_type, data.gstin, data.pan, data.payment_terms,
-     data.bank_name, data.bank_account, data.ifsc_code, data.notes, data.status, id]
+     data.bank_name, data.bank_account, data.ifsc_code, data.notes, data.status,
+     data.country_id || null, data.state_id || null, data.city_id || null,
+     updatedBy, id]
   );
   return result.affectedRows > 0;
 }
 
+export async function checkReferences(id) {
+  const [[pricingCount]] = await pool.query('SELECT COUNT(*) AS count FROM supplier_pricing WHERE supplier_id = ?', [id]);
+  if (pricingCount.count > 0) return { hasReferences: true, table: 'Supplier Pricing' };
+  return { hasReferences: false };
+}
+
 export async function remove(id) {
+  const refCheck = await checkReferences(id);
+  if (refCheck.hasReferences) {
+    const err = new Error(`Cannot delete this supplier. It is being used in ${refCheck.table}.`);
+    err.code = 'REFERENCE_ERROR';
+    throw err;
+  }
   const [result] = await pool.query('DELETE FROM suppliers WHERE id = ?', [id]);
   return result.affectedRows > 0;
 }

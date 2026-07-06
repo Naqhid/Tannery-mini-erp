@@ -5,34 +5,48 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
   const params = [];
 
   if (search) {
-    where += ' AND (name LIKE ? OR code LIKE ? OR contact_person LIKE ?)';
+    where += ' AND (c.name LIKE ? OR c.code LIKE ? OR c.contact_person LIKE ?)';
     const term = `%${search}%`;
     params.push(term, term, term);
   }
   if (status) {
-    where += ' AND status = ?';
+    where += ' AND c.status = ?';
     params.push(status);
   }
 
-  // Whitelist sortable columns to prevent SQL injection
   const allowedSortColumns = ['id', 'code', 'name', 'contact_person', 'phone', 'email', 'city', 'status', 'created_at'];
-  const column = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+  const column = allowedSortColumns.includes(sortBy) ? `c.${sortBy}` : 'c.id';
   const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT * FROM customers WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
+    `SELECT c.*,
+      co.name AS country_name, s.name AS state_name, ci.name AS city_name
+    FROM customers c
+    LEFT JOIN countries co ON c.country_id = co.id
+    LEFT JOIN states s ON c.state_id = s.id
+    LEFT JOIN cities ci ON c.city_id = ci.id
+    WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM customers WHERE ${where}`,
+    `SELECT COUNT(*) AS total FROM customers c WHERE ${where}`,
     params
   );
   return { rows, total };
 }
 
 export async function getById(id) {
-  const [rows] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
+  const [rows] = await pool.query(
+    `SELECT c.*,
+      co.name AS country_name, s.name AS state_name, ci.name AS city_name
+    FROM customers c
+    LEFT JOIN countries co ON c.country_id = co.id
+    LEFT JOIN states s ON c.state_id = s.id
+    LEFT JOIN cities ci ON c.city_id = ci.id
+    WHERE c.id = ?`,
+    [id]
+  );
   return rows[0] || null;
 }
 
@@ -50,31 +64,47 @@ export async function getNextCode() {
   return `CUST-${String(num).padStart(5, '0')}`;
 }
 
-export async function create(data) {
+export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
-    `INSERT INTO customers (code, name, contact_person, phone, email, alt_phone, city, state, status, category, currency, billing_address, shipping_address, pin_code, gstin, pan, payment_terms, credit_limit, notes)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO customers (code, name, contact_person, phone, email, alt_phone, city, state, status, category, currency, billing_address, shipping_address, pin_code, gstin, pan, payment_terms, credit_limit, notes, country_id, state_id, city_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
      data.city, data.state, data.status || 'Active', data.category, data.currency,
      data.billing_address, data.shipping_address, data.pin_code, data.gstin, data.pan,
-     data.payment_terms, data.credit_limit, data.notes]
+     data.payment_terms, data.credit_limit, data.notes,
+     data.country_id || null, data.state_id || null, data.city_id || null,
+     createdBy]
   );
   return { id: result.insertId, code };
 }
 
-export async function update(id, data) {
+export async function update(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE customers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, status=?, category=?, currency=?, billing_address=?, shipping_address=?, pin_code=?, gstin=?, pan=?, payment_terms=?, credit_limit=?, notes=? WHERE id=?`,
+    `UPDATE customers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, status=?, category=?, currency=?, billing_address=?, shipping_address=?, pin_code=?, gstin=?, pan=?, payment_terms=?, credit_limit=?, notes=?, country_id=?, state_id=?, city_id=?, updated_by=? WHERE id=?`,
     [data.code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
      data.city, data.state, data.status, data.category, data.currency,
      data.billing_address, data.shipping_address, data.pin_code, data.gstin, data.pan,
-     data.payment_terms, data.credit_limit, data.notes, id]
+     data.payment_terms, data.credit_limit, data.notes,
+     data.country_id || null, data.state_id || null, data.city_id || null,
+     updatedBy, id]
   );
   return result.affectedRows > 0;
 }
 
+export async function checkReferences(id) {
+  // Check if customer is used in orders, etc.
+  // Add more checks as needed
+  return { hasReferences: false };
+}
+
 export async function remove(id) {
+  const refCheck = await checkReferences(id);
+  if (refCheck.hasReferences) {
+    const err = new Error(`Cannot delete this customer. It is being used in ${refCheck.table}.`);
+    err.code = 'REFERENCE_ERROR';
+    throw err;
+  }
   const [result] = await pool.query('DELETE FROM customers WHERE id = ?', [id]);
   return result.affectedRows > 0;
 }

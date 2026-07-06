@@ -27,6 +27,8 @@ import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
+import { useDropdowns } from '../lib/useDropdowns';
 import api from '../lib/api';
 
 interface Product {
@@ -34,26 +36,43 @@ interface Product {
   code: string;
   name: string;
   category: string;
+  category_id?: number | null;
   leather_type: string;
+  leather_type_id?: number | null;
   uom: string;
+  uom_id?: number | null;
   thickness: string;
+  thickness_id?: number | null;
   status: string;
   color?: string;
+  color_id?: number | null;
   finish_type?: string;
+  finish_type_id?: number | null;
   description?: string;
   standard_size?: string;
+  standard_size_id?: number | null;
   grade?: string;
-  sales_price?: string;
+  grade_id?: number | null;
   hsn_code?: string;
+  hsn_code_id?: number | null;
+  category_name?: string;
+  leather_type_name?: string;
+  uom_name?: string;
+  thickness_name?: string;
+  color_name?: string;
+  finish_type_name?: string;
+  grade_name?: string;
+  hsn_name?: string;
+  standard_size_name?: string;
 }
 
 type SortField = 'code' | 'name' | 'category' | 'leather_type' | 'thickness' | 'status';
 type SortOrder = 'asc' | 'desc';
 
 const emptyProduct: Product = {
-  code: '', name: '', category: 'Finished Leather', leather_type: 'cow', uom: 'Sq. Ft.',
-  thickness: '', status: 'Active', color: '', finish_type: '', description: '',
-  standard_size: '', grade: 'a', sales_price: '', hsn_code: '',
+  code: '', name: '', category: '', leather_type: '', uom: '', thickness: '',
+  status: 'Active', color: '', finish_type: '', description: '',
+  standard_size: '', grade: '', hsn_code: '',
 };
 
 export default function ProductMaster() {
@@ -64,7 +83,6 @@ export default function ProductMaster() {
   const [showPanel, setShowPanel] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<Product>(emptyProduct);
-  const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'pricing'>('basic');
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
@@ -78,6 +96,19 @@ export default function ProductMaster() {
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  // Fetch all dropdowns
+  const dropdowns = useDropdowns([
+    'product-categories',
+    'leather-types',
+    'uom',
+    'thickness',
+    'colors',
+    'finish-types',
+    'grades',
+    'hsn-codes',
+    'standard-sizes',
+  ]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -111,7 +142,6 @@ export default function ProductMaster() {
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  // Reset to page 1 when search or sort changes
   useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
 
   const handleSort = (field: SortField) => {
@@ -124,7 +154,7 @@ export default function ProductMaster() {
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-300 group-hover:text-gray-500" />;
+    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-700 group-hover:text-gray-900" />;
     return sortOrder === 'asc'
       ? <ArrowUp size={12} className="text-teal-600" />
       : <ArrowDown size={12} className="text-teal-600" />;
@@ -140,7 +170,6 @@ export default function ProductMaster() {
       setFormData(emptyProduct);
       setStatusToggle(true);
     }
-    setActiveTab('basic');
     setShowPanel(true);
   };
 
@@ -151,27 +180,18 @@ export default function ProductMaster() {
       const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
       if (selectedProduct?.id) {
         const res = await api(`/products/${selectedProduct.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-        toast.success(res.message || 'Product updated successfully!', {
-          position: 'top-right',
-          autoClose: 3000,
-        });
+        toast.success(res.message || 'Product updated successfully!', { position: 'top-right', autoClose: 3000 });
       } else {
         const res = await api('/products', { method: 'POST', body: JSON.stringify(payload) });
-        toast.success(res.message || 'Product created successfully!', {
-          position: 'top-right',
-          autoClose: 3000,
-        });
+        toast.success(res.message || 'Product created successfully!', { position: 'top-right', autoClose: 3000 });
       }
       setShowPanel(false);
-      setSearchQuery(''); // Clear search to see all records including the updated one
+      setSearchQuery('');
       setCurrentPage(1);
       fetchProducts();
       fetchStats();
     } catch (err) {
-      toast.error('Failed to save product: ' + (err as Error).message, {
-        position: 'top-right',
-        autoClose: 3000,
-      });
+      toast.error('Failed to save product: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
     } finally {
       setSaving(false);
     }
@@ -187,60 +207,36 @@ export default function ProductMaster() {
     if (!id) return;
     try {
       const res = await api(`/products/${id}`, { method: 'DELETE' });
-      toast.success(res.message || 'Product deleted successfully!', {
-        position: 'top-right',
-        autoClose: 3000,
-      });
+      toast.success(res.message || 'Product deleted successfully!', { position: 'top-right', autoClose: 3000 });
       setShowPanel(false);
       setSearchQuery('');
       setCurrentPage(1);
       fetchProducts();
       fetchStats();
     } catch (err) {
-      toast.error('Failed to delete product: ' + (err as Error).message, {
-        position: 'top-right',
-        autoClose: 3000,
-      });
+      toast.error('Failed to delete product: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
     }
   };
 
-  const updateField = (field: keyof Product, value: string) => {
+  const updateField = (field: keyof Product, value: string | number | null) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Validation helpers for step-by-step navigation
-  const isBasicInfoComplete = () => {
-    return formData.name && formData.category && formData.leather_type;
-  };
-
-  const isSpecsComplete = () => {
-    return formData.uom && formData.thickness;
-  };
-
-  const canAccessTab = (tab: 'basic' | 'specs' | 'pricing') => {
-    // When editing, allow access to all tabs
-    if (selectedProduct) return true;
-    // When adding, restrict tabs step-by-step
-    if (tab === 'basic') return true;
-    if (tab === 'specs') return isBasicInfoComplete();
-    if (tab === 'pricing') return isBasicInfoComplete() && isSpecsComplete();
-    return false;
-  };
-
-  const goToNextTab = () => {
-    if (activeTab === 'basic' && isBasicInfoComplete()) {
-      setActiveTab('specs');
-    } else if (activeTab === 'specs' && isSpecsComplete()) {
-      setActiveTab('pricing');
-    }
-  };
-
-  const goToPreviousTab = () => {
-    if (activeTab === 'specs') {
-      setActiveTab('basic');
-    } else if (activeTab === 'pricing') {
-      setActiveTab('specs');
-    }
+  const updateDropdownField = (field: keyof Product, idField: keyof Product, nameField: keyof Product, value: string) => {
+    const selectedId = value ? Number(value) : null;
+    const dropdownType = field === 'category' ? 'product-categories' :
+                         field === 'leather_type' ? 'leather-types' :
+                         field === 'uom' ? 'uom' :
+                         field === 'thickness' ? 'thickness' :
+                         field === 'color' ? 'colors' :
+                         field === 'finish_type' ? 'finish-types' :
+                         field === 'grade' ? 'grades' : 'hsn-codes';
+    const selectedItem = dropdowns[dropdownType]?.data.find((item: any) => item.id === selectedId);
+    setFormData((prev) => ({
+      ...prev,
+      [idField]: selectedId,
+      [field]: selectedItem?.name || '',
+    }));
   };
 
   return (
@@ -272,7 +268,7 @@ export default function ProductMaster() {
         </div>
       </div>
 
-      {/* Product List - Full Width */}
+      {/* Product List */}
       <div className="bg-white rounded-xl border border-teal-100 shadow-sm shadow-teal-100/50 overflow-hidden ring-1 ring-teal-50">
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-teal-50/30">
@@ -293,13 +289,28 @@ export default function ProductMaster() {
             <ExportMenu
               onPreview={() => {
                 const columns = ['Code', 'Name', 'Category', 'Leather Type', 'UOM', 'Thickness', 'Status'];
-                const rows = products.map(p => [p.code, p.name, p.category, p.leather_type, p.uom, p.thickness, p.status]);
+                const rows = products.map(p => [p.code, p.name, p.category_name || p.category, p.leather_type_name || p.leather_type, p.uom_name || p.uom, p.thickness_name || p.thickness, p.status]);
                 previewPDF({ title: 'Product Master', subtitle: `Total: ${products.length} products`, columns, rows, accentColor: [16, 185, 129] });
               }}
               onDownload={() => {
                 const columns = ['Code', 'Name', 'Category', 'Leather Type', 'UOM', 'Thickness', 'Status'];
-                const rows = products.map(p => [p.code, p.name, p.category, p.leather_type, p.uom, p.thickness, p.status]);
+                const rows = products.map(p => [p.code, p.name, p.category_name || p.category, p.leather_type_name || p.leather_type, p.uom_name || p.uom, p.thickness_name || p.thickness, p.status]);
                 downloadPDF({ title: 'Product Master', subtitle: `Total: ${products.length} products`, columns, rows, accentColor: [16, 185, 129], fileName: 'Product_Master.pdf' });
+              }}
+              onExcel={() => {
+                exportToExcel({
+                  data: products,
+                  columns: [
+                    { key: 'code', header: 'Code' },
+                    { key: 'name', header: 'Name' },
+                    { key: 'category_name', header: 'Category' },
+                    { key: 'leather_type_name', header: 'Leather Type' },
+                    { key: 'uom_name', header: 'UOM' },
+                    { key: 'thickness_name', header: 'Thickness' },
+                    { key: 'status', header: 'Status' },
+                  ],
+                  fileName: 'Product_Master',
+                });
               }}
             />
           </div>
@@ -349,14 +360,14 @@ export default function ProductMaster() {
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                      {p.category}
+                      {p.category_name || p.category}
                     </span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
-                    <span className="text-amber-700 font-medium text-xs">{p.leather_type}</span>
+                    <span className="text-amber-700 font-medium text-xs">{p.leather_type_name || p.leather_type}</span>
                   </td>
                   <td className="py-3 px-4 hidden xl:table-cell">
-                    <span className="text-sky-600 text-xs font-medium">{p.thickness}</span>
+                    <span className="text-sky-600 text-xs font-medium">{p.thickness_name || p.thickness}</span>
                   </td>
                   <td className="py-3 px-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-sm ${
@@ -401,9 +412,9 @@ export default function ProductMaster() {
                   </div>
                   <p className="text-sm font-semibold text-gray-900 mt-1.5">{p.name}</p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 rounded text-blue-600 text-[10px] font-medium">{p.category}</span>
-                    <span className="text-amber-600 font-medium">{p.leather_type}</span>
-                    <span className="text-sky-600">{p.thickness}</span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 rounded text-blue-600 text-[10px] font-medium">{p.category_name || p.category}</span>
+                    <span className="text-amber-600 font-medium">{p.leather_type_name || p.leather_type}</span>
+                    <span className="text-sky-600">{p.thickness_name || p.thickness}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -491,7 +502,7 @@ export default function ProductMaster() {
             onClick={() => setShowPanel(false)}
           >
             <div
-              className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-3"
+              className="w-full max-w-[900px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-3"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
@@ -514,170 +525,148 @@ export default function ProductMaster() {
                     <X size={18} />
                   </button>
                 </div>
-
-                {/* Tabs */}
-                <div className="flex items-center gap-1 mt-4">
-                  {[
-                    { id: 'basic' as const, label: 'Basic Info', icon: <Box size={13} />, color: 'from-teal-500 to-emerald-600' },
-                    { id: 'specs' as const, label: 'Specifications', icon: <Ruler size={13} />, color: 'from-violet-500 to-purple-600' },
-                    { id: 'pricing' as const, label: 'Pricing & Grade', icon: <Tag size={13} />, color: 'from-amber-500 to-orange-600' },
-                  ].map((tab) => {
-                    const isAccessible = canAccessTab(tab.id);
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => isAccessible && setActiveTab(tab.id)}
-                        disabled={!isAccessible}
-                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
-                          !isAccessible
-                            ? 'opacity-40 cursor-not-allowed text-gray-400'
-                            : activeTab === tab.id
-                            ? `bg-gradient-to-r ${tab.color} text-white shadow-md`
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
-                        }`}
-                      >
-                        {tab.icon}
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
 
-              {/* Modal Body */}
+              {/* Modal Body - Single Form with All Fields */}
               <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/50">
-                {activeTab === 'basic' && (
-                  <div className="space-y-4">
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <Package size={10} /> Product Identity
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Input label="Product Code" required value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
-                        <Input label="Product Name" required value={formData.name || ''} placeholder="Enter product name" onChange={(e) => updateField('name', e.target.value)} />
-                      </div>
-                    </div>
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <Layers size={10} /> Classification
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Select label="Category" required options={[
-                          { value: '', label: 'Select category' },
-                          { value: 'finished', label: 'Finished Leather' },
-                          { value: 'semi', label: 'Semi Finished' },
-                          { value: 'raw', label: 'Raw Material' },
-                        ]} value={formData.category === 'Finished Leather' ? 'finished' : formData.category === 'Semi Finished' ? 'semi' : ''} onChange={(e) => updateField('category', e.target.value === 'finished' ? 'Finished Leather' : e.target.value === 'semi' ? 'Semi Finished' : '')} />
-                        <Select label="Leather Type" required options={[
-                          { value: '', label: 'Select type' },
-                          { value: 'cow', label: 'Cow' },
-                          { value: 'buffalo', label: 'Buffalo' },
-                          { value: 'goat', label: 'Goat' },
-                          { value: 'sheep', label: 'Sheep' },
-                        ]} value={formData.leather_type?.toLowerCase() || ''} onChange={(e) => updateField('leather_type', e.target.value)} />
-                      </div>
-                    </div>
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-wider flex items-center gap-1.5">
-                        📝 Description
-                      </p>
-                      <textarea
-                        rows={3}
+                {/* Product Identity */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
+                  <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Box size={10} /> Product Identity
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input label="Product Code" value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                    <Input label="Product Name" required value={formData.name || ''} placeholder="Enter product name" onChange={(e) => updateField('name', e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Classification */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
+                  <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Layers size={10} /> Classification
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select
+                      label="Category"
+                      required
+                      options={[
+                        { value: '', label: dropdowns['product-categories']?.loading ? 'Loading...' : 'Select category' },
+                        ...(dropdowns['product-categories']?.options || []),
+                      ]}
+                      value={String(formData.category_id || '')}
+                      onChange={(e) => updateDropdownField('category', 'category_id', 'category', e.target.value)}
+                    />
+                    <Select
+                      label="Leather Type"
+                      required
+                      options={[
+                        { value: '', label: dropdowns['leather-types']?.loading ? 'Loading...' : 'Select type' },
+                        ...(dropdowns['leather-types']?.options || []),
+                      ]}
+                      value={String(formData.leather_type_id || '')}
+                      onChange={(e) => updateDropdownField('leather_type', 'leather_type_id', 'leather_type', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Specifications */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
+                  <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Ruler size={10} /> Specifications
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Select
+                      label="UOM"
+                      required
+                      options={[
+                        { value: '', label: dropdowns['uom']?.loading ? 'Loading...' : 'Select UOM' },
+                        ...(dropdowns['uom']?.options || []),
+                      ]}
+                      value={String(formData.uom_id || '')}
+                      onChange={(e) => updateDropdownField('uom', 'uom_id', 'uom', e.target.value)}
+                    />
+                    <Select
+                      label="Thickness"
+                      required
+                      options={[
+                        { value: '', label: dropdowns['thickness']?.loading ? 'Loading...' : 'Select thickness' },
+                        ...(dropdowns['thickness']?.options || []),
+                      ]}
+                      value={String(formData.thickness_id || '')}
+                      onChange={(e) => updateDropdownField('thickness', 'thickness_id', 'thickness', e.target.value)}
+                    />
+                    <Select
+                      label="Standard Size"
+                      options={[
+                        { value: '', label: dropdowns['standard-sizes']?.loading ? 'Loading...' : 'Select size' },
+                        ...(dropdowns['standard-sizes']?.options || []),
+                      ]}
+                      value={String(formData.standard_size_id || '')}
+                      onChange={(e) => updateDropdownField('standard_size', 'standard_size_id', 'standard_size', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Finish & Appearance */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
+                  <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Palette size={10} /> Finish & Appearance
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Select
+                      label="Color"
+                      options={[
+                        { value: '', label: dropdowns['colors']?.loading ? 'Loading...' : 'Select color' },
+                        ...(dropdowns['colors']?.options || []),
+                      ]}
+                      value={String(formData.color_id || '')}
+                      onChange={(e) => updateDropdownField('color', 'color_id', 'color', e.target.value)}
+                    />
+                    <Select
+                      label="Finish Type"
+                      options={[
+                        { value: '', label: dropdowns['finish-types']?.loading ? 'Loading...' : 'Select finish' },
+                        ...(dropdowns['finish-types']?.options || []),
+                      ]}
+                      value={String(formData.finish_type_id || '')}
+                      onChange={(e) => updateDropdownField('finish_type', 'finish_type_id', 'finish_type', e.target.value)}
+                    />
+                    <Select
+                      label="Grade"
+                      options={[
+                        { value: '', label: dropdowns['grades']?.loading ? 'Loading...' : 'Select grade' },
+                        ...(dropdowns['grades']?.options || []),
+                      ]}
+                      value={String(formData.grade_id || '')}
+                      onChange={(e) => updateDropdownField('grade', 'grade_id', 'grade', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Additional Details */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-50/80 to-orange-50/80 border border-amber-100/50 space-y-3">
+                  <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Tag size={10} /> Additional Details
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select
+                      label="HSN Code"
+                      options={[
+                        { value: '', label: dropdowns['hsn-codes']?.loading ? 'Loading...' : 'Select HSN' },
+                        ...(dropdowns['hsn-codes']?.options || []),
+                      ]}
+                      value={String(formData.hsn_code_id || '')}
+                      onChange={(e) => updateDropdownField('hsn_code', 'hsn_code_id', 'hsn_code', e.target.value)}
+                    />
+                    <div className="flex items-end">
+                      <Input
+                        label="Description"
                         value={formData.description || ''}
-                      onChange={(e) => updateField('description', e.target.value)}
-                        placeholder="Product description..."
-                        className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white"
+                        placeholder="Product description"
+                        onChange={(e) => updateField('description', e.target.value)}
                       />
                     </div>
                   </div>
-                )}
-
-                {activeTab === 'specs' && (
-                  <div className="space-y-4">
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <Ruler size={10} /> Dimensions
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Select label="UOM" required options={[
-                          { value: 'sqft', label: 'Sq. Ft.' },
-                          { value: 'sqm', label: 'Sq. M.' },
-                          { value: 'kg', label: 'Kg' },
-                        ]} value={formData.uom === 'Sq. Ft.' ? 'sqft' : 'sqm'} onChange={(e) => updateField('uom', e.target.value === 'sqft' ? 'Sq. Ft.' : 'Sq. M.')} />
-                        <Select label="Thickness (mm)" options={[
-                          { value: '1.2-1.4', label: '1.2 - 1.4 mm' },
-                          { value: '1.0-1.2', label: '1.0 - 1.2 mm' },
-                          { value: '1.4-1.6', label: '1.4 - 1.6 mm' },
-                          { value: '0.8-1.0', label: '0.8 - 1.0 mm' },
-                        ]} value={formData.thickness?.includes('1.2') ? '1.2-1.4' : formData.thickness?.includes('1.0') ? '1.0-1.2' : '1.4-1.6'} onChange={(e) => updateField('thickness', e.target.value)} />
-                      </div>
-                      <Input label="Standard Size" value={formData.standard_size || ''} placeholder="e.g. As per Customer Requirement" onChange={(e) => updateField('standard_size', e.target.value)} />
-                    </div>
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <Palette size={10} /> Finish & Appearance
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Input label="Color / Shade" value={formData.color || ''} placeholder="e.g. Black, Brown" onChange={(e) => updateField('color', e.target.value)} />
-                        <Select label="Finish Type" options={[
-                          { value: '', label: 'Select finish' },
-                          { value: 'semi-aniline', label: 'Semi Aniline' },
-                          { value: 'full-grain', label: 'Full Grain' },
-                          { value: 'nappa', label: 'Nappa' },
-                          { value: 'suede', label: 'Suede' },
-                          { value: 'pull-up', label: 'Pull-Up' },
-                        ]} value={formData.finish_type || ''} onChange={(e) => updateField('finish_type', e.target.value)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'pricing' && (
-                  <div className="space-y-4">
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-amber-50/80 to-orange-50/80 border border-amber-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <Tag size={10} /> Pricing
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Input label="Sales Price (₹ / Sq. Ft.)" value={formData.sales_price || ''} placeholder="e.g. 125.00" onChange={(e) => updateField('sales_price', e.target.value)} />
-                        <Input label="HSN Code" value={formData.hsn_code || ''} placeholder="e.g. 4107" onChange={(e) => updateField('hsn_code', e.target.value)} />
-                      </div>
-                    </div>
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border border-indigo-100/50 space-y-3">
-                      <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <Layers size={10} /> Quality Grade
-                      </p>
-                      <Select label="Grade" options={[
-                        { value: 'a', label: 'A Grade (Premium)' },
-                        { value: 'b', label: 'B Grade (Standard)' },
-                        { value: 'c', label: 'C Grade (Economy)' },
-                      ]} value={formData.grade || 'a'} onChange={(e) => updateField('grade', e.target.value)} />
-                    </div>
-                    <div className="p-3 rounded-lg bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200">
-                      <p className="text-xs text-teal-700 font-semibold flex items-center gap-1.5">💡 Info</p>
-                      <p className="text-[11px] text-teal-600 mt-1">Sales price is per unit (Sq. Ft.). HSN code is used for GST invoicing.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Navigation Buttons */}
-                <div className="flex items-center gap-2 pt-4">
-                  <button
-                    onClick={goToPreviousTab}
-                    disabled={activeTab === 'basic'}
-                    className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
-                  >
-                    ← Previous
-                  </button>
-                  {activeTab !== 'pricing' && (
-                    <button
-                      onClick={goToNextTab}
-                      disabled={!canAccessTab(activeTab === 'basic' ? 'specs' : 'pricing')}
-                      className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
-                    >
-                      Next →
-                    </button>
-                  )}
                 </div>
 
                 {/* Status Toggle */}
@@ -690,7 +679,7 @@ export default function ProductMaster() {
                     <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${statusToggle ? 'translate-x-5' : ''}`} />
                   </button>
                   <span className={`text-xs font-semibold ${statusToggle ? 'text-emerald-600' : 'text-gray-500'}`}>
-                    {statusToggle ? '● Active' : '○ Inactive'}
+                    {statusToggle ? 'Active' : 'Inactive'}
                   </span>
                 </div>
               </div>
