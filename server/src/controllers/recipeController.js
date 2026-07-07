@@ -14,28 +14,31 @@ export async function getOne(req, res, next) {
   try {
     const recipe = await model.getById(req.params.id);
     if (!recipe) return res.status(404).json({ error: 'Recipe not found' });
-    const [items, stages] = await Promise.all([
+    const [items, stages, attachments] = await Promise.all([
       model.getItems(req.params.id),
       model.getStages(req.params.id),
+      model.getAttachments(req.params.id),
     ]);
-    res.json({ data: { ...recipe, items, stages } });
+    res.json({ data: { ...recipe, items, stages, attachments } });
   } catch (err) { next(err); }
 }
 
 export async function create(req, res, next) {
   try {
     if (!req.body.name) return res.status(400).json({ error: 'Recipe name is required' });
-    const result = await model.create(req.body);
-    res.status(201).json({ data: { id: result.id, code: result.code } });
+    const createdBy = req.user?.id || null;
+    const result = await model.create(req.body, createdBy);
+    res.status(201).json({ data: { id: result.id, code: result.code }, message: 'Recipe created successfully!' });
   } catch (err) { next(err); }
 }
 
 export async function update(req, res, next) {
   try {
     if (!req.body.name) return res.status(400).json({ error: 'Recipe name is required' });
-    const ok = await model.update(req.params.id, req.body);
+    const updatedBy = req.user?.id || null;
+    const ok = await model.update(req.params.id, req.body, updatedBy);
     if (!ok) return res.status(404).json({ error: 'Recipe not found' });
-    res.json({ data: { id: req.params.id } });
+    res.json({ data: { id: req.params.id }, message: 'Recipe updated successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -43,7 +46,7 @@ export async function remove(req, res, next) {
   try {
     const ok = await model.remove(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Recipe not found' });
-    res.json({ data: { id: req.params.id, deleted: true } });
+    res.json({ data: { id: req.params.id, deleted: true }, message: 'Recipe deleted successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -65,16 +68,18 @@ export async function listItems(req, res, next) {
 export async function addItem(req, res, next) {
   try {
     if (!req.body.material_id) return res.status(400).json({ error: 'material_id is required' });
-    const result = await model.addItem(req.params.id, req.body);
-    res.status(201).json({ data: { id: result.id } });
+    const createdBy = req.user?.id || null;
+    const result = await model.addItem(req.params.id, req.body, createdBy);
+    res.status(201).json({ data: { id: result.id }, message: 'Item added successfully!' });
   } catch (err) { next(err); }
 }
 
 export async function updateItem(req, res, next) {
   try {
-    const ok = await model.updateItem(req.params.itemId, req.body);
+    const updatedBy = req.user?.id || null;
+    const ok = await model.updateItem(req.params.itemId, req.body, updatedBy);
     if (!ok) return res.status(404).json({ error: 'Recipe item not found' });
-    res.json({ data: { id: req.params.itemId } });
+    res.json({ data: { id: req.params.itemId }, message: 'Item updated successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -82,7 +87,7 @@ export async function removeItem(req, res, next) {
   try {
     const ok = await model.removeItem(req.params.itemId);
     if (!ok) return res.status(404).json({ error: 'Recipe item not found' });
-    res.json({ data: { id: req.params.itemId, deleted: true } });
+    res.json({ data: { id: req.params.itemId, deleted: true }, message: 'Item deleted successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -96,17 +101,18 @@ export async function listStages(req, res, next) {
 
 export async function addStage(req, res, next) {
   try {
-    if (!req.body.process_stage) return res.status(400).json({ error: 'process_stage is required' });
-    const result = await model.addStage(req.params.id, req.body);
-    res.status(201).json({ data: { id: result.id } });
+    const createdBy = req.user?.id || null;
+    const result = await model.addStage(req.params.id, req.body, createdBy);
+    res.status(201).json({ data: { id: result.id }, message: 'Stage added successfully!' });
   } catch (err) { next(err); }
 }
 
 export async function updateStage(req, res, next) {
   try {
-    const ok = await model.updateStage(req.params.stageId, req.body);
+    const updatedBy = req.user?.id || null;
+    const ok = await model.updateStage(req.params.stageId, req.body, updatedBy);
     if (!ok) return res.status(404).json({ error: 'Process stage not found' });
-    res.json({ data: { id: req.params.stageId } });
+    res.json({ data: { id: req.params.stageId }, message: 'Stage updated successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -114,6 +120,68 @@ export async function removeStage(req, res, next) {
   try {
     const ok = await model.removeStage(req.params.stageId);
     if (!ok) return res.status(404).json({ error: 'Process stage not found' });
-    res.json({ data: { id: req.params.stageId, deleted: true } });
+    res.json({ data: { id: req.params.stageId, deleted: true }, message: 'Stage deleted successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- Attachments ---
+export async function listAttachments(req, res, next) {
+  try {
+    const rows = await model.getAttachments(req.params.id);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+export async function addAttachment(req, res, next) {
+  try {
+    if (!req.body.file_name || !req.body.file_path) {
+      return res.status(400).json({ error: 'file_name and file_path are required' });
+    }
+    const uploadedBy = req.user?.id || null;
+    const result = await model.addAttachment(req.params.id, req.body, uploadedBy);
+    res.status(201).json({ data: { id: result.id }, message: 'Attachment added successfully!' });
+  } catch (err) { next(err); }
+}
+
+export async function removeAttachment(req, res, next) {
+  try {
+    const ok = await model.removeAttachment(req.params.attachmentId);
+    if (!ok) return res.status(404).json({ error: 'Attachment not found' });
+    res.json({ data: { id: req.params.attachmentId, deleted: true }, message: 'Attachment deleted successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- Remarks ---
+export async function getRemarks(req, res, next) {
+  try {
+    const remarks = await model.getRemarks(req.params.id);
+    res.json({ data: { remarks } });
+  } catch (err) { next(err); }
+}
+
+export async function updateRemarks(req, res, next) {
+  try {
+    const updatedBy = req.user?.id || null;
+    const ok = await model.updateRemarks(req.params.id, req.body.remarks, updatedBy);
+    if (!ok) return res.status(404).json({ error: 'Recipe not found' });
+    res.json({ data: { id: req.params.id }, message: 'Remarks updated successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- BOM Items for Recipe ---
+export async function getBOMItems(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    const rows = await model.getBOMItemsByProduct(productId);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+// --- Process Stage Parameters ---
+export async function getStageParameters(req, res, next) {
+  try {
+    const processStageId = req.params.processStageId;
+    const rows = await model.getStageParameters(processStageId);
+    res.json({ data: rows });
   } catch (err) { next(err); }
 }

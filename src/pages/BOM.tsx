@@ -5,8 +5,6 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Upload,
-  History,
   Search,
   Filter,
   ChevronLeft,
@@ -18,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
+  History,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -27,10 +26,12 @@ import Table from '../components/ui/Table';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { useDropdowns } from '../lib/useDropdowns';
 import api from '../lib/api';
 
 interface BOMItemRow {
   id: number;
+  material_id: number;
   material_code: string;
   material_name: string;
   type: string;
@@ -41,14 +42,30 @@ interface BOMItemRow {
   remarks: string;
 }
 
+interface Material {
+  id: number;
+  code: string;
+  name: string;
+  uom: string;
+  type: string;
+}
+
 interface BOM {
   id?: number;
   code: string;
   name: string;
+  product_id?: number | null;
+  product_name?: string;
   leather_type: string;
+  leather_type_id?: number | null;
+  leather_type_name?: string;
   process_type: string;
   thickness: string;
+  thickness_id?: number | null;
+  thickness_name?: string;
   uom: string;
+  uom_id?: number | null;
+  uom_name?: string;
   valid_from: string;
   valid_to: string;
   status: string;
@@ -57,14 +74,14 @@ interface BOM {
   items?: BOMItemRow[];
 }
 
-const emptyBOM: BOM = {
-  code: '', name: '', leather_type: 'cow', process_type: 'finishing',
-  thickness: '1.2-1.4', uom: 'sqft', valid_from: '', valid_to: '',
-  status: 'Active', description: '', version: 1,
-};
-
 type SortField = 'code' | 'name' | 'leather_type' | 'process_type' | 'status';
 type SortOrder = 'asc' | 'desc';
+
+const emptyBOM: BOM = {
+  code: '', name: '', product_id: null, leather_type: '', process_type: 'finishing',
+  thickness: '', uom: '', valid_from: '', valid_to: '',
+  status: 'Active', description: '', version: 1,
+};
 
 export default function BOM() {
   const [boms, setBoms] = useState<BOM[]>([]);
@@ -78,6 +95,11 @@ export default function BOM() {
   const [saving, setSaving] = useState(false);
   const [statusToggle, setStatusToggle] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<BOMItemRow | null>(null);
+  const [itemForm, setItemForm] = useState({ material_id: '', qty: '', unit_cost: '', remarks: '' });
+  const [materials, setMaterials] = useState<Material[]>([]);
+
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -88,6 +110,23 @@ export default function BOM() {
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  // Fetch all dropdowns
+  const dropdowns = useDropdowns(['products', 'leather-types', 'uom', 'thickness']);
+
+  // Fetch materials
+  const fetchMaterials = useCallback(async () => {
+    try {
+      const res = await api<{ data: Material[] }>('/materials?limit=500');
+      setMaterials(res.data || []);
+    } catch {
+      setMaterials([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
 
   const fetchBOMs = useCallback(async () => {
     try {
@@ -121,7 +160,6 @@ export default function BOM() {
   useEffect(() => { fetchBOMs(); }, [fetchBOMs]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  // Reset to page 1 when search or sort changes
   useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
 
   const handleSort = (field: SortField) => {
@@ -217,36 +255,138 @@ export default function BOM() {
     }
   };
 
-  const updateField = (field: keyof BOM, value: string) => {
+  const updateField = (field: keyof BOM, value: string | number | null) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Handle product selection and auto-populate
+  const handleProductChange = (productId: string) => {
+    const product = dropdowns['products']?.data.find((p: any) => p.id === Number(productId));
+    if (product) {
+      setFormData(prev => ({
+        ...prev,
+        product_id: product.id,
+        name: prev.name || product.name,
+        leather_type: product.leather_type || prev.leather_type,
+        leather_type_id: product.leather_type_id || prev.leather_type_id,
+        thickness: product.thickness || prev.thickness,
+        thickness_id: product.thickness_id || prev.thickness_id,
+        uom: product.uom || prev.uom,
+        uom_id: product.uom_id || prev.uom_id,
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, product_id: null }));
+    }
+  };
+
+  // Item CRUD
+  const openAddItem = () => {
+    setSelectedItem(null);
+    setItemForm({ material_id: '', qty: '', unit_cost: '', remarks: '' });
+    setShowItemModal(true);
+  };
+
+  const openEditItem = (item: BOMItemRow) => {
+    setSelectedItem(item);
+    setItemForm({
+      material_id: String(item.material_id),
+      qty: String(item.qty),
+      unit_cost: String(item.unit_cost),
+      remarks: item.remarks || '',
+    });
+    setShowItemModal(true);
+  };
+
+  const handleSaveItem = async () => {
+    if (!itemForm.material_id || !itemForm.qty) {
+      toast.error('Material and Qty are required', { position: 'top-right', autoClose: 3000 });
+      return;
+    }
+    const material = materials.find(m => m.id === Number(itemForm.material_id));
+    if (!material) return;
+
+    const qty = parseFloat(itemForm.qty) || 0;
+    const unitCost = parseFloat(itemForm.unit_cost) || 0;
+    const amount = qty * unitCost;
+
+    try {
+      if (selectedBOM?.id) {
+        const payload = {
+          material_id: Number(itemForm.material_id),
+          type: material.type,
+          uom: material.uom,
+          qty,
+          unit_cost: unitCost,
+          amount,
+          remarks: itemForm.remarks,
+        };
+        if (selectedItem?.id) {
+          await api(`/boms/${selectedBOM.id}/items/${selectedItem.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          toast.success('Item updated!', { position: 'top-right', autoClose: 2000 });
+        } else {
+          await api(`/boms/${selectedBOM.id}/items`, { method: 'POST', body: JSON.stringify(payload) });
+          toast.success('Item added!', { position: 'top-right', autoClose: 2000 });
+        }
+        const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${selectedBOM.id}`);
+        setItems(detail.data.items || []);
+      } else {
+        // Adding to local state for new BOM
+        const newItem: BOMItemRow = {
+          id: Date.now(),
+          material_id: material.id,
+          material_code: material.code,
+          material_name: material.name,
+          type: material.type,
+          uom: material.uom,
+          qty,
+          unit_cost: unitCost,
+          amount,
+          remarks: itemForm.remarks,
+        };
+        if (selectedItem?.id) {
+          setItems(prev => prev.map(i => i.id === selectedItem.id ? newItem : i));
+        } else {
+          setItems(prev => [...prev, newItem]);
+        }
+      }
+      setShowItemModal(false);
+    } catch (err) {
+      toast.error('Failed to save item: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
+    }
+  };
+
+  const handleDeleteItem = async (itemId: number) => {
+    try {
+      if (selectedBOM?.id) {
+        await api(`/boms/${selectedBOM.id}/items/${itemId}`, { method: 'DELETE' });
+        const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${selectedBOM.id}`);
+        setItems(detail.data.items || []);
+      } else {
+        setItems(prev => prev.filter(i => i.id !== itemId));
+      }
+      toast.success('Item deleted!', { position: 'top-right', autoClose: 2000 });
+    } catch (err) {
+      toast.error('Failed to delete item: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
+    }
   };
 
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
   const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
 
   const itemColumns = [
-    { key: 'checkbox', header: '', width: '30px', render: () => (
-      <input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" />
-    )},
-    { key: 'id', header: '#', width: '35px' },
+    { key: 'id', header: '#', width: '35px', render: (_row: BOMItemRow, i: number) => <span>{i + 1}</span> },
     { key: 'material_code', header: 'Material Code', width: '110px' },
     { key: 'material_name', header: 'Material Name', width: '180px' },
     { key: 'type', header: 'Type', width: '80px' },
     { key: 'uom', header: 'UOM', width: '55px' },
-    { key: 'qty', header: 'Qty / Sq. Ft.', width: '95px', render: (row: BOMItemRow) => (
-      <span>{row.qty.toFixed(3)}</span>
-    )},
-    { key: 'unit_cost', header: 'Unit Cost (Rs)', width: '100px', render: (row: BOMItemRow) => (
-      <span>{row.unit_cost.toFixed(2)}</span>
-    )},
-    { key: 'amount', header: 'Amount (Rs)', width: '95px', render: (row: BOMItemRow) => (
-      <span>{row.amount.toFixed(2)}</span>
-    )},
+    { key: 'qty', header: 'Qty', width: '95px', render: (row: BOMItemRow) => <span>{row.qty.toFixed(3)}</span> },
+    { key: 'unit_cost', header: 'Unit Cost', width: '100px', render: (row: BOMItemRow) => <span>{row.unit_cost.toFixed(2)}</span> },
+    { key: 'amount', header: 'Amount', width: '95px', render: (row: BOMItemRow) => <span>{row.amount.toFixed(2)}</span> },
     { key: 'remarks', header: 'Remarks', width: '140px' },
-    { key: 'actions', header: 'Action', width: '60px', render: () => (
+    { key: 'actions', header: 'Action', width: '60px', render: (row: BOMItemRow) => (
       <div className="flex items-center gap-1">
-        <button className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-        <button className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+        <button onClick={() => openEditItem(row)} className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
+        <button onClick={() => handleDeleteItem(row.id)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
       </div>
     )},
   ];
@@ -266,9 +406,6 @@ export default function BOM() {
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-lg border border-teal-100 shadow-sm">
-            <div className="p-1 rounded-md bg-teal-100">
-              <ClipboardList size={12} className="text-teal-600" />
-            </div>
             <span className="text-xs text-teal-600 font-medium">Total:</span>
             <span className="text-sm font-bold text-teal-800">{stats.total}</span>
           </div>
@@ -300,13 +437,13 @@ export default function BOM() {
             </button>
             <ExportMenu
               onPreview={() => {
-                const columns = ['Code', 'Name', 'Leather Type', 'Process Type', 'Thickness', 'UOM', 'Status'];
-                const rows = boms.map(b => [b.code, b.name, b.leather_type, b.process_type, b.thickness, b.uom, b.status]);
+                const columns = ['Code', 'Name', 'Product', 'Leather Type', 'Thickness', 'Status'];
+                const rows = boms.map(b => [b.code, b.name, b.product_name || '', b.leather_type_name || b.leather_type, b.thickness_name || b.thickness, b.status]);
                 previewPDF({ title: 'Bill of Materials', subtitle: `Total: ${boms.length} BOMs`, columns, rows, accentColor: [20, 184, 166] });
               }}
               onDownload={() => {
-                const columns = ['Code', 'Name', 'Leather Type', 'Process Type', 'Thickness', 'UOM', 'Status'];
-                const rows = boms.map(b => [b.code, b.name, b.leather_type, b.process_type, b.thickness, b.uom, b.status]);
+                const columns = ['Code', 'Name', 'Product', 'Leather Type', 'Thickness', 'Status'];
+                const rows = boms.map(b => [b.code, b.name, b.product_name || '', b.leather_type_name || b.leather_type, b.thickness_name || b.thickness, b.status]);
                 downloadPDF({ title: 'Bill of Materials', subtitle: `Total: ${boms.length} BOMs`, columns, rows, accentColor: [20, 184, 166], fileName: 'BOM_Master.pdf' });
               }}
             />
@@ -327,10 +464,9 @@ export default function BOM() {
               <tr className="bg-gradient-to-r from-slate-50 to-teal-50/40 border-b border-teal-100/50">
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">BOM Name <SortIcon field="name" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('process_type')}><span className="inline-flex items-center gap-1">Process Type <SortIcon field="process_type" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider">Product</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-amber-500 uppercase tracking-wider hidden lg:table-cell">Thickness</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-500 uppercase tracking-wider hidden xl:table-cell">UOM</th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('status')}><span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-rose-500 uppercase tracking-wider w-[90px]">Actions</th>
               </tr>
@@ -357,16 +493,13 @@ export default function BOM() {
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <span className="text-blue-700 font-medium text-xs capitalize">{b.leather_type}</span>
+                    <span className="text-blue-700 font-medium text-xs">{b.product_name || '-'}</span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
-                    <span className="text-sky-600 font-medium text-xs capitalize">{b.process_type}</span>
+                    <span className="text-sky-600 font-medium text-xs">{b.leather_type_name || b.leather_type}</span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-100">{b.thickness}</span>
-                  </td>
-                  <td className="py-3 px-4 hidden xl:table-cell">
-                    <span className="text-violet-600 font-medium text-xs uppercase">{b.uom}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-100">{b.thickness_name || b.thickness}</span>
                   </td>
                   <td className="py-3 px-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-sm ${
@@ -407,9 +540,9 @@ export default function BOM() {
                   </div>
                   <p className="text-sm font-semibold text-gray-900 mt-1.5">{b.name}</p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
-                    <span className="capitalize">{b.leather_type}</span>
-                    <span className="capitalize">{b.process_type}</span>
-                    <span>{b.thickness}</span>
+                    <span>{b.product_name || '-'}</span>
+                    <span>{b.leather_type_name || b.leather_type}</span>
+                    <span>{b.thickness_name || b.thickness}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -438,54 +571,14 @@ export default function BOM() {
             </select>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-teal-300 border border-transparent hover:border-teal-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => {
-                if (totalPages <= 5) return true;
-                if (p === 1 || p === totalPages) return true;
-                if (Math.abs(p - currentPage) <= 1) return true;
-                return false;
-              })
-              .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
-                if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((item, idx) =>
-                item === 'ellipsis' ? (
-                  <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-teal-400">…</span>
-                ) : (
-                  <button
-                    key={item}
-                    onClick={() => setCurrentPage(item)}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                      currentPage === item
-                        ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-md shadow-teal-200'
-                        : 'hover:bg-white hover:shadow-sm text-teal-600 border border-transparent hover:border-teal-200'
-                    }`}
-                  >
-                    {item}
-                  </button>
-                )
-              )}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-teal-300 border border-transparent hover:border-teal-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <ChevronRight size={14} />
-            </button>
+            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-teal-300 border border-transparent hover:border-teal-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => { if (totalPages <= 5) return true; if (p === 1 || p === totalPages) return true; if (Math.abs(p - currentPage) <= 1) return true; return false; }).reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => { if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis'); acc.push(p); return acc; }, []).map((item, idx) => item === 'ellipsis' ? <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-teal-400">…</span> : <button key={item} onClick={() => setCurrentPage(item)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === item ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-md shadow-teal-200' : 'hover:bg-white hover:shadow-sm text-teal-600 border border-transparent hover:border-teal-200'}`}>{item}</button>)}
+            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-teal-300 border border-transparent hover:border-teal-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight size={14} /></button>
           </div>
         </div>
       </div>
 
-      {/* Modal Dialog */}
+      {/* BOM Edit Modal */}
       {showPanel && createPortal(
         <>
           <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center" onClick={() => setShowPanel(false)}>
@@ -503,7 +596,7 @@ export default function BOM() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" icon={<History size={14} />}>Revision History</Button>
+                    <Button variant="outline" size="sm" icon={<History size={14} />}>Revision</Button>
                     <button onClick={() => setShowPanel(false)} className="p-2 rounded-lg hover:bg-white/70 text-gray-400 hover:text-gray-600 transition-all"><X size={18} /></button>
                   </div>
                 </div>
@@ -511,137 +604,100 @@ export default function BOM() {
 
               {/* Modal Body */}
               <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-gradient-to-b from-white to-slate-50/50">
-                {/* BOM Header + Summary */}
-                <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-5">
-                  {/* BOM Header Form */}
-                  <Card title="BOM Header">
-                    <div className="space-y-3">
-                      {/* Row 1 */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <Input label="BOM / Recipe Code" required value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
-                        <Input label="BOM / Recipe Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
-                        <Input label="Product / Leather" required value={formData.name || ''} placeholder="Enter product" onChange={(e) => updateField('name', e.target.value)} />
-                        <Select
-                          label="Leather Type"
-                          options={[
-                            { value: 'cow', label: 'Cow' },
-                            { value: 'buffalo', label: 'Buffalo' },
-                            { value: 'goat', label: 'Goat' },
-                          ]}
-                          value={formData.leather_type || 'cow'}
-                          onChange={(e) => updateField('leather_type', e.target.value)}
-                        />
-                      </div>
-                      {/* Row 2 */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <Select
-                          label="Process Type"
-                          required
-                          options={[
-                            { value: 'finishing', label: 'Finishing' },
-                            { value: 'tanning', label: 'Tanning' },
-                            { value: 'dyeing', label: 'Dyeing' },
-                          ]}
-                          value={formData.process_type || 'finishing'}
-                          onChange={(e) => updateField('process_type', e.target.value)}
-                        />
-                        <Select
-                          label="Thickness"
-                          options={[
-                            { value: '1.2-1.4', label: '1.2 - 1.4 mm' },
-                            { value: '1.4-1.6', label: '1.4 - 1.6 mm' },
-                          ]}
-                          value={formData.thickness || '1.2-1.4'}
-                          onChange={(e) => updateField('thickness', e.target.value)}
-                        />
-                        <Select
-                          label="UOM"
-                          options={[
-                            { value: 'sqft', label: 'Sq. Ft.' },
-                            { value: 'sqm', label: 'Sq. M.' },
-                          ]}
-                          value={formData.uom || 'sqft'}
-                          onChange={(e) => updateField('uom', e.target.value)}
-                        />
-                      </div>
-                      {/* Row 3 */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <Input label="Valid From" required type="date" value={formData.valid_from || ''} onChange={(e) => updateField('valid_from', e.target.value)} />
-                        <Input label="Valid To" type="date" value={formData.valid_to || ''} onChange={(e) => updateField('valid_to', e.target.value)} />
-                        <div>
-                          <label className="block text-xs font-medium text-gray-900 mb-1">Status</label>
-                          <span className={`inline-flex px-3 py-2 text-xs font-medium rounded-lg ${statusToggle ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-red-600 bg-red-50 border border-red-200'}`}>
-                            {statusToggle ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Description */}
-                      <div>
-                        <label className="block text-xs font-medium text-gray-900 mb-1">Description / Notes</label>
-                        <textarea
-                          rows={2}
-                          value={formData.description || ''}
-                          onChange={(e) => updateField('description', e.target.value)}
-                          placeholder="Enter description or notes..."
-                          className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
-                        />
-                      </div>
+                {/* BOM Header */}
+                <Card title="BOM Header">
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <Input label="BOM Code" value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                      <Input label="BOM Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
+                      <Select
+                        label="Product"
+                        required
+                        options={[
+                          { value: '', label: dropdowns['products']?.loading ? 'Loading...' : 'Select product' },
+                          ...(dropdowns['products']?.options || []),
+                        ]}
+                        value={String(formData.product_id || '')}
+                        onChange={(e) => handleProductChange(e.target.value)}
+                      />
+                      <Select
+                        label="Leather Type"
+                        options={[
+                          { value: '', label: dropdowns['leather-types']?.loading ? 'Loading...' : 'Select type' },
+                          ...(dropdowns['leather-types']?.options || []),
+                        ]}
+                        value={String(formData.leather_type_id || '')}
+                        onChange={(e) => {
+                          const item = dropdowns['leather-types']?.data.find((d: any) => d.id === Number(e.target.value));
+                          setFormData(prev => ({ ...prev, leather_type_id: item?.id || null, leather_type: item?.name || '' }));
+                        }}
+                      />
                     </div>
-                  </Card>
-
-                  {/* BOM Summary */}
-                  <Card title="BOM Summary">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                        <span className="text-xs text-gray-500">Total Items</span>
-                        <span className="text-xs font-semibold text-gray-900">:</span>
-                        <span className="text-xs font-semibold text-gray-900">{items.length}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                        <span className="text-xs text-gray-500">Total Qty</span>
-                        <span className="text-xs font-semibold text-gray-900">:</span>
-                        <span className="text-xs font-semibold text-gray-900">{totalQty.toFixed(3)} (per Sq. Ft.)</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                        <span className="text-xs text-gray-500">Total Chemical Cost</span>
-                        <span className="text-xs font-semibold text-gray-900">:</span>
-                        <span className="text-xs font-semibold text-gray-900">Rs 38.42 / Sq. Ft.</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                        <span className="text-xs text-gray-500">Total Other Cost</span>
-                        <span className="text-xs font-semibold text-gray-900">:</span>
-                        <span className="text-xs font-semibold text-gray-900">Rs 2.80 / Sq. Ft.</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2">
-                        <span className="text-xs font-bold text-gray-900">Total Cost</span>
-                        <span className="text-xs font-bold text-gray-900">:</span>
-                        <span className="text-xs font-bold text-gray-900">Rs {totalAmount.toFixed(2)} / Sq. Ft.</span>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                      <Select
+                        label="Process Type"
+                        required
+                        options={[
+                          { value: 'finishing', label: 'Finishing' },
+                          { value: 'tanning', label: 'Tanning' },
+                          { value: 'dyeing', label: 'Dyeing' },
+                        ]}
+                        value={formData.process_type || 'finishing'}
+                        onChange={(e) => updateField('process_type', e.target.value)}
+                      />
+                      <Select
+                        label="Thickness"
+                        options={[
+                          { value: '', label: dropdowns['thickness']?.loading ? 'Loading...' : 'Select' },
+                          ...(dropdowns['thickness']?.options || []),
+                        ]}
+                        value={String(formData.thickness_id || '')}
+                        onChange={(e) => {
+                          const item = dropdowns['thickness']?.data.find((d: any) => d.id === Number(e.target.value));
+                          setFormData(prev => ({ ...prev, thickness_id: item?.id || null, thickness: item?.name || '' }));
+                        }}
+                      />
+                      <Select
+                        label="UOM"
+                        options={[
+                          { value: '', label: dropdowns['uom']?.loading ? 'Loading...' : 'Select' },
+                          ...(dropdowns['uom']?.options || []),
+                        ]}
+                        value={String(formData.uom_id || '')}
+                        onChange={(e) => {
+                          const item = dropdowns['uom']?.data.find((d: any) => d.id === Number(e.target.value));
+                          setFormData(prev => ({ ...prev, uom_id: item?.id || null, uom: item?.name || '' }));
+                        }}
+                      />
+                      <Input label="Valid From" type="date" value={formData.valid_from || ''} onChange={(e) => updateField('valid_from', e.target.value)} />
+                      <Input label="Valid To" type="date" value={formData.valid_to || ''} onChange={(e) => updateField('valid_to', e.target.value)} />
                     </div>
-                  </Card>
-                </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">Description / Notes</label>
+                      <textarea
+                        rows={2}
+                        value={formData.description || ''}
+                        onChange={(e) => updateField('description', e.target.value)}
+                        placeholder="Enter description or notes..."
+                        className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
+                      />
+                    </div>
+                  </div>
+                </Card>
 
-                {/* BOM Items Table */}
+                {/* BOM Items */}
                 <Card>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <h3 className="text-sm font-semibold text-gray-900">BOM Items</h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button size="sm" variant="teal" icon={<Plus size={14} />}>Add Item</Button>
-                      <Button size="sm" variant="outline" icon={<Upload size={14} />}>Import from Template</Button>
-                      <Button size="sm" variant="danger" icon={<Trash2 size={14} />}>Remove</Button>
-                    </div>
+                    <Button size="sm" variant="teal" icon={<Plus size={14} />} onClick={openAddItem}>Add Item</Button>
                   </div>
 
                   <Table columns={itemColumns} data={items} />
 
-                  {/* Total Row */}
                   <div className="flex items-center justify-end gap-6 border-t border-gray-200 mt-1 pt-2 text-xs font-semibold text-gray-900">
                     <span>Total Qty: {totalQty.toFixed(3)}</span>
-                    <span>Total Amount: ₹{totalAmount.toFixed(2)}</span>
+                    <span>Total Amount: {totalAmount.toFixed(2)}</span>
                   </div>
-
-                  {/* Footer note */}
-                  <p className="text-[10px] text-amber-600 mt-4">* Qty / Sq. Ft. indicates quantity required per Square Feet</p>
                 </Card>
 
                 {/* Status Toggle */}
@@ -650,7 +706,7 @@ export default function BOM() {
                   <button onClick={() => setStatusToggle(!statusToggle)} className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${statusToggle ? 'bg-gradient-to-r from-emerald-400 to-teal-500' : 'bg-gray-300'}`}>
                     <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${statusToggle ? 'translate-x-5' : ''}`} />
                   </button>
-                  <span className={`text-xs font-semibold ${statusToggle ? 'text-emerald-600' : 'text-gray-500'}`}>{statusToggle ? '● Active' : '○ Inactive'}</span>
+                  <span className={`text-xs font-semibold ${statusToggle ? 'text-emerald-600' : 'text-gray-500'}`}>{statusToggle ? 'Active' : 'Inactive'}</span>
                 </div>
               </div>
 
@@ -669,6 +725,37 @@ export default function BOM() {
             </div>
           </div>
         </>,
+        document.body
+      )}
+
+      {/* Item Modal */}
+      {showItemModal && createPortal(
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[70] flex items-center justify-center" onClick={() => setShowItemModal(false)}>
+          <div className="w-full max-w-md bg-white rounded-xl shadow-xl mx-3 p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-gray-900 mb-4">{selectedItem ? 'Edit Item' : 'Add Item'}</h3>
+            <div className="space-y-3">
+              <Select
+                label="Material"
+                required
+                options={[
+                  { value: '', label: 'Select material' },
+                  ...materials.map(m => ({ value: String(m.id), label: `${m.code} - ${m.name}` })),
+                ]}
+                value={itemForm.material_id}
+                onChange={(e) => setItemForm(prev => ({ ...prev, material_id: e.target.value }))}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Qty" required type="number" value={itemForm.qty} onChange={(e) => setItemForm(prev => ({ ...prev, qty: e.target.value }))} />
+                <Input label="Unit Cost" type="number" value={itemForm.unit_cost} onChange={(e) => setItemForm(prev => ({ ...prev, unit_cost: e.target.value }))} />
+              </div>
+              <Input label="Remarks" value={itemForm.remarks} onChange={(e) => setItemForm(prev => ({ ...prev, remarks: e.target.value }))} />
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button onClick={() => setShowItemModal(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+              <button onClick={handleSaveItem} className="px-4 py-1.5 text-xs font-medium text-white bg-teal-500 rounded-lg hover:bg-teal-600">{selectedItem ? 'Update' : 'Add'}</button>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
 

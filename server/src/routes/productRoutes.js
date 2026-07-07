@@ -5,6 +5,7 @@ import { validateId, validatePagination } from '../middleware/validators.js';
 const router = Router();
 
 router.get('/', validatePagination, ctrl.list);
+router.get('/dropdown', ctrl.dropdown);
 router.get('/stats', ctrl.stats);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', ctrl.create);

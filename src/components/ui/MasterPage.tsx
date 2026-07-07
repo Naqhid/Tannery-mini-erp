@@ -17,6 +17,10 @@ import {
   ChevronsUpDown,
   FileSpreadsheet,
   Download,
+<<<<<<< HEAD
+=======
+  Eye,
+>>>>>>> develop
 } from 'lucide-react';
 import Input from './Input';
 import Select from './Select';
@@ -300,11 +304,19 @@ export default function MasterPage({
               </button>
               <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 hidden group-hover:block min-w-[140px]">
                 <button
+<<<<<<< HEAD
                   onClick={handleExportExcel}
                   className="w-full px-4 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2"
                 >
                   <FileSpreadsheet size={14} className="text-green-600" />
                   Export to Excel
+=======
+                  onClick={() => handleExportPDF(true)}
+                  className="w-full px-4 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <Eye size={14} className="text-sky-500" />
+                  Preview PDF
+>>>>>>> develop
                 </button>
                 <button
                   onClick={() => handleExportPDF(false)}
@@ -313,6 +325,16 @@ export default function MasterPage({
                   <Download size={14} className="text-red-600" />
                   Download PDF
                 </button>
+<<<<<<< HEAD
+=======
+                <button
+                  onClick={handleExportExcel}
+                  className="w-full px-4 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <FileSpreadsheet size={14} className="text-green-600" />
+                  Export to Excel
+                </button>
+>>>>>>> develop
               </div>
             </div>
           </div>

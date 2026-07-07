@@ -19,17 +19,19 @@ export async function getOne(req, res, next) {
 export async function create(req, res, next) {
   try {
     if (!req.body.name) return res.status(400).json({ error: 'Material name is required' });
-    const result = await model.create(req.body);
-    res.status(201).json({ data: { id: result.id, code: result.code } });
+    const createdBy = req.user?.id || null;
+    const result = await model.create(req.body, createdBy);
+    res.status(201).json({ data: { id: result.id, code: result.code }, message: 'Material created successfully!' });
   } catch (err) { next(err); }
 }
 
 export async function update(req, res, next) {
   try {
     if (!req.body.name) return res.status(400).json({ error: 'Material name is required' });
-    const ok = await model.update(req.params.id, req.body);
+    const updatedBy = req.user?.id || null;
+    const ok = await model.update(req.params.id, req.body, updatedBy);
     if (!ok) return res.status(404).json({ error: 'Material not found' });
-    res.json({ data: { id: req.params.id } });
+    res.json({ data: { id: req.params.id }, message: 'Material updated successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -37,6 +39,18 @@ export async function remove(req, res, next) {
   try {
     const ok = await model.remove(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Material not found' });
-    res.json({ data: { id: req.params.id, deleted: true } });
+    res.json({ data: { id: req.params.id, deleted: true }, message: 'Material deleted successfully!' });
+  } catch (err) {
+    if (err.code === 'REFERENCE_ERROR') {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+}
+
+export async function dropdown(_req, res, next) {
+  try {
+    const rows = await model.getDropdown();
+    res.json({ data: rows });
   } catch (err) { next(err); }
 }

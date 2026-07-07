@@ -97,3 +97,68 @@ INSERT INTO bom_items (bom_id, material_id, type, uom, qty, unit_cost, amount, r
 (1,5,'Chemical','Ltr',0.140,140.00,19.60,'--'),
 (1,7,'Chemical','Kg',0.020,120.00,2.40,'--'),
 (1,6,'Chemical','Kg',0.030,110.00,3.30,'Gloss & finish');
+
+
+-- Countries
+INSERT INTO countries (code, name, phone_code, status) VALUES
+('CTR-001','India','+91','Active'),
+('CTR-002','United States','+1','Active'),
+('CTR-003','United Kingdom','+44','Active'),
+('CTR-004','Germany','+49','Active'),
+('CTR-005','France','+33','Active'),
+('CTR-006','Italy','+39','Active'),
+('CTR-007','China','+86','Active'),
+('CTR-008','Japan','+81','Active'),
+('CTR-009','Australia','+61','Active'),
+('CTR-010','Canada','+1','Active'),
+('CTR-011','Brazil','+55','Active'),
+('CTR-012','South Korea','+82','Active'),
+('CTR-013','Spain','+34','Active'),
+('CTR-014','Bangladesh','+880','Active'),
+('CTR-015','Vietnam','+84','Active'),
+('CTR-016','Turkey','+90','Active'),
+('CTR-017','UAE','+971','Active'),
+('CTR-018','Saudi Arabia','+966','Active'),
+('CTR-019','Singapore','+65','Active'),
+('CTR-020','Malaysia','+60','Active');
+
+-- States (India)
+INSERT INTO states (code, name, country_id, status) VALUES
+('ST-001','Tamil Nadu',1,'Active'),
+('ST-002','Karnataka',1,'Active'),
+('ST-003','Maharashtra',1,'Active'),
+('ST-004','Kerala',1,'Active'),
+('ST-005','Andhra Pradesh',1,'Active'),
+('ST-006','Telangana',1,'Active'),
+('ST-007','Delhi',1,'Active'),
+('ST-008','Gujarat',1,'Active'),
+('ST-009','Rajasthan',1,'Active'),
+('ST-010','Uttar Pradesh',1,'Active'),
+('ST-011','West Bengal',1,'Active'),
+('ST-012','Punjab',1,'Active'),
+('ST-013','Madhya Pradesh',1,'Active'),
+('ST-014','Bihar',1,'Active'),
+('ST-015','Odisha',1,'Active');
+
+-- Cities (Tamil Nadu)
+INSERT INTO cities (name, state_id, country_id, pincode, status) VALUES
+('Chennai',1,1,'600001','Active'),
+('Vellore',1,1,'632001','Active'),
+('Ambur',1,1,'635802','Active'),
+('Ranipet',1,1,'632401','Active'),
+('Coimbatore',1,1,'641001','Active'),
+('Madurai',1,1,'625001','Active'),
+('Salem',1,1,'636001','Active'),
+('Trichy',1,1,'620001','Active'),
+('Erode',1,1,'638001','Active'),
+('Tiruppur',1,1,'641601','Active');
+
+-- Cities (Karnataka)
+INSERT INTO cities (name, state_id, country_id, pincode, status) VALUES
+('Bangalore',2,1,'560001','Active'),
+('Mysore',2,1,'570001','Active');
+
+-- Cities (Maharashtra)
+INSERT INTO cities (name, state_id, country_id, pincode, status) VALUES
+('Mumbai',3,1,'400001','Active'),
+('Pune',3,1,'411001','Active');

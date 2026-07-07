@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { Download, Eye, FileDown } from 'lucide-react';
+import { Download, Eye, FileDown, FileSpreadsheet } from 'lucide-react';
 
 interface ExportMenuProps {
   onPreview: () => void;
   onDownload: () => void;
+  onExcel?: () => void;
 }
 
-export default function ExportMenu({ onPreview, onDownload }: ExportMenuProps) {
+export default function ExportMenu({ onPreview, onDownload, onExcel }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +46,18 @@ export default function ExportMenu({ onPreview, onDownload }: ExportMenuProps) {
             <FileDown size={14} className="text-emerald-500" />
             Download PDF
           </button>
+          {onExcel && (
+            <>
+              <div className="border-t border-gray-50" />
+              <button
+                onClick={() => { onExcel(); setOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 transition-all"
+              >
+                <FileSpreadsheet size={14} className="text-green-600" />
+                Download Excel
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

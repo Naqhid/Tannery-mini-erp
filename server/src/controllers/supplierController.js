@@ -40,7 +40,12 @@ export async function remove(req, res, next) {
     const ok = await model.remove(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Supplier not found' });
     res.json({ data: { id: req.params.id, deleted: true }, message: 'Supplier deleted successfully!' });
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === 'REFERENCE_ERROR') {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
 }
 
 export async function stats(_req, res, next) {
