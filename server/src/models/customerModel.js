@@ -67,10 +67,10 @@ export async function getNextCode() {
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
-    `INSERT INTO customers (code, name, contact_person, phone, email, alt_phone, city, state, status, category, currency, billing_address, shipping_address, pin_code, gstin, pan, payment_terms, credit_limit, notes, country_id, state_id, city_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO customers (code, name, contact_person, phone, email, alt_phone, city, state, country, status, category, currency, billing_address, shipping_address, pin_code, gstin, pan, payment_terms, credit_limit, notes, country_id, state_id, city_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
-     data.city, data.state, data.status || 'Active', data.category, data.currency,
+     data.city, data.state, data.country || null, data.status || 'Active', data.category, data.currency,
      data.billing_address, data.shipping_address, data.pin_code, data.gstin, data.pan,
      data.payment_terms, data.credit_limit, data.notes,
      data.country_id || null, data.state_id || null, data.city_id || null,
@@ -81,9 +81,9 @@ export async function create(data, createdBy = null) {
 
 export async function update(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE customers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, status=?, category=?, currency=?, billing_address=?, shipping_address=?, pin_code=?, gstin=?, pan=?, payment_terms=?, credit_limit=?, notes=?, country_id=?, state_id=?, city_id=?, updated_by=? WHERE id=?`,
+    `UPDATE customers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, country=?, status=?, category=?, currency=?, billing_address=?, shipping_address=?, pin_code=?, gstin=?, pan=?, payment_terms=?, credit_limit=?, notes=?, country_id=?, state_id=?, city_id=?, updated_by=? WHERE id=?`,
     [data.code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
-     data.city, data.state, data.status, data.category, data.currency,
+     data.city, data.state, data.country || null, data.status, data.category, data.currency,
      data.billing_address, data.shipping_address, data.pin_code, data.gstin, data.pan,
      data.payment_terms, data.credit_limit, data.notes,
      data.country_id || null, data.state_id || null, data.city_id || null,

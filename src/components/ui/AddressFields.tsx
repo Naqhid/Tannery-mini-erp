@@ -66,7 +66,6 @@ export default function AddressFields({
         setCountries(names);
       }
     } catch {
-      // Fallback: try alternate endpoint
       try {
         const res = await fetch('https://countriesnow.space/api/v0.1/countries/states');
         const data = await res.json();
@@ -195,7 +194,15 @@ export default function AddressFields({
     });
   };
 
-  const handleCityChange = (city: string) => {
+  const handleCityDropdownChange = (city: string) => {
+    onChange({
+      ...value,
+      city,
+      city_id: null,
+    });
+  };
+
+  const handleManualCityChange = (city: string) => {
     onChange({
       ...value,
       city,
@@ -206,16 +213,22 @@ export default function AddressFields({
   const countryOptions = [
     { value: '', label: loadingCountries ? 'Loading countries...' : 'Select country' },
     ...countries.map(c => ({ value: c, label: c })),
+    // Include current country if not in fetched list yet
+    ...(value.country && !countries.includes(value.country) ? [{ value: value.country, label: value.country }] : []),
   ];
 
   const stateOptions = [
     { value: '', label: loadingStates ? 'Loading states...' : value.country ? 'Select state' : 'Select country first' },
     ...states.map(s => ({ value: s, label: s })),
+    // Include current state if not in fetched list yet
+    ...(value.state && !states.includes(value.state) ? [{ value: value.state, label: value.state }] : []),
   ];
 
   const cityOptions = [
     { value: '', label: loadingCities ? 'Loading cities...' : value.state ? 'Select city' : 'Select state first' },
     ...cities.map(c => ({ value: c, label: c })),
+    // Include current city in options if it exists but not in the fetched list
+    ...(value.city && !cities.includes(value.city) ? [{ value: value.city, label: value.city }] : []),
   ];
 
   return (
@@ -275,13 +288,22 @@ export default function AddressFields({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Select
-          label="City"
-          options={cityOptions}
-          value={value.city || ''}
-          onChange={(e) => handleCityChange(e.target.value)}
-          disabled={!value.state}
-        />
+        <div className="space-y-2">
+          <Select
+            label="City"
+            options={cityOptions}
+            value={value.city || ''}
+            onChange={(e) => handleCityDropdownChange(e.target.value)}
+            disabled={!value.state}
+          />
+          <Input
+            label="Or type city manually"
+            value={value.city && !cities.includes(value.city) ? value.city : ''}
+            placeholder="Enter city if not in list"
+            onChange={(e) => handleManualCityChange(e.target.value)}
+            disabled={!value.state}
+          />
+        </div>
         <Input
           label="Pin Code"
           value={value.pin_code || ''}

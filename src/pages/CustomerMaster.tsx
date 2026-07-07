@@ -144,7 +144,15 @@ export default function CustomerMaster() {
   const openPanel = (customer?: Customer) => {
     if (customer) {
       setSelectedCustomer(customer);
-      setFormData({ ...emptyCustomer, ...customer });
+      // Map API response names to form fields for AddressFields
+      const mapped = {
+        ...emptyCustomer,
+        ...customer,
+        country: (customer as any).country_name || customer.country || '',
+        state: (customer as any).state_name || customer.state || '',
+        city: (customer as any).city_name || customer.city || '',
+      };
+      setFormData(mapped);
       setStatusToggle(customer.status === 'Active');
     } else {
       setSelectedCustomer(null);

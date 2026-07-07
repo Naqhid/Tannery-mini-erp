@@ -173,7 +173,15 @@ export default function SupplierMaster() {
   const openPanel = (supplier?: Supplier) => {
     if (supplier) {
       setSelectedSupplier(supplier);
-      setFormData({ ...emptySupplier, ...supplier });
+      // Map API response names to form fields for AddressFields
+      const mapped = {
+        ...emptySupplier,
+        ...supplier,
+        country: (supplier as any).country_name || supplier.country || '',
+        state: (supplier as any).state_name || supplier.state || '',
+        city: (supplier as any).city_name || supplier.city || '',
+      };
+      setFormData(mapped);
       setStatusToggle(supplier.status === 'Active');
     } else {
       setSelectedSupplier(null);
