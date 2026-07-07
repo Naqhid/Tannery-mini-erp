@@ -151,21 +151,21 @@ export async function getStages(recipeId) {
 
 export async function addStage(recipeId, data, createdBy = null) {
   const [result] = await pool.query(
-    `INSERT INTO recipe_process_stages (recipe_id, seq, process_stage, machine, duration, temperature, speed, qc_check, remarks, process_stage_id, machine_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO recipe_process_stages (recipe_id, seq, process_stage, machine, duration, temperature, speed, qc_check, remarks, process_stage_id, machine_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     [recipeId, data.seq, data.process_stage, data.machine, data.duration,
      data.temperature, data.speed, data.qc_check, data.remarks,
-     data.process_stage_id || null, data.machine_id || null, createdBy]
+     data.process_stage_id || null, data.machine_id || null]
   );
   return { id: result.insertId };
 }
 
 export async function updateStage(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE recipe_process_stages SET seq=?, process_stage=?, machine=?, duration=?, temperature=?, speed=?, qc_check=?, remarks=?, process_stage_id=?, machine_id=?, updated_by=? WHERE id=?`,
+    `UPDATE recipe_process_stages SET seq=?, process_stage=?, machine=?, duration=?, temperature=?, speed=?, qc_check=?, remarks=?, process_stage_id=?, machine_id=? WHERE id=?`,
     [data.seq, data.process_stage, data.machine, data.duration,
      data.temperature, data.speed, data.qc_check, data.remarks,
-     data.process_stage_id || null, data.machine_id || null, updatedBy, id]
+     data.process_stage_id || null, data.machine_id || null, id]
   );
   return result.affectedRows > 0;
 }

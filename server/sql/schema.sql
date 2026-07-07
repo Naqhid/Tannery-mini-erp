@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS recipes (
   valid_to      DATE,
   version       INT DEFAULT 1,
   description   TEXT,
+  remarks       TEXT,
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

@@ -1,6 +1,20 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'path';
 import * as ctrl from '../controllers/recipeController.js';
 import { validateId, validatePagination } from '../middleware/validators.js';
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, 'uploads/recipes');
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
 
 const router = Router();
 
@@ -24,7 +38,7 @@ router.delete('/:id/stages/:stageId', validateId, ctrl.removeStage);
 
 // Attachments
 router.get('/:id/attachments', validateId, ctrl.listAttachments);
-router.post('/:id/attachments', validateId, ctrl.addAttachment);
+router.post('/:id/attachments', validateId, upload.single('file'), ctrl.addAttachment);
 router.delete('/:id/attachments/:attachmentId', validateId, ctrl.removeAttachment);
 
 // Remarks

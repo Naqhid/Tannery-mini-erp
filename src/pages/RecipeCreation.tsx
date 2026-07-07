@@ -959,17 +959,128 @@ export default function RecipeCreation() {
                     )}
 
                     {activeDetailTab === 'parameters' && (
-                      <div className="py-8 text-center text-gray-400 text-sm">
-                        Process parameters will load dynamically based on selected Process Stage.
+                      <div className="space-y-3">
+                        {stages.length === 0 ? (
+                          <div className="py-8 text-center text-gray-400 text-sm">
+                            Add process stages first to view parameters.
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {stages.map((stage, idx) => (
+                              <div key={stage.id || idx} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50">
+                                <p className="text-xs font-semibold text-violet-600 mb-2">
+                                  Stage {stage.seq}: {stage.process_stage}
+                                </p>
+                                <div className="grid grid-cols-3 gap-3 text-xs">
+                                  {stage.duration ? (
+                                    <div>
+                                      <span className="text-gray-500">Duration:</span>
+                                      <span className="ml-1 font-medium text-gray-800">{stage.duration} min</span>
+                                    </div>
+                                  ) : null}
+                                  {stage.temperature ? (
+                                    <div>
+                                      <span className="text-gray-500">Temperature:</span>
+                                      <span className="ml-1 font-medium text-gray-800">{stage.temperature}°C</span>
+                                    </div>
+                                  ) : null}
+                                  {stage.speed ? (
+                                    <div>
+                                      <span className="text-gray-500">Speed:</span>
+                                      <span className="ml-1 font-medium text-gray-800">{stage.speed}</span>
+                                    </div>
+                                  ) : null}
+                                  {stage.machine ? (
+                                    <div>
+                                      <span className="text-gray-500">Machine:</span>
+                                      <span className="ml-1 font-medium text-gray-800">{stage.machine}</span>
+                                    </div>
+                                  ) : null}
+                                  <div>
+                                    <span className="text-gray-500">QC Check:</span>
+                                    <span className={`ml-1 font-medium ${stage.qc_check ? 'text-emerald-600' : 'text-gray-400'}`}>{stage.qc_check ? 'Yes' : 'No'}</span>
+                                  </div>
+                                </div>
+                                {stage.remarks && (
+                                  <p className="mt-2 text-[11px] text-gray-500"><span className="font-medium">Remarks:</span> {stage.remarks}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {activeDetailTab === 'attachments' && (
-                      <div className="py-8 text-center text-gray-400 text-sm">
-                        Upload and manage recipe-related documents.
-                        <div className="mt-4">
-                          <Button variant="outline" size="sm" icon={<Paperclip size={14} />}>Upload Attachment</Button>
+                      <div className="space-y-4">
+                        <div className="py-4 text-center text-gray-400 text-sm">
+                          Upload and manage recipe-related documents.
                         </div>
+                        <div className="flex justify-center">
+                          <label className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-violet-600 bg-white border border-violet-200 rounded-lg hover:bg-violet-50 cursor-pointer transition-all">
+                            <Paperclip size={14} />
+                            Upload Attachment
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (!selectedRecipe?.id) {
+                                  toast.info('Save the recipe first before uploading attachments.', { position: 'top-right', autoClose: 3000 });
+                                  return;
+                                }
+                                try {
+                                  const fd = new FormData();
+                                  fd.append('file', file);
+                                  const token = localStorage.getItem('tannery_token');
+                                  const res = await fetch(`/api/recipes/${selectedRecipe.id}/attachments`, {
+                                    method: 'POST',
+                                    headers: {
+                                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                    },
+                                    body: fd,
+                                  });
+                                  if (!res.ok) {
+                                    const err = await res.json();
+                                    throw new Error(err.error || 'Upload failed');
+                                  }
+                                  toast.success('Attachment uploaded!', { position: 'top-right', autoClose: 2000 });
+                                  const detail = await api<{ data: Recipe & { attachments: RecipeAttachment[] } }>(`/recipes/${selectedRecipe.id}`);
+                                  setAttachments(detail.data.attachments || []);
+                                } catch (err) {
+                                  toast.error('Failed to upload: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
+                                }
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
+                        {attachments.length > 0 && (
+                          <div className="space-y-2">
+                            {attachments.map((att) => (
+                              <div key={att.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+                                <div className="flex items-center gap-2">
+                                  <Paperclip size={13} className="text-gray-400" />
+                                  <span className="text-xs text-gray-700 font-medium">{att.file_name}</span>
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await api(`/recipes/${selectedRecipe?.id}/attachments/${att.id}`, { method: 'DELETE' });
+                                      setAttachments(prev => prev.filter(a => a.id !== att.id));
+                                      toast.success('Attachment removed!', { position: 'top-right', autoClose: 2000 });
+                                    } catch {}
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 
