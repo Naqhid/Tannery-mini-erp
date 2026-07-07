@@ -87,17 +87,17 @@ export async function updateUser(id, data, updatedBy) {
     updates.push('full_name = ?');
     values.push(data.full_name);
   }
-  if (data.role_id) {
+  if (data.role_id !== undefined) {
     updates.push('role_id = ?');
-    values.push(data.role_id);
+    values.push(data.role_id || null);
   }
   if (data.company_id !== undefined) {
     updates.push('company_id = ?');
-    values.push(data.company_id);
+    values.push(data.company_id || null);
   }
   if (data.business_unit_id !== undefined) {
     updates.push('business_unit_id = ?');
-    values.push(data.business_unit_id);
+    values.push(data.business_unit_id || null);
   }
   if (data.status) {
     updates.push('status = ?');

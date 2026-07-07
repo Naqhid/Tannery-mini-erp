@@ -31,6 +31,9 @@ const router = Router();
 // Auth routes
 router.use('/auth', authRoutes);
 
+// Users routes
+router.use(settingsRoutes.usersRouter);
+
 // Master data routes
 router.use('/customers', customerRoutes);
 router.use('/products', productRoutes);

@@ -32,6 +32,7 @@ import Table from '../components/ui/Table';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 import { useDropdowns } from '../lib/useDropdowns';
 import api from '../lib/api';
 
@@ -656,6 +657,20 @@ export default function RecipeCreation() {
                 const columns = ['Code', 'Name', 'Product', 'Leather Type', 'Version', 'Status'];
                 const rows = recipes.map(r => [r.code, r.name, r.product_name || '-', r.leather_type_name || r.leather_type, `v${r.version}`, r.status]);
                 downloadPDF({ title: 'Recipe Creation', subtitle: `Total: ${recipes.length} recipes`, columns, rows, accentColor: [139, 92, 246], fileName: 'Recipe_Creation.pdf' });
+              }}
+              onExcel={() => {
+                exportToExcel({
+                  data: recipes,
+                  columns: [
+                    { key: 'code', header: 'Code' },
+                    { key: 'name', header: 'Name' },
+                    { key: 'product_name', header: 'Product' },
+                    { key: 'leather_type_name', header: 'Leather Type' },
+                    { key: 'version', header: 'Version' },
+                    { key: 'status', header: 'Status' },
+                  ],
+                  fileName: 'Recipe_Creation',
+                });
               }}
             />
           </div>
