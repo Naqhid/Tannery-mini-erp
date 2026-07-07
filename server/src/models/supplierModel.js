@@ -85,6 +85,20 @@ export async function update(id, data, updatedBy = null) {
 export async function checkReferences(id) {
   const [[pricingCount]] = await pool.query('SELECT COUNT(*) AS count FROM supplier_pricing WHERE supplier_id = ?', [id]);
   if (pricingCount.count > 0) return { hasReferences: true, table: 'Supplier Pricing' };
+  // Check if supplier has financial transaction data
+  const [rows] = await pool.query(
+    `SELECT bank_account, gstin, pan FROM suppliers WHERE id = ?`,
+    [id]
+  );
+  if (rows.length > 0) {
+    const supplier = rows[0];
+    const hasFinancialData = (supplier.bank_account && supplier.bank_account.trim() !== '') ||
+                             (supplier.gstin && supplier.gstin.trim() !== '') ||
+                             (supplier.pan && supplier.pan.trim() !== '');
+    if (hasFinancialData) {
+      return { hasReferences: true, table: 'Financial Transactions' };
+    }
+  }
   return { hasReferences: false };
 }
 

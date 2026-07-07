@@ -19,7 +19,7 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     const params = [];
 
     if (search) {
-      where += ` AND (${_searchFields.map(f => `${f} LIKE ?`).join(' OR ')})`;
+      where += ` AND (${_searchFields.map(f => `\`${f}\` LIKE ?`).join(' OR ')})`;
       const term = `%${search}%`;
       params.push(..._searchFields.map(() => term));
     }
@@ -29,12 +29,13 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     }
 
     const allowedSortColumns = ['id', 'code', 'name', 'status', 'created_at'];
-    const column = allowedSortColumns.includes(sortBy) ? sortBy : 'id';
+    const column = allowedSortColumns.includes(sortBy) ? `\`${sortBy}\`` : '`id`';
     const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
     const offset = (page - 1) * limit;
+    const escapedListFields = _listFields.map(f => `\`${f}\``).join(', ');
     const [rows] = await pool.query(
-      `SELECT ${_listFields.join(', ')} FROM ${_tableName} WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
+      `SELECT ${escapedListFields} FROM ${_tableName} WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
     const [[{ total }]] = await pool.query(
@@ -95,8 +96,9 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     if (createdBy !== null) { columns.push('created_by'); values.push(createdBy); }
 
     const placeholders = values.map(() => '?').join(', ');
+    const escapedColumns = columns.map(c => `\`${c}\``).join(', ');
     const [result] = await pool.query(
-      `INSERT INTO ${_tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+      `INSERT INTO ${_tableName} (${escapedColumns}) VALUES (${placeholders})`,
       values
     );
     return { id: result.insertId, code };
@@ -106,30 +108,30 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     const updates = [];
     const values = [];
 
-    if (data.code !== undefined) { updates.push('code = ?'); values.push(data.code); }
-    if (data.name !== undefined) { updates.push('name = ?'); values.push(data.name); }
-    if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description); }
-    if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
-    if (data.value_mm !== undefined) { updates.push('value_mm = ?'); values.push(data.value_mm); }
-    if (data.rank !== undefined) { updates.push('rank = ?'); values.push(data.rank); }
-    if (data.hex_code !== undefined) { updates.push('hex_code = ?'); values.push(data.hex_code); }
-    if (data.seq !== undefined) { updates.push('seq = ?'); values.push(data.seq); }
-    if (data.gst_rate !== undefined) { updates.push('gst_rate = ?'); values.push(data.gst_rate); }
-    if (data.machine_type !== undefined) { updates.push('machine_type = ?'); values.push(data.machine_type); }
-    if (data.capacity !== undefined) { updates.push('capacity = ?'); values.push(data.capacity); }
-    if (data.process_stage_id !== undefined) { updates.push('process_stage_id = ?'); values.push(data.process_stage_id); }
-    if (data.parameter_name !== undefined) { updates.push('parameter_name = ?'); values.push(data.parameter_name); }
-    if (data.unit !== undefined) { updates.push('unit = ?'); values.push(data.unit); }
-    if (data.default_value !== undefined) { updates.push('default_value = ?'); values.push(data.default_value); }
-    if (data.min_value !== undefined) { updates.push('min_value = ?'); values.push(data.min_value); }
-    if (data.max_value !== undefined) { updates.push('max_value = ?'); values.push(data.max_value); }
-    if (data.required !== undefined) { updates.push('required = ?'); values.push(data.required ? 1 : 0); }
-    if (data.phone_code !== undefined) { updates.push('phone_code = ?'); values.push(data.phone_code); }
-    if (data.country_id !== undefined) { updates.push('country_id = ?'); values.push(data.country_id); }
-    if (data.state_id !== undefined) { updates.push('state_id = ?'); values.push(data.state_id); }
-    if (data.pincode !== undefined) { updates.push('pincode = ?'); values.push(data.pincode); }
-    if (data.company_id !== undefined) { updates.push('company_id = ?'); values.push(data.company_id); }
-    if (updatedBy !== null) { updates.push('updated_by = ?'); values.push(updatedBy); }
+    if (data.code !== undefined) { updates.push('`code` = ?'); values.push(data.code); }
+    if (data.name !== undefined) { updates.push('`name` = ?'); values.push(data.name); }
+    if (data.description !== undefined) { updates.push('`description` = ?'); values.push(data.description); }
+    if (data.status !== undefined) { updates.push('`status` = ?'); values.push(data.status); }
+    if (data.value_mm !== undefined) { updates.push('`value_mm` = ?'); values.push(data.value_mm); }
+    if (data.rank !== undefined) { updates.push('`rank` = ?'); values.push(data.rank); }
+    if (data.hex_code !== undefined) { updates.push('`hex_code` = ?'); values.push(data.hex_code); }
+    if (data.seq !== undefined) { updates.push('`seq` = ?'); values.push(data.seq); }
+    if (data.gst_rate !== undefined) { updates.push('`gst_rate` = ?'); values.push(data.gst_rate); }
+    if (data.machine_type !== undefined) { updates.push('`machine_type` = ?'); values.push(data.machine_type); }
+    if (data.capacity !== undefined) { updates.push('`capacity` = ?'); values.push(data.capacity); }
+    if (data.process_stage_id !== undefined) { updates.push('`process_stage_id` = ?'); values.push(data.process_stage_id); }
+    if (data.parameter_name !== undefined) { updates.push('`parameter_name` = ?'); values.push(data.parameter_name); }
+    if (data.unit !== undefined) { updates.push('`unit` = ?'); values.push(data.unit); }
+    if (data.default_value !== undefined) { updates.push('`default_value` = ?'); values.push(data.default_value); }
+    if (data.min_value !== undefined) { updates.push('`min_value` = ?'); values.push(data.min_value); }
+    if (data.max_value !== undefined) { updates.push('`max_value` = ?'); values.push(data.max_value); }
+    if (data.required !== undefined) { updates.push('`required` = ?'); values.push(data.required ? 1 : 0); }
+    if (data.phone_code !== undefined) { updates.push('`phone_code` = ?'); values.push(data.phone_code); }
+    if (data.country_id !== undefined) { updates.push('`country_id` = ?'); values.push(data.country_id); }
+    if (data.state_id !== undefined) { updates.push('`state_id` = ?'); values.push(data.state_id); }
+    if (data.pincode !== undefined) { updates.push('`pincode` = ?'); values.push(data.pincode); }
+    if (data.company_id !== undefined) { updates.push('`company_id` = ?'); values.push(data.company_id); }
+    if (updatedBy !== null) { updates.push('`updated_by` = ?'); values.push(updatedBy); }
 
     if (updates.length === 0) return false;
 

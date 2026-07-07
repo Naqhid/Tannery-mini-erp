@@ -75,12 +75,32 @@ export async function getNextCode() {
 
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
+
+  // Normalize leather_type to valid ENUM value when using _id field
+  let leatherType = data.leather_type || 'cow';
+  const validLeatherTypes = ['cow', 'buffalo', 'goat', 'sheep'];
+  if (!validLeatherTypes.includes(leatherType)) {
+    // Try to extract from the name (e.g., "Calf Leather" -> check if contains a valid type)
+    const lower = leatherType.toLowerCase();
+    const matched = validLeatherTypes.find(t => lower.includes(t));
+    leatherType = matched || 'cow';
+  }
+
+  // Normalize grade to valid ENUM value when using _id field
+  let grade = data.grade || 'a';
+  const validGrades = ['a', 'b', 'c'];
+  if (!validGrades.includes(grade)) {
+    const lower = grade.toLowerCase();
+    const matched = validGrades.find(t => lower.startsWith(t) || lower.includes(`grade ${t}`) || lower.includes(`- ${t}`));
+    grade = matched || 'a';
+  }
+
   const [result] = await pool.query(
     `INSERT INTO products (code, name, category, leather_type, uom, thickness, color, finish_type, description, standard_size, grade, hsn_code, status, category_id, leather_type_id, uom_id, thickness_id, color_id, finish_type_id, grade_id, hsn_code_id, standard_size_id, created_by)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [code, data.name, data.category, data.leather_type, data.uom, data.thickness,
-     data.color, data.finish_type, data.description, data.standard_size,
-     data.grade, data.hsn_code, data.status || 'Active',
+    [code, data.name, data.category || null, leatherType, data.uom || null, data.thickness || null,
+     data.color || null, data.finish_type || null, data.description, data.standard_size || null,
+     grade, data.hsn_code || null, data.status || 'Active',
      data.category_id || null, data.leather_type_id || null, data.uom_id || null,
      data.thickness_id || null, data.color_id || null, data.finish_type_id || null,
      data.grade_id || null, data.hsn_code_id || null, data.standard_size_id || null,
@@ -90,11 +110,29 @@ export async function create(data, createdBy = null) {
 }
 
 export async function update(id, data, updatedBy = null) {
+  // Normalize leather_type to valid ENUM value when using _id field
+  let leatherType = data.leather_type || 'cow';
+  const validLeatherTypes = ['cow', 'buffalo', 'goat', 'sheep'];
+  if (!validLeatherTypes.includes(leatherType)) {
+    const lower = leatherType.toLowerCase();
+    const matched = validLeatherTypes.find(t => lower.includes(t));
+    leatherType = matched || 'cow';
+  }
+
+  // Normalize grade to valid ENUM value when using _id field
+  let grade = data.grade || 'a';
+  const validGrades = ['a', 'b', 'c'];
+  if (!validGrades.includes(grade)) {
+    const lower = grade.toLowerCase();
+    const matched = validGrades.find(t => lower.startsWith(t) || lower.includes(`grade ${t}`) || lower.includes(`- ${t}`));
+    grade = matched || 'a';
+  }
+
   const [result] = await pool.query(
     `UPDATE products SET code=?, name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, hsn_code=?, status=?, category_id=?, leather_type_id=?, uom_id=?, thickness_id=?, color_id=?, finish_type_id=?, grade_id=?, hsn_code_id=?, standard_size_id=?, updated_by=? WHERE id=?`,
-    [data.code, data.name, data.category, data.leather_type, data.uom, data.thickness,
-     data.color, data.finish_type, data.description, data.standard_size,
-     data.grade, data.hsn_code, data.status,
+    [data.code, data.name, data.category || null, leatherType, data.uom || null, data.thickness || null,
+     data.color || null, data.finish_type || null, data.description, data.standard_size || null,
+     grade, data.hsn_code || null, data.status,
      data.category_id || null, data.leather_type_id || null, data.uom_id || null,
      data.thickness_id || null, data.color_id || null, data.finish_type_id || null,
      data.grade_id || null, data.hsn_code_id || null, data.standard_size_id || null,

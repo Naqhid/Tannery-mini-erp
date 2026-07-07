@@ -45,6 +45,7 @@ interface Customer {
   notes?: string;
   billing_address?: string;
   shipping_address?: string;
+  country?: string;
   state?: string;
   pin_code?: string;
   gstin?: string;
@@ -62,7 +63,7 @@ type SortOrder = 'asc' | 'desc';
 const emptyCustomer: Customer = {
   code: '', name: '', contact_person: '', phone: '', email: '', city: '', status: 'Active',
   alt_phone: '', category: 'domestic', currency: 'inr', notes: '', billing_address: '',
-  shipping_address: '', state: '', pin_code: '', gstin: '', pan: '', payment_terms: '30', credit_limit: '',
+  shipping_address: '', country: '', state: '', pin_code: '', gstin: '', pan: '', payment_terms: '30', credit_limit: '',
   country_id: null, state_id: null, city_id: null,
 };
 
@@ -216,6 +217,16 @@ export default function CustomerMaster() {
 
   const updateField = (field: keyof Customer, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Check if a customer has financial transaction data (credit_limit, gstin, pan)
+  const hasFinancialData = (customer: Customer | null) => {
+    if (!customer) return false;
+    return !!(
+      (customer.credit_limit && customer.credit_limit.trim() !== '') ||
+      (customer.gstin && customer.gstin.trim() !== '') ||
+      (customer.pan && customer.pan.trim() !== '')
+    );
   };
 
   // Validation helpers for step-by-step navigation
@@ -429,7 +440,9 @@ export default function CustomerMaster() {
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); c.id && handleDelete(c.id); }}
-                        className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all"
+                        disabled={hasFinancialData(c)}
+                        title={hasFinancialData(c) ? 'Cannot delete: customer has financial transaction data' : 'Delete customer'}
+                        className={`p-1.5 rounded-lg transition-all ${hasFinancialData(c) ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -479,7 +492,9 @@ export default function CustomerMaster() {
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); c.id && handleDelete(c.id); }}
-                    className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                    disabled={hasFinancialData(c)}
+                    title={hasFinancialData(c) ? 'Cannot delete: customer has financial transaction data' : 'Delete customer'}
+                    className={`p-2 rounded-lg transition-all ${hasFinancialData(c) ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -699,6 +714,7 @@ export default function CustomerMaster() {
                         country_id: formData.country_id,
                         state_id: formData.state_id,
                         city_id: formData.city_id,
+                        country: formData.country,
                         city: formData.city,
                         state: formData.state,
                         pin_code: formData.pin_code,
@@ -796,9 +812,15 @@ export default function CustomerMaster() {
             <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/30 shrink-0 rounded-b-2xl">
               <div className="flex items-center justify-between">
                 {selectedCustomer ? (
-                  <button onClick={() => selectedCustomer?.id && handleDelete(selectedCustomer.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95">
-                    <Trash2 size={13} /> Delete
-                  </button>
+                  hasFinancialData(selectedCustomer) ? (
+                    <button disabled title="Cannot delete: customer has financial transaction data" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 border border-gray-200 rounded-lg cursor-not-allowed opacity-60">
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  ) : (
+                    <button onClick={() => selectedCustomer?.id && handleDelete(selectedCustomer.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95">
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  )
                 ) : (
                   <div />
                 )}

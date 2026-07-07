@@ -93,9 +93,33 @@ export async function update(id, data, updatedBy = null) {
 }
 
 export async function checkReferences(id) {
-  // Check if customer is used in orders, etc.
-  // Add more checks as needed
+  // Check if customer has financial transaction data
+  const [rows] = await pool.query(
+    `SELECT payment_terms, credit_limit, gstin, pan FROM customers WHERE id = ?`,
+    [id]
+  );
+  if (rows.length > 0) {
+    const customer = rows[0];
+    const hasFinancialData = (customer.credit_limit && customer.credit_limit.trim() !== '') ||
+                             (customer.gstin && customer.gstin.trim() !== '') ||
+                             (customer.pan && customer.pan.trim() !== '');
+    if (hasFinancialData) {
+      return { hasReferences: true, table: 'Financial Transactions' };
+    }
+  }
   return { hasReferences: false };
+}
+
+export async function hasFinancialData(id) {
+  const [rows] = await pool.query(
+    `SELECT payment_terms, credit_limit, gstin, pan FROM customers WHERE id = ?`,
+    [id]
+  );
+  if (rows.length === 0) return false;
+  const customer = rows[0];
+  return (customer.credit_limit && customer.credit_limit.trim() !== '') ||
+         (customer.gstin && customer.gstin.trim() !== '') ||
+         (customer.pan && customer.pan.trim() !== '');
 }
 
 export async function remove(id) {

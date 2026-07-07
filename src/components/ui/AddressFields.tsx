@@ -1,26 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Select from './Select';
 import Input from './Input';
-import api from '../../lib/api';
-
-interface Country {
-  id: number;
-  code: string;
-  name: string;
-  phone_code: string;
-}
-
-interface State {
-  id: number;
-  code: string;
-  name: string;
-}
-
-interface City {
-  id: number;
-  name: string;
-  pincode: string;
-}
 
 interface AddressData {
   country_id?: number | null;
@@ -29,6 +9,7 @@ interface AddressData {
   pin_code?: string;
   city?: string;
   state?: string;
+  country?: string;
   address?: string;
   billing_address?: string;
   shipping_address?: string;
@@ -43,6 +24,17 @@ interface AddressFieldsProps {
   className?: string;
 }
 
+// Cache for API responses to avoid repeated calls
+const cache: {
+  countries: string[];
+  states: Record<string, string[]>;
+  cities: Record<string, string[]>;
+} = {
+  countries: [],
+  states: {},
+  cities: {},
+};
+
 export default function AddressFields({
   value,
   onChange,
@@ -51,21 +43,41 @@ export default function AddressFields({
   addressLabel = 'Address',
   className = '',
 }: AddressFieldsProps) {
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [states, setStates] = useState<State[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
+  const [states, setStates] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
   const [loadingCountries, setLoadingCountries] = useState(false);
   const [loadingStates, setLoadingStates] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
 
-  // Fetch countries on mount
+  // Fetch all countries on mount
   const fetchCountries = useCallback(async () => {
+    if (cache.countries.length > 0) {
+      setCountries(cache.countries);
+      return;
+    }
     setLoadingCountries(true);
     try {
-      const res = await api<{ data: Country[] }>('/locations/countries/dropdown');
-      setCountries(res.data || []);
+      const res = await fetch('https://countriesnow.space/api/v0.1/countries/positions');
+      const data = await res.json();
+      if (data && !data.error && data.data) {
+        const names = data.data.map((c: { name: string }) => c.name).sort();
+        cache.countries = names;
+        setCountries(names);
+      }
     } catch {
-      setCountries([]);
+      // Fallback: try alternate endpoint
+      try {
+        const res = await fetch('https://countriesnow.space/api/v0.1/countries/states');
+        const data = await res.json();
+        if (data && !data.error && data.data) {
+          const names = data.data.map((c: { name: string }) => c.name).sort();
+          cache.countries = names;
+          setCountries(names);
+        }
+      } catch {
+        setCountries([]);
+      }
     } finally {
       setLoadingCountries(false);
     }
@@ -76,15 +88,30 @@ export default function AddressFields({
   }, [fetchCountries]);
 
   // Fetch states when country changes
-  const fetchStates = useCallback(async (countryId: number) => {
-    if (!countryId) {
+  const fetchStates = useCallback(async (country: string) => {
+    if (!country) {
       setStates([]);
+      return;
+    }
+    if (cache.states[country]) {
+      setStates(cache.states[country]);
       return;
     }
     setLoadingStates(true);
     try {
-      const res = await api<{ data: State[] }>(`/locations/states/country/${countryId}`);
-      setStates(res.data || []);
+      const res = await fetch('https://countriesnow.space/api/v0.1/countries/states', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country }),
+      });
+      const data = await res.json();
+      if (data && !data.error && data.data?.states) {
+        const names = data.data.states.map((s: { name: string }) => s.name).sort();
+        cache.states[country] = names;
+        setStates(names);
+      } else {
+        setStates([]);
+      }
     } catch {
       setStates([]);
     } finally {
@@ -93,15 +120,31 @@ export default function AddressFields({
   }, []);
 
   // Fetch cities when state changes
-  const fetchCities = useCallback(async (stateId: number) => {
-    if (!stateId) {
+  const fetchCities = useCallback(async (country: string, state: string) => {
+    if (!country || !state) {
       setCities([]);
+      return;
+    }
+    const cacheKey = `${country}__${state}`;
+    if (cache.cities[cacheKey]) {
+      setCities(cache.cities[cacheKey]);
       return;
     }
     setLoadingCities(true);
     try {
-      const res = await api<{ data: City[] }>(`/locations/cities/state/${stateId}`);
-      setCities(res.data || []);
+      const res = await fetch('https://countriesnow.space/api/v0.1/countries/state/cities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country, state }),
+      });
+      const data = await res.json();
+      if (data && !data.error && data.data) {
+        const names = (data.data as string[]).sort();
+        cache.cities[cacheKey] = names;
+        setCities(names);
+      } else {
+        setCities([]);
+      }
     } catch {
       setCities([]);
     } finally {
@@ -109,82 +152,70 @@ export default function AddressFields({
     }
   }, []);
 
-  // Load states when country_id changes
+  // Load states when country changes
   useEffect(() => {
-    if (value.country_id) {
-      fetchStates(value.country_id);
+    if (value.country) {
+      fetchStates(value.country);
     } else {
       setStates([]);
       setCities([]);
     }
-  }, [value.country_id, fetchStates]);
+  }, [value.country, fetchStates]);
 
-  // Load cities when state_id changes
+  // Load cities when state changes
   useEffect(() => {
-    if (value.state_id) {
-      fetchCities(value.state_id);
+    if (value.country && value.state) {
+      fetchCities(value.country, value.state);
     } else {
       setCities([]);
     }
-  }, [value.state_id, fetchCities]);
+  }, [value.country, value.state, fetchCities]);
 
-  // Auto-fill pincode when city is selected
-  useEffect(() => {
-    if (value.city_id && cities.length > 0) {
-      const selectedCity = cities.find(c => c.id === value.city_id);
-      if (selectedCity?.pincode && !value.pin_code) {
-        onChange({ ...value, pin_code: selectedCity.pincode });
-      }
-    }
-  }, [value.city_id, cities]);
+  const handleCountryChange = (country: string) => {
+    onChange({
+      ...value,
+      country,
+      country_id: null,
+      state: '',
+      state_id: null,
+      city: '',
+      city_id: null,
+      pin_code: '',
+    });
+  };
 
-  const updateField = (field: keyof AddressData, fieldValue: string | number | null) => {
-    if (field === 'country_id') {
-      onChange({
-        ...value,
-        country_id: fieldValue as number | null,
-        state_id: null,
-        city_id: null,
-        pin_code: '',
-        city: '',
-        state: '',
-      });
-    } else if (field === 'state_id') {
-      const selectedState = states.find(s => s.id === fieldValue);
-      onChange({
-        ...value,
-        state_id: fieldValue as number | null,
-        city_id: null,
-        pin_code: '',
-        city: '',
-        state: selectedState?.name || '',
-      });
-    } else if (field === 'city_id') {
-      const selectedCity = cities.find(c => c.id === fieldValue);
-      onChange({
-        ...value,
-        city_id: fieldValue as number | null,
-        city: selectedCity?.name || value.city || '',
-        pin_code: selectedCity?.pincode || value.pin_code || '',
-      });
-    } else {
-      onChange({ ...value, [field]: fieldValue });
-    }
+  const handleStateChange = (state: string) => {
+    onChange({
+      ...value,
+      state,
+      state_id: null,
+      city: '',
+      city_id: null,
+      pin_code: '',
+    });
+  };
+
+  const handleCityChange = (city: string) => {
+    onChange({
+      ...value,
+      city,
+      city_id: null,
+    });
   };
 
   const countryOptions = [
-    { value: '', label: loadingCountries ? 'Loading...' : 'Select country' },
-    ...countries.map(c => ({ value: String(c.id), label: c.name })),
+    { value: '', label: loadingCountries ? 'Loading countries...' : 'Select country' },
+    ...countries.map(c => ({ value: c, label: c })),
   ];
 
   const stateOptions = [
-    { value: '', label: loadingStates ? 'Loading...' : value.country_id ? 'Select state' : 'Select country first' },
-    ...states.map(s => ({ value: String(s.id), label: s.name })),
+    { value: '', label: loadingStates ? 'Loading states...' : value.country ? 'Select state' : 'Select country first' },
+    ...states.map(s => ({ value: s, label: s })),
   ];
 
   const cityOptions = [
-    { value: '', label: loadingCities ? 'Loading...' : value.state_id ? 'Select city' : 'Select state first' },
-    ...cities.map(c => ({ value: String(c.id), label: c.name })),
+    { value: '', label: loadingCities ? 'Loading cities...' : value.state ? 'Select city' : 'Select state first' },
+    ...cities.map(c => ({ value: c, label: c })),
   ];
 
   return (
@@ -198,7 +229,7 @@ export default function AddressFields({
             <textarea
               rows={3}
               value={value.billing_address || ''}
-              onChange={(e) => updateField('billing_address', e.target.value)}
+              onChange={(e) => onChange({ ...value, billing_address: e.target.value })}
               placeholder="Enter billing address..."
               className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all resize-none placeholder-gray-400 bg-white"
             />
@@ -208,7 +239,7 @@ export default function AddressFields({
             <textarea
               rows={3}
               value={value.shipping_address || ''}
-              onChange={(e) => updateField('shipping_address', e.target.value)}
+              onChange={(e) => onChange({ ...value, shipping_address: e.target.value })}
               placeholder="Enter shipping address (or same as billing)..."
               className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all resize-none placeholder-gray-400 bg-white"
             />
@@ -220,7 +251,7 @@ export default function AddressFields({
           <textarea
             rows={3}
             value={value.address || ''}
-            onChange={(e) => updateField('address', e.target.value)}
+            onChange={(e) => onChange({ ...value, address: e.target.value })}
             placeholder={`Enter ${addressLabel.toLowerCase()}...`}
             className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:border-gray-400 transition-all resize-none placeholder-gray-400 bg-white"
           />
@@ -231,44 +262,31 @@ export default function AddressFields({
         <Select
           label="Country"
           options={countryOptions}
-          value={String(value.country_id || '')}
-          onChange={(e) => updateField('country_id', e.target.value ? Number(e.target.value) : null)}
+          value={value.country || ''}
+          onChange={(e) => handleCountryChange(e.target.value)}
         />
         <Select
           label="State"
           options={stateOptions}
-          value={String(value.state_id || '')}
-          onChange={(e) => updateField('state_id', e.target.value ? Number(e.target.value) : null)}
-          disabled={!value.country_id}
+          value={value.state || ''}
+          onChange={(e) => handleStateChange(e.target.value)}
+          disabled={!value.country}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Select
-            label="City"
-            options={cityOptions}
-            value={String(value.city_id || '')}
-            onChange={(e) => updateField('city_id', e.target.value ? Number(e.target.value) : null)}
-            disabled={!value.state_id}
-          />
-          {/* Allow manual city entry if not found */}
-          {value.state_id && (
-            <Input
-              label="Or enter city manually"
-              value={value.city || ''}
-              placeholder="Type city name"
-              onChange={(e) => {
-                onChange({ ...value, city: e.target.value, city_id: null });
-              }}
-            />
-          )}
-        </div>
+        <Select
+          label="City"
+          options={cityOptions}
+          value={value.city || ''}
+          onChange={(e) => handleCityChange(e.target.value)}
+          disabled={!value.state}
+        />
         <Input
           label="Pin Code"
           value={value.pin_code || ''}
-          placeholder="Auto-filled or enter manually"
-          onChange={(e) => updateField('pin_code', e.target.value)}
+          placeholder="Enter pin code"
+          onChange={(e) => onChange({ ...value, pin_code: e.target.value })}
         />
       </div>
     </div>
