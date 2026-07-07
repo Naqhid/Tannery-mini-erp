@@ -23,6 +23,10 @@ import Grade from './pages/Grade';
 import HSNCode from './pages/HSNCode';
 import ProcessStage from './pages/ProcessStage';
 import Machine from './pages/Machine';
+import MaterialMaster from './pages/MaterialMaster';
+// Sales Order Pages
+import SalesOrder from './pages/SalesOrder';
+import SalesOrderDetail from './pages/SalesOrderDetail';
 // Settings Pages
 import UsersPage from './pages/UsersPage';
 import Roles from './pages/Roles';
@@ -54,11 +58,13 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="sales-orders" element={<PlaceholderPage />} />
+            <Route path="sales-orders" element={<SalesOrder />} />
+            <Route path="sales-orders/new" element={<SalesOrderDetail />} />
+            <Route path="sales-orders/:id" element={<SalesOrderDetail />} />
             <Route path="customer-master" element={<CustomerMaster />} />
             <Route path="supplier-master" element={<SupplierMaster />} />
             <Route path="product-master" element={<ProductMaster />} />
-            <Route path="chemical-master" element={<PlaceholderPage />} />
+            <Route path="chemical-master" element={<MaterialMaster />} />
             {/* New Master Pages */}
             <Route path="product-category" element={<ProductCategory />} />
             <Route path="leather-type" element={<LeatherType />} />

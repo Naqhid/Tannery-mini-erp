@@ -21,6 +21,8 @@ import {
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ExportMenu from '../components/ui/ExportMenu';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import { exportToExcel } from '../lib/excelExport';
 import api from '../lib/api';
 
@@ -244,9 +246,19 @@ export default function UsersPage() {
               />
             </div>
           </div>
-          <button onClick={handleExportExcel} className="p-2 rounded-lg border border-green-200 text-green-600 hover:bg-green-50 transition-all">
-            Export Excel
-          </button>
+          <ExportMenu
+            onPreview={() => {
+              const columns = ['Username', 'Full Name', 'Email', 'Role', 'Status'];
+              const rows = users.map(u => [u.username, u.full_name, u.email || '-', roles.find(r => r.id === u.role_id)?.name || '-', u.status]);
+              previewPDF({ title: 'Users', subtitle: `Total: ${users.length} users`, columns, rows, accentColor: [79, 70, 229] });
+            }}
+            onDownload={() => {
+              const columns = ['Username', 'Full Name', 'Email', 'Role', 'Status'];
+              const rows = users.map(u => [u.username, u.full_name, u.email || '-', roles.find(r => r.id === u.role_id)?.name || '-', u.status]);
+              downloadPDF({ title: 'Users', subtitle: `Total: ${users.length} users`, columns, rows, accentColor: [79, 70, 229], fileName: 'Users.pdf' });
+            }}
+            onExcel={handleExportExcel}
+          />
           <button
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all active:scale-95"
             onClick={() => openPanel()}

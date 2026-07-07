@@ -67,10 +67,10 @@ export async function getNextCode() {
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
-    `INSERT INTO customers (code, name, contact_person, phone, email, alt_phone, city, state, status, category, currency, billing_address, shipping_address, pin_code, gstin, pan, payment_terms, credit_limit, notes, country_id, state_id, city_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO customers (code, name, contact_person, phone, email, alt_phone, city, state, country, status, category, currency, billing_address, shipping_address, pin_code, gstin, pan, payment_terms, credit_limit, notes, country_id, state_id, city_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
-     data.city, data.state, data.status || 'Active', data.category, data.currency,
+     data.city, data.state, data.country || null, data.status || 'Active', data.category, data.currency,
      data.billing_address, data.shipping_address, data.pin_code, data.gstin, data.pan,
      data.payment_terms, data.credit_limit, data.notes,
      data.country_id || null, data.state_id || null, data.city_id || null,
@@ -81,9 +81,9 @@ export async function create(data, createdBy = null) {
 
 export async function update(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE customers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, status=?, category=?, currency=?, billing_address=?, shipping_address=?, pin_code=?, gstin=?, pan=?, payment_terms=?, credit_limit=?, notes=?, country_id=?, state_id=?, city_id=?, updated_by=? WHERE id=?`,
+    `UPDATE customers SET code=?, name=?, contact_person=?, phone=?, email=?, alt_phone=?, city=?, state=?, country=?, status=?, category=?, currency=?, billing_address=?, shipping_address=?, pin_code=?, gstin=?, pan=?, payment_terms=?, credit_limit=?, notes=?, country_id=?, state_id=?, city_id=?, updated_by=? WHERE id=?`,
     [data.code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
-     data.city, data.state, data.status, data.category, data.currency,
+     data.city, data.state, data.country || null, data.status, data.category, data.currency,
      data.billing_address, data.shipping_address, data.pin_code, data.gstin, data.pan,
      data.payment_terms, data.credit_limit, data.notes,
      data.country_id || null, data.state_id || null, data.city_id || null,
@@ -93,9 +93,33 @@ export async function update(id, data, updatedBy = null) {
 }
 
 export async function checkReferences(id) {
-  // Check if customer is used in orders, etc.
-  // Add more checks as needed
+  // Check if customer has financial transaction data
+  const [rows] = await pool.query(
+    `SELECT payment_terms, credit_limit, gstin, pan FROM customers WHERE id = ?`,
+    [id]
+  );
+  if (rows.length > 0) {
+    const customer = rows[0];
+    const hasFinancialData = (customer.credit_limit && customer.credit_limit.trim() !== '') ||
+                             (customer.gstin && customer.gstin.trim() !== '') ||
+                             (customer.pan && customer.pan.trim() !== '');
+    if (hasFinancialData) {
+      return { hasReferences: true, table: 'Financial Transactions' };
+    }
+  }
   return { hasReferences: false };
+}
+
+export async function hasFinancialData(id) {
+  const [rows] = await pool.query(
+    `SELECT payment_terms, credit_limit, gstin, pan FROM customers WHERE id = ?`,
+    [id]
+  );
+  if (rows.length === 0) return false;
+  const customer = rows[0];
+  return (customer.credit_limit && customer.credit_limit.trim() !== '') ||
+         (customer.gstin && customer.gstin.trim() !== '') ||
+         (customer.pan && customer.pan.trim() !== '');
 }
 
 export async function remove(id) {

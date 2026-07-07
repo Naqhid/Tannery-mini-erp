@@ -134,12 +134,18 @@ export async function listAttachments(req, res, next) {
 
 export async function addAttachment(req, res, next) {
   try {
-    if (!req.body.file_name || !req.body.file_path) {
-      return res.status(400).json({ error: 'file_name and file_path are required' });
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
     }
+    const data = {
+      file_name: req.file.originalname,
+      file_path: req.file.path.replace(/\\/g, '/'),
+      file_size: req.file.size,
+      file_type: req.file.mimetype,
+    };
     const uploadedBy = req.user?.id || null;
-    const result = await model.addAttachment(req.params.id, req.body, uploadedBy);
-    res.status(201).json({ data: { id: result.id }, message: 'Attachment added successfully!' });
+    const result = await model.addAttachment(req.params.id, data, uploadedBy);
+    res.status(201).json({ data: { id: result.id, file_name: data.file_name }, message: 'Attachment uploaded successfully!' });
   } catch (err) { next(err); }
 }
 

@@ -36,11 +36,19 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-2xl shadow-blue-500/30 mb-4">
-            <span className="text-3xl font-bold text-white">C</span>
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-white/10 backdrop-blur shadow-2xl shadow-black/30 mb-4 p-2">
+            <img
+              src={`${import.meta.env.BASE_URL}images/company-logo.png`}
+              alt="Corix"
+              className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-3xl font-bold text-white">C</span>';
+              }}
+            />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Corix ERP</h1>
-          <p className="text-blue-300/80 text-sm">Tannery Management System</p>
+          <h1 className="text-3xl font-bold text-white mb-1 tracking-wide">Corix</h1>
+          <p className="text-blue-300/80 text-sm font-medium tracking-wider uppercase">Powering Modern Tanneries</p>
         </div>
 
         {/* Login Form */}
@@ -126,7 +134,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className="text-center text-blue-300/50 text-xs mt-6">
-          © 2024 Corix ERP. All rights reserved.
+          © 2024 Corix. All rights reserved.
         </p>
       </div>
     </div>

@@ -26,6 +26,7 @@ import Table from '../components/ui/Table';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 import { useDropdowns } from '../lib/useDropdowns';
 import api from '../lib/api';
 
@@ -445,6 +446,20 @@ export default function BOM() {
                 const columns = ['Code', 'Name', 'Product', 'Leather Type', 'Thickness', 'Status'];
                 const rows = boms.map(b => [b.code, b.name, b.product_name || '', b.leather_type_name || b.leather_type, b.thickness_name || b.thickness, b.status]);
                 downloadPDF({ title: 'Bill of Materials', subtitle: `Total: ${boms.length} BOMs`, columns, rows, accentColor: [20, 184, 166], fileName: 'BOM_Master.pdf' });
+              }}
+              onExcel={() => {
+                exportToExcel({
+                  data: boms,
+                  columns: [
+                    { key: 'code', header: 'Code' },
+                    { key: 'name', header: 'Name' },
+                    { key: 'product_name', header: 'Product' },
+                    { key: 'leather_type_name', header: 'Leather Type' },
+                    { key: 'thickness_name', header: 'Thickness' },
+                    { key: 'status', header: 'Status' },
+                  ],
+                  fileName: 'BOM_Master',
+                });
               }}
             />
           </div>

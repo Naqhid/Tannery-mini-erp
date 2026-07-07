@@ -32,6 +32,7 @@ import Table from '../components/ui/Table';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 import { useDropdowns } from '../lib/useDropdowns';
 import api from '../lib/api';
 
@@ -159,7 +160,7 @@ export default function RecipeCreation() {
   const [stageParameters, setStageParameters] = useState<StageParameter[]>([]);
 
   // Active tab in recipe detail
-  const [activeDetailTab, setActiveDetailTab] = useState<'items' | 'stages' | 'parameters' | 'attachments' | 'remarks'>('items');
+  const [activeDetailTab, setActiveDetailTab] = useState<'items' | 'stages' | 'attachments' | 'remarks'>('items');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -597,7 +598,6 @@ export default function RecipeCreation() {
   const detailTabs = [
     { id: 'items' as const, label: 'Recipe Items', icon: <ClipboardList size={14} /> },
     { id: 'stages' as const, label: 'Process Stages', icon: <Settings size={14} /> },
-    { id: 'parameters' as const, label: 'Parameters', icon: <FileText size={14} /> },
     { id: 'attachments' as const, label: 'Attachments', icon: <Paperclip size={14} /> },
     { id: 'remarks' as const, label: 'Remarks', icon: <MessageSquare size={14} /> },
   ];
@@ -656,6 +656,20 @@ export default function RecipeCreation() {
                 const columns = ['Code', 'Name', 'Product', 'Leather Type', 'Version', 'Status'];
                 const rows = recipes.map(r => [r.code, r.name, r.product_name || '-', r.leather_type_name || r.leather_type, `v${r.version}`, r.status]);
                 downloadPDF({ title: 'Recipe Creation', subtitle: `Total: ${recipes.length} recipes`, columns, rows, accentColor: [139, 92, 246], fileName: 'Recipe_Creation.pdf' });
+              }}
+              onExcel={() => {
+                exportToExcel({
+                  data: recipes,
+                  columns: [
+                    { key: 'code', header: 'Code' },
+                    { key: 'name', header: 'Name' },
+                    { key: 'product_name', header: 'Product' },
+                    { key: 'leather_type_name', header: 'Leather Type' },
+                    { key: 'version', header: 'Version' },
+                    { key: 'status', header: 'Status' },
+                  ],
+                  fileName: 'Recipe_Creation',
+                });
               }}
             />
           </div>
@@ -949,7 +963,56 @@ export default function RecipeCreation() {
                           <span className="text-sm font-semibold text-gray-900">Process Stages ({stages.length})</span>
                           <Button size="sm" variant="violet" icon={<Plus size={14} />} onClick={openAddStage}>Add Stage</Button>
                         </div>
-                        <Table columns={processStagesColumns} data={stages} />
+                        {stages.length === 0 ? (
+                          <div className="py-8 text-center text-gray-400 text-sm">
+                            Add process stages to define the workflow.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {stages.map((stage, idx) => (
+                              <div key={stage.id || idx} className="p-4 rounded-xl border border-violet-100 bg-gradient-to-r from-violet-50/50 to-white shadow-sm">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
+                                      {stage.seq}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-900">{stage.process_stage}</p>
+                                      <p className="text-[11px] text-gray-500 mt-0.5">{stage.machine || 'No machine assigned'}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button onClick={() => openEditStage(stage)} className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-all"><Edit2 size={13} /></button>
+                                    <button onClick={() => handleDeleteStage(stage.id!)} className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
+                                  </div>
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-violet-100/50">
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">Duration</span>
+                                      <span className="font-semibold text-gray-800">{stage.duration ? `${stage.duration} min` : '—'}</span>
+                                    </div>
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">Temperature</span>
+                                      <span className="font-semibold text-gray-800">{stage.temperature ? `${stage.temperature}°C` : '—'}</span>
+                                    </div>
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">Speed</span>
+                                      <span className="font-semibold text-gray-800">{stage.speed || '—'}</span>
+                                    </div>
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">QC Check</span>
+                                      <span className={`font-semibold ${stage.qc_check ? 'text-emerald-600' : 'text-gray-400'}`}>{stage.qc_check ? 'Required' : 'Not Required'}</span>
+                                    </div>
+                                  </div>
+                                  {stage.remarks && (
+                                    <p className="mt-3 text-[11px] text-gray-500 bg-white rounded-lg px-2.5 py-2 border border-gray-100"><span className="font-medium text-gray-600">Remarks:</span> {stage.remarks}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-2 pt-2">
                           <Button variant="outline" size="sm" icon={<ChevronUp size={14} />}>Move Up</Button>
                           <Button variant="outline" size="sm" icon={<ChevronDown size={14} />}>Move Down</Button>
@@ -958,18 +1021,76 @@ export default function RecipeCreation() {
                       </div>
                     )}
 
-                    {activeDetailTab === 'parameters' && (
-                      <div className="py-8 text-center text-gray-400 text-sm">
-                        Process parameters will load dynamically based on selected Process Stage.
-                      </div>
-                    )}
-
                     {activeDetailTab === 'attachments' && (
-                      <div className="py-8 text-center text-gray-400 text-sm">
-                        Upload and manage recipe-related documents.
-                        <div className="mt-4">
-                          <Button variant="outline" size="sm" icon={<Paperclip size={14} />}>Upload Attachment</Button>
+                      <div className="space-y-4">
+                        <div className="py-4 text-center text-gray-400 text-sm">
+                          Upload and manage recipe-related documents.
                         </div>
+                        <div className="flex justify-center">
+                          <label className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-violet-600 bg-white border border-violet-200 rounded-lg hover:bg-violet-50 cursor-pointer transition-all">
+                            <Paperclip size={14} />
+                            Upload Attachment
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (!selectedRecipe?.id) {
+                                  toast.info('Save the recipe first before uploading attachments.', { position: 'top-right', autoClose: 3000 });
+                                  return;
+                                }
+                                try {
+                                  const fd = new FormData();
+                                  fd.append('file', file);
+                                  const token = localStorage.getItem('tannery_token');
+                                  const res = await fetch(`/api/recipes/${selectedRecipe.id}/attachments`, {
+                                    method: 'POST',
+                                    headers: {
+                                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                    },
+                                    body: fd,
+                                  });
+                                  if (!res.ok) {
+                                    const err = await res.json();
+                                    throw new Error(err.error || 'Upload failed');
+                                  }
+                                  toast.success('Attachment uploaded!', { position: 'top-right', autoClose: 2000 });
+                                  const detail = await api<{ data: Recipe & { attachments: RecipeAttachment[] } }>(`/recipes/${selectedRecipe.id}`);
+                                  setAttachments(detail.data.attachments || []);
+                                } catch (err) {
+                                  toast.error('Failed to upload: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
+                                }
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
+                        {attachments.length > 0 && (
+                          <div className="space-y-2">
+                            {attachments.map((att) => (
+                              <div key={att.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+                                <div className="flex items-center gap-2">
+                                  <Paperclip size={13} className="text-gray-400" />
+                                  <span className="text-xs text-gray-700 font-medium">{att.file_name}</span>
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await api(`/recipes/${selectedRecipe?.id}/attachments/${att.id}`, { method: 'DELETE' });
+                                      setAttachments(prev => prev.filter(a => a.id !== att.id));
+                                      toast.success('Attachment removed!', { position: 'top-right', autoClose: 2000 });
+                                    } catch {}
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 

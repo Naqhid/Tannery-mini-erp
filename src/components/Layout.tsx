@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import { Search, Bell, ChevronDown, ChevronRight, Menu } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
+import { Search, Bell, ChevronDown, ChevronRight, Menu, LogOut } from 'lucide-react';
 import Sidebar from './Sidebar';
+import { useAuth } from '../lib/authContext';
 
 const breadcrumbMap: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -32,11 +33,31 @@ const parentMap: Record<string, string> = {
 };
 
 export default function Layout() {
+  const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const path = location.pathname;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const getBreadcrumbs = () => {
     const crumbs: { label: string }[] = [];
@@ -104,19 +125,40 @@ export default function Layout() {
             <div className="hidden sm:block h-8 w-px bg-gray-200 mx-1"></div>
 
             {/* User profile */}
-            <button className="flex items-center gap-2 sm:gap-2.5 p-1.5 sm:pl-2 sm:pr-3 rounded-xl hover:bg-gray-50 transition-all duration-200 active:scale-[0.98]">
-              <div className="relative">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] sm:text-xs font-bold text-white shadow-md shadow-blue-200/50 ring-2 ring-white">
-                  AU
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 sm:gap-2.5 p-1.5 sm:pl-2 sm:pr-3 rounded-xl hover:bg-gray-50 transition-all duration-200 active:scale-[0.98]"
+              >
+                <div className="relative">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] sm:text-xs font-bold text-white shadow-md shadow-blue-200/50 ring-2 ring-white">
+                    {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'AU'}
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 border-2 border-white rounded-full"></span>
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 border-2 border-white rounded-full"></span>
-              </div>
-              <div className="hidden sm:block text-left">
-                <div className="text-sm font-medium text-gray-800 leading-tight">Admin User</div>
-                <div className="text-[11px] text-gray-400 leading-tight">Administrator</div>
-              </div>
-              <ChevronDown size={13} className="hidden sm:block text-gray-400" />
-            </button>
+                <div className="hidden sm:block text-left">
+                  <div className="text-sm font-medium text-gray-800 leading-tight">{user?.full_name || 'Admin User'}</div>
+                  <div className="text-[11px] text-gray-400 leading-tight">{user?.username || 'Administrator'}</div>
+                </div>
+                <ChevronDown size={13} className={`hidden sm:block text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <p className="text-sm font-medium text-gray-800">{user?.full_name}</p>
+                    <p className="text-[11px] text-gray-400">{user?.username}</p>
+                  </div>
+                  <button
+                    onClick={() => { setShowUserMenu(false); logout(); navigate('/login'); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut size={15} />
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           </div>
         </header>

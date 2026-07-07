@@ -15,11 +15,7 @@ router.delete('/countries/:id', validateId, ctrl.countryController.remove);
 
 // States
 router.get('/states', validatePagination, ctrl.stateController.list);
-<<<<<<< HEAD
-router.get('/states/country/:countryId', validateId, ctrl.getStatesByCountry);
-=======
 router.get('/states/country/:countryId', ctrl.getStatesByCountry);
->>>>>>> develop
 router.get('/states/stats', ctrl.stateController.stats);
 router.get('/states/:id', validateId, ctrl.stateController.getOne);
 router.post('/states', ctrl.stateController.create);
@@ -28,13 +24,8 @@ router.delete('/states/:id', validateId, ctrl.stateController.remove);
 
 // Cities
 router.get('/cities', validatePagination, ctrl.cityController.list);
-<<<<<<< HEAD
-router.get('/cities/state/:stateId', validateId, ctrl.getCitiesByState);
-router.get('/cities/pincode/:cityId', validateId, ctrl.getPincodeByCity);
-=======
 router.get('/cities/state/:stateId', ctrl.getCitiesByState);
 router.get('/cities/pincode/:cityId', ctrl.getPincodeByCity);
->>>>>>> develop
 router.get('/cities/stats', ctrl.cityController.stats);
 router.get('/cities/:id', validateId, ctrl.cityController.getOne);
 router.post('/cities', ctrl.cityController.create);

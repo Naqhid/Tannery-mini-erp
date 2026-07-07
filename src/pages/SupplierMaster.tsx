@@ -45,6 +45,7 @@ interface Supplier {
   status: string;
   category?: string;
   supply_type?: string;
+  country?: string;
   address?: string;
   alt_phone?: string;
   pincode?: string;
@@ -75,7 +76,7 @@ interface PricingEntry {
 
 const emptySupplier: Supplier = {
   code: '', name: '', contact_person: '', phone: '', email: '', city: '', state: '',
-  status: 'Active', category: 'chemical', supply_type: 'chemical', address: '',
+  status: 'Active', category: 'chemical', supply_type: 'chemical', country: '', address: '',
   alt_phone: '', pincode: '', website: '', gstin: '', pan: '', payment_terms: '30',
   bank_name: '', bank_account: '', ifsc_code: '', notes: '',
   country_id: null, state_id: null, city_id: null, pin_code: '',
@@ -172,7 +173,15 @@ export default function SupplierMaster() {
   const openPanel = (supplier?: Supplier) => {
     if (supplier) {
       setSelectedSupplier(supplier);
-      setFormData({ ...emptySupplier, ...supplier });
+      // Map API response names to form fields for AddressFields
+      const mapped = {
+        ...emptySupplier,
+        ...supplier,
+        country: (supplier as any).country_name || supplier.country || '',
+        state: (supplier as any).state_name || supplier.state || '',
+        city: (supplier as any).city_name || supplier.city || '',
+      };
+      setFormData(mapped);
       setStatusToggle(supplier.status === 'Active');
     } else {
       setSelectedSupplier(null);
@@ -245,6 +254,16 @@ export default function SupplierMaster() {
 
   const updateField = (field: keyof Supplier, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Check if a supplier has financial transaction data (bank details, gstin, pan)
+  const hasFinancialData = (supplier: Supplier | null) => {
+    if (!supplier) return false;
+    return !!(
+      (supplier.bank_account && supplier.bank_account.trim() !== '') ||
+      (supplier.gstin && supplier.gstin.trim() !== '') ||
+      (supplier.pan && supplier.pan.trim() !== '')
+    );
   };
 
   // Tab Validation Functions
@@ -420,7 +439,7 @@ export default function SupplierMaster() {
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1">
                       <button onClick={(e) => { e.stopPropagation(); openPanel(s); }} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-100 transition-all"><Edit2 size={14} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); s.id && handleDelete(s.id); }} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all"><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); s.id && handleDelete(s.id); }} disabled={hasFinancialData(s)} title={hasFinancialData(s) ? 'Cannot delete: supplier has financial transaction data' : 'Delete supplier'} className={`p-1.5 rounded-lg transition-all ${hasFinancialData(s) ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -453,7 +472,7 @@ export default function SupplierMaster() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={(e) => { e.stopPropagation(); openPanel(s); }} className="p-2 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"><Edit2 size={14} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); s.id && handleDelete(s.id); }} className="p-2 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={14} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); s.id && handleDelete(s.id); }} disabled={hasFinancialData(s)} title={hasFinancialData(s) ? 'Cannot delete: supplier has financial transaction data' : 'Delete supplier'} className={`p-2 rounded-lg transition-all ${hasFinancialData(s) ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50'}`}><Trash2 size={14} /></button>
                 </div>
               </div>
             </div>
@@ -698,6 +717,7 @@ export default function SupplierMaster() {
                           country_id: formData.country_id,
                           state_id: formData.state_id,
                           city_id: formData.city_id,
+                          country: formData.country,
                           city: formData.city,
                           state: formData.state,
                           pin_code: formData.pin_code || formData.pincode,
@@ -780,7 +800,11 @@ export default function SupplierMaster() {
               <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-orange-50/30 shrink-0 rounded-b-2xl">
                 <div className="flex items-center justify-between">
                   {selectedSupplier ? (
-                    <button onClick={() => selectedSupplier?.id && handleDelete(selectedSupplier.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95"><Trash2 size={13} /> Delete</button>
+                    hasFinancialData(selectedSupplier) ? (
+                      <button disabled title="Cannot delete: supplier has financial transaction data" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 border border-gray-200 rounded-lg cursor-not-allowed opacity-60"><Trash2 size={13} /> Delete</button>
+                    ) : (
+                      <button onClick={() => selectedSupplier?.id && handleDelete(selectedSupplier.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95"><Trash2 size={13} /> Delete</button>
+                    )
                   ) : <div />}
                   <div className="flex items-center gap-2">
                     <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all active:scale-95" onClick={() => setShowPanel(false)}><RotateCcw size={13} /> Cancel</button>

@@ -8,6 +8,7 @@ import bomRoutes from './bomRoutes.js';
 import dashboardRoutes from './dashboardRoutes.js';
 import authRoutes from './authRoutes.js';
 import locationRoutes from './locationRoutes.js';
+import salesOrderRoutes from './salesOrderRoutes.js';
 import {
   productCategoryRoutes,
   leatherTypeRoutes,
@@ -31,11 +32,15 @@ const router = Router();
 // Auth routes
 router.use('/auth', authRoutes);
 
+// Users routes
+router.use(settingsRoutes.usersRouter);
+
 // Master data routes
 router.use('/customers', customerRoutes);
 router.use('/products', productRoutes);
 router.use('/suppliers', supplierRoutes);
 router.use('/materials', materialRoutes);
+router.use('/sales-orders', salesOrderRoutes);
 router.use('/recipes', recipeRoutes);
 router.use('/boms', bomRoutes);
 
