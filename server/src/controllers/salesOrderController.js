@@ -155,3 +155,54 @@ export async function deleteAttachment(req, res, next) {
     res.json({ data: { deleted: true }, message: 'Attachment deleted successfully!' });
   } catch (err) { next(err); }
 }
+
+export async function updateAttachment(req, res, next) {
+  try {
+    const ok = await model.updateAttachment(req.params.attachmentId, req.body);
+    if (!ok) return res.status(404).json({ error: 'Attachment not found' });
+    res.json({ data: { id: req.params.attachmentId }, message: 'Attachment updated successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- Delivery Delete ---
+export async function deleteDelivery(req, res, next) {
+  try {
+    const ok = await model.deleteDelivery(req.params.dnId);
+    if (!ok) return res.status(404).json({ error: 'Delivery note not found' });
+    res.json({ data: { deleted: true }, message: 'Delivery note deleted successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- Payment Receipt Update ---
+export async function updateReceipt(req, res, next) {
+  try {
+    const ok = await model.updateReceipt(req.params.receiptId, req.body);
+    if (!ok) return res.status(404).json({ error: 'Receipt not found' });
+    res.json({ data: { id: req.params.receiptId }, message: 'Receipt updated successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- Invoices ---
+export async function createInvoice(req, res, next) {
+  try {
+    const createdBy = req.user?.id || null;
+    const result = await model.createInvoice(req.params.id, req.body, createdBy);
+    res.status(201).json({ data: result, message: 'Invoice created successfully!' });
+  } catch (err) { next(err); }
+}
+
+export async function updateInvoice(req, res, next) {
+  try {
+    const ok = await model.updateInvoice(req.params.invoiceId, req.body);
+    if (!ok) return res.status(404).json({ error: 'Invoice not found' });
+    res.json({ data: { id: req.params.invoiceId }, message: 'Invoice updated successfully!' });
+  } catch (err) { next(err); }
+}
+
+export async function deleteInvoice(req, res, next) {
+  try {
+    const ok = await model.deleteInvoice(req.params.invoiceId);
+    if (!ok) return res.status(404).json({ error: 'Invoice not found' });
+    res.json({ data: { deleted: true }, message: 'Invoice deleted successfully!' });
+  } catch (err) { next(err); }
+}

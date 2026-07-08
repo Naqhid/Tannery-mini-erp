@@ -33,7 +33,7 @@ const parentMap: Record<string, string> = {
 };
 
 export default function Layout() {
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
@@ -42,11 +42,6 @@ export default function Layout() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -58,6 +53,16 @@ export default function Layout() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  // Wait for auth state to be resolved before deciding
+  if (loading) {
+    return null;
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   const getBreadcrumbs = () => {
     const crumbs: { label: string }[] = [];

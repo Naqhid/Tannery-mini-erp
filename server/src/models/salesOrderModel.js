@@ -343,3 +343,81 @@ export async function deleteAttachment(attachmentId) {
   const [result] = await pool.query('DELETE FROM sales_order_attachments WHERE id = ?', [attachmentId]);
   return result.affectedRows > 0;
 }
+
+export async function updateAttachment(attachmentId, data) {
+  const updates = [];
+  const values = [];
+  if (data.category !== undefined) { updates.push('category = ?'); values.push(data.category); }
+  if (data.remarks !== undefined) { updates.push('remarks = ?'); values.push(data.remarks); }
+  if (updates.length === 0) return true;
+  values.push(attachmentId);
+  const [result] = await pool.query(`UPDATE sales_order_attachments SET ${updates.join(', ')} WHERE id = ?`, values);
+  return result.affectedRows > 0;
+}
+
+// ---- Delete Delivery Note ----
+export async function deleteDelivery(dnId) {
+  const [result] = await pool.query('DELETE FROM delivery_notes WHERE id = ?', [dnId]);
+  return result.affectedRows > 0;
+}
+
+// ---- Update Payment Receipt ----
+export async function updateReceipt(receiptId, data) {
+  const updates = [];
+  const values = [];
+  if (data.receipt_date !== undefined) { updates.push('receipt_date = ?'); values.push(data.receipt_date); }
+  if (data.payment_mode !== undefined) { updates.push('payment_mode = ?'); values.push(data.payment_mode); }
+  if (data.amount !== undefined) { updates.push('amount = ?'); values.push(data.amount); }
+  if (data.remarks !== undefined) { updates.push('remarks = ?'); values.push(data.remarks); }
+  if (updates.length === 0) return true;
+  values.push(receiptId);
+  const [result] = await pool.query(`UPDATE payment_receipts SET ${updates.join(', ')} WHERE id = ?`, values);
+  return result.affectedRows > 0;
+}
+
+// ---- Invoices ----
+export async function getNextInvoiceNo() {
+  const year = new Date().getFullYear();
+  const [[row]] = await pool.query(
+    `SELECT invoice_no FROM invoices WHERE invoice_no LIKE ? ORDER BY id DESC LIMIT 1`,
+    [`INV-${year}-%`]
+  );
+  if (!row) return `INV-${year}-00001`;
+  const num = parseInt(row.invoice_no.split('-')[2], 10) + 1;
+  return `INV-${year}-${String(num).padStart(5, '0')}`;
+}
+
+export async function createInvoice(orderId, data, createdBy = null) {
+  const invoice_no = data.invoice_no || await getNextInvoiceNo();
+  const [result] = await pool.query(
+    `INSERT INTO invoices (invoice_no, sales_order_id, invoice_date, invoice_amount, paid_amount, balance, status, due_date, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [
+      invoice_no, orderId, data.invoice_date || null,
+      data.invoice_amount || 0, data.paid_amount || 0,
+      (data.invoice_amount || 0) - (data.paid_amount || 0),
+      data.status || 'Pending', data.due_date || null, createdBy,
+    ]
+  );
+  return { id: result.insertId, invoice_no };
+}
+
+export async function updateInvoice(invoiceId, data) {
+  const updates = [];
+  const values = [];
+  if (data.invoice_date !== undefined) { updates.push('invoice_date = ?'); values.push(data.invoice_date); }
+  if (data.invoice_amount !== undefined) { updates.push('invoice_amount = ?'); values.push(data.invoice_amount); }
+  if (data.paid_amount !== undefined) { updates.push('paid_amount = ?'); values.push(data.paid_amount); }
+  if (data.balance !== undefined) { updates.push('balance = ?'); values.push(data.balance); }
+  if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
+  if (data.due_date !== undefined) { updates.push('due_date = ?'); values.push(data.due_date); }
+  if (updates.length === 0) return true;
+  values.push(invoiceId);
+  const [result] = await pool.query(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`, values);
+  return result.affectedRows > 0;
+}
+
+export async function deleteInvoice(invoiceId) {
+  const [result] = await pool.query('DELETE FROM invoices WHERE id = ?', [invoiceId]);
+  return result.affectedRows > 0;
+}
