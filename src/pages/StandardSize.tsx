@@ -26,7 +26,7 @@ export default function StandardSize() {
       title="Standard Size"
       subtitle="Manage standard sizes"
       icon={<Maximize2 size={20} className="text-white" />}
-      iconColor="from-violet-500 to-purple-600"
+      iconColor="from-violet-500 via-purple-500 to-fuchsia-600"
       apiEndpoint="/standard-sizes"
       columns={columns}
       formFields={formFields}

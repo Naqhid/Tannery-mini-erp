@@ -28,7 +28,7 @@ export default function Grade() {
       title="Grade"
       subtitle="Manage quality grades"
       icon={<Award size={20} className="text-white" />}
-      iconColor="from-yellow-500 to-amber-600"
+      iconColor="from-yellow-400 via-amber-500 to-orange-600"
       apiEndpoint="/grades"
       columns={columns}
       formFields={formFields}

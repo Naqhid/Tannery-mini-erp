@@ -27,13 +27,13 @@ export default function ProductCategory() {
       title="Product Category"
       subtitle="Manage product categories"
       icon={<Layers size={20} className="text-white" />}
-      iconColor="from-indigo-500 to-purple-600"
+      iconColor="from-violet-500 via-purple-500 to-fuchsia-600"
       apiEndpoint="/product-categories"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[99, 102, 241]}
+      pdfAccentColor={[139, 92, 246]}
     />
   );
 }

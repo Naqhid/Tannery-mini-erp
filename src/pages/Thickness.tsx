@@ -28,7 +28,7 @@ export default function Thickness() {
       title="Thickness"
       subtitle="Manage thickness options"
       icon={<Ruler size={20} className="text-white" />}
-      iconColor="from-sky-500 to-blue-600"
+      iconColor="from-sky-500 via-blue-500 to-indigo-600"
       apiEndpoint="/thickness"
       columns={columns}
       formFields={formFields}

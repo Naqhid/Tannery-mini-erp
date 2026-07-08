@@ -22,12 +22,12 @@ interface SalesOrderRow {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  Draft: 'bg-gray-100 text-gray-600 border border-gray-200',
-  Confirmed: 'bg-green-50 text-green-700 border border-green-200',
-  Processing: 'bg-blue-50 text-blue-700 border border-blue-200',
-  Shipped: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
-  Delivered: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  Cancelled: 'bg-red-50 text-red-600 border border-red-200',
+  Draft: 'bg-gradient-to-r from-slate-100 to-gray-100 text-slate-700 border border-slate-200 shadow-sm',
+  Confirmed: 'bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-700 border border-emerald-200 shadow-sm',
+  Processing: 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 border border-blue-200 shadow-sm',
+  Shipped: 'bg-gradient-to-r from-violet-100 to-purple-100 text-violet-700 border border-violet-200 shadow-sm',
+  Delivered: 'bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700 border border-teal-200 shadow-sm',
+  Cancelled: 'bg-gradient-to-r from-rose-100 to-red-100 text-rose-600 border border-rose-200 shadow-sm',
 };
 
 export default function SalesOrder() {
@@ -102,39 +102,40 @@ export default function SalesOrder() {
   };
 
   const statCards = [
-    { label: 'Total Orders', value: stats.total, color: 'text-blue-800', bg: 'bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200' },
-    { label: 'Draft', value: stats.draft, color: 'text-amber-800', bg: 'bg-gradient-to-br from-amber-50 to-orange-100 border-amber-200' },
-    { label: 'Confirmed', value: stats.confirmed, color: 'text-green-800', bg: 'bg-gradient-to-br from-green-50 to-emerald-100 border-green-200' },
-    { label: 'Delivered', value: stats.delivered, color: 'text-purple-800', bg: 'bg-gradient-to-br from-purple-50 to-violet-100 border-purple-200' },
+    { label: 'Total Orders', value: stats.total, color: 'text-blue-900', bg: 'bg-gradient-to-br from-blue-100 via-indigo-100 to-violet-100 border-blue-300', iconColor: 'from-blue-500 to-indigo-600' },
+    { label: 'Draft', value: stats.draft, color: 'text-amber-900', bg: 'bg-gradient-to-br from-amber-100 via-yellow-100 to-orange-100 border-amber-300', iconColor: 'from-amber-500 to-orange-600' },
+    { label: 'Confirmed', value: stats.confirmed, color: 'text-emerald-900', bg: 'bg-gradient-to-br from-emerald-100 via-green-100 to-teal-100 border-emerald-300', iconColor: 'from-emerald-500 to-green-600' },
+    { label: 'Delivered', value: stats.delivered, color: 'text-purple-900', bg: 'bg-gradient-to-br from-purple-100 via-violet-100 to-fuchsia-100 border-purple-300', iconColor: 'from-purple-500 to-violet-600' },
   ];
 
   return (
     <div className="space-y-4 sm:space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 shadow-lg shadow-blue-200/50">
-            <FileText size={20} className="text-white" />
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 shadow-xl shadow-blue-300/40 ring-2 ring-white/50">
+            <FileText size={22} className="text-white" />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Sales Orders</h1>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">Manage all customer sales orders</p>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">Sales Orders</h1>
+            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mt-0.5">Manage all customer sales orders</p>
           </div>
         </div>
         <button
-          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95"
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-600 rounded-xl shadow-lg shadow-blue-300/40 hover:shadow-xl hover:scale-105 transition-all active:scale-95"
           onClick={() => navigate('/sales-orders/new')}
         >
-          <Plus size={14} /> New Sales Order
+          <Plus size={16} /> New Sales Order
         </button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(c => (
-          <div key={c.label} className={`p-3 rounded-xl border ${c.bg} shadow-sm`}>
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{c.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${c.color}`}>{c.value}</p>
+          <div key={c.label} className={`relative overflow-hidden p-4 rounded-2xl border ${c.bg} shadow-lg`}>
+            <div className={`absolute top-0 right-0 w-20 h-20 rounded-full bg-gradient-to-br ${c.iconColor} opacity-20 -mr-6 -mt-6`} />
+            <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">{c.label}</p>
+            <p className={`text-3xl font-black mt-1 ${c.color}`}>{c.value}</p>
           </div>
         ))}
       </div>

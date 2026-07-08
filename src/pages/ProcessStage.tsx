@@ -28,7 +28,7 @@ export default function ProcessStage() {
       title="Process Stage"
       subtitle="Manage process stages"
       icon={<ListChecks size={20} className="text-white" />}
-      iconColor="from-blue-500 to-indigo-600"
+      iconColor="from-blue-500 via-indigo-500 to-violet-600"
       apiEndpoint="/process-stages"
       columns={columns}
       formFields={formFields}

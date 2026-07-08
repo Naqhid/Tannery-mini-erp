@@ -27,7 +27,7 @@ export default function UOM() {
       title="UOM"
       subtitle="Manage Units of Measure"
       icon={<Ruler size={20} className="text-white" />}
-      iconColor="from-teal-500 to-emerald-600"
+      iconColor="from-teal-500 via-cyan-500 to-sky-600"
       apiEndpoint="/uom"
       columns={columns}
       formFields={formFields}

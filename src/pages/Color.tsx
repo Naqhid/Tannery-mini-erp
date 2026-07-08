@@ -28,7 +28,7 @@ export default function Color() {
       title="Color"
       subtitle="Manage color options"
       icon={<Palette size={20} className="text-white" />}
-      iconColor="from-pink-500 to-rose-600"
+      iconColor="from-pink-500 via-rose-500 to-red-500"
       apiEndpoint="/colors"
       columns={columns}
       formFields={formFields}

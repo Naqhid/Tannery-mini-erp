@@ -77,12 +77,12 @@ const emptyItem: SalesOrderItem = {
 };
 
 const STATUS_CONFIG: Record<string, { color: string; icon: any; bg: string }> = {
-  Draft: { color: 'text-slate-600', icon: Clock, bg: 'bg-slate-100 border-slate-200' },
-  Confirmed: { color: 'text-emerald-700', icon: CheckCircle2, bg: 'bg-emerald-50 border-emerald-200' },
-  Processing: { color: 'text-blue-700', icon: Package, bg: 'bg-blue-50 border-blue-200' },
-  Shipped: { color: 'text-indigo-700', icon: Truck, bg: 'bg-indigo-50 border-indigo-200' },
-  Delivered: { color: 'text-green-700', icon: CheckCircle2, bg: 'bg-green-50 border-green-200' },
-  Cancelled: { color: 'text-red-600', icon: Ban, bg: 'bg-red-50 border-red-200' },
+  Draft: { color: 'text-slate-700', icon: Clock, bg: 'bg-gradient-to-r from-slate-100 to-gray-100 border-slate-300' },
+  Confirmed: { color: 'text-emerald-700', icon: CheckCircle2, bg: 'bg-gradient-to-r from-emerald-100 to-green-100 border-emerald-300' },
+  Processing: { color: 'text-blue-700', icon: Package, bg: 'bg-gradient-to-r from-blue-100 to-indigo-100 border-blue-300' },
+  Shipped: { color: 'text-violet-700', icon: Truck, bg: 'bg-gradient-to-r from-violet-100 to-purple-100 border-violet-300' },
+  Delivered: { color: 'text-teal-700', icon: CheckCircle2, bg: 'bg-gradient-to-r from-teal-100 to-cyan-100 border-teal-300' },
+  Cancelled: { color: 'text-rose-600', icon: Ban, bg: 'bg-gradient-to-r from-rose-100 to-red-100 border-rose-300' },
 };
 
 const PAYMENT_TERMS_OPTS = ['Advance', '30 Days', '45 Days', '60 Days', '90 Days', 'Letter of Credit'];
@@ -398,30 +398,30 @@ export default function SalesOrderDetail() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 shadow-lg shadow-blue-200/50">
-              <FileText size={20} className="text-white" />
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 via-indigo-600 to-violet-700 shadow-xl shadow-blue-300/40 ring-2 ring-white/50">
+              <FileText size={22} className="text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-xl font-bold text-gray-900">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
                   {isNew ? 'New Sales Order' : `Sales Order`}
                 </h1>
                 {order.order_no && (
-                  <span className="text-lg font-semibold text-blue-700 font-mono">{order.order_no}</span>
+                  <span className="text-lg font-bold text-blue-600 font-mono bg-blue-50 px-3 py-1 rounded-lg">{order.order_no}</span>
                 )}
                 {!isNew && (
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border ${statusConfig.bg} ${statusConfig.color}`}>
-                    <StatusIcon size={12} />
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border ${statusConfig.bg} ${statusConfig.color} shadow-sm`}>
+                    <StatusIcon size={14} />
                     {order.status}
                   </span>
                 )}
               </div>
-              <nav className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5">
+              <nav className="flex items-center gap-1.5 text-xs text-gray-400 mt-1 font-medium">
                 <button onClick={() => navigate('/dashboard')} className="hover:text-blue-600 transition-colors">Home</button>
                 <span>›</span>
                 <button onClick={() => navigate('/sales-orders')} className="hover:text-blue-600 transition-colors">Sales Orders</button>
-                {order.order_no && <><span>›</span><span className="text-gray-600 font-medium">{order.order_no}</span></>}
+                {order.order_no && <><span>›</span><span className="text-gray-600 font-semibold">{order.order_no}</span></>}
               </nav>
             </div>
           </div>
@@ -429,16 +429,16 @@ export default function SalesOrderDetail() {
         <div className="flex items-center gap-2">
           {!isNew && (
             <>
-              <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm">
-                <Printer size={14} /> Print
+              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm">
+                <Printer size={15} /> Print
               </button>
-              <button onClick={handleCopyOrder} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm">
-                <Copy size={14} /> Duplicate
+              <button onClick={handleCopyOrder} className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm">
+                <Copy size={15} /> Duplicate
               </button>
             </>
           )}
-          <button onClick={() => navigate('/sales-orders/new')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md shadow-blue-200/50">
-            <Plus size={14} /> New Order
+          <button onClick={() => navigate('/sales-orders/new')} className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-600 rounded-xl shadow-lg shadow-blue-300/40 hover:shadow-xl hover:scale-105 transition-all active:scale-95">
+            <Plus size={15} /> New Order
           </button>
         </div>
       </div>
