@@ -102,10 +102,10 @@ export default function SalesOrder() {
   };
 
   const statCards = [
-    { label: 'Total Orders', value: stats.total, color: 'text-gray-800', bg: 'bg-gray-50 border-gray-200' },
-    { label: 'Draft', value: stats.draft, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200' },
-    { label: 'Confirmed', value: stats.confirmed, color: 'text-green-700', bg: 'bg-green-50 border-green-200' },
-    { label: 'Delivered', value: stats.delivered, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+    { label: 'Total Orders', value: stats.total, color: 'text-blue-800', bg: 'bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200' },
+    { label: 'Draft', value: stats.draft, color: 'text-amber-800', bg: 'bg-gradient-to-br from-amber-50 to-orange-100 border-amber-200' },
+    { label: 'Confirmed', value: stats.confirmed, color: 'text-green-800', bg: 'bg-gradient-to-br from-green-50 to-emerald-100 border-green-200' },
+    { label: 'Delivered', value: stats.delivered, color: 'text-purple-800', bg: 'bg-gradient-to-br from-purple-50 to-violet-100 border-purple-200' },
   ];
 
   return (
@@ -140,9 +140,9 @@ export default function SalesOrder() {
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-sm shadow-blue-100/50 overflow-hidden ring-1 ring-blue-50">
         {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
           <div className="flex items-center gap-2 flex-1">
             <div className="relative flex-1 max-w-xs">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -161,8 +161,63 @@ export default function SalesOrder() {
           </div>
         </div>
 
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading...</div>
+          ) : data.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">No sales orders found</div>
+          ) : data.map((row, i) => {
+            const cardColors = [
+              'border-l-blue-500', 'border-l-indigo-500', 'border-l-purple-500',
+              'border-l-teal-500', 'border-l-emerald-500', 'border-l-amber-500',
+              'border-l-rose-500', 'border-l-cyan-500',
+            ];
+            return (
+              <div
+                key={row.id}
+                className={`p-4 border-l-4 ${cardColors[i % 8]} hover:bg-blue-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                onClick={() => navigate(`/sales-orders/${row.id}`)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{row.order_no}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[row.status] || ''}`}>
+                        {row.status}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900 mt-1.5 truncate">{row.customer_name}</p>
+                  </div>
+                  <p className="text-sm font-bold text-gray-900 shrink-0">{formatCurrency(row.grand_total)}</p>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Order:</span>
+                    <span className="text-[11px] text-gray-700">{formatDate(row.order_date)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Delivery:</span>
+                    <span className="text-[11px] text-gray-700">{formatDate(row.delivery_date)}</span>
+                  </div>
+                  {row.payment_terms && (
+                    <div className="flex items-center gap-1.5 col-span-2">
+                      <span className="text-[10px] text-gray-400 font-medium">Terms:</span>
+                      <span className="text-[11px] text-gray-700">{row.payment_terms}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+                  <button onClick={(e) => { e.stopPropagation(); navigate(`/sales-orders/${row.id}`); }} className="p-2 rounded-lg text-blue-500 hover:bg-blue-100 transition-all"><Edit2 size={15} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, id: row.id }); }} className="p-2 rounded-lg text-rose-500 hover:bg-rose-100 transition-all"><Trash2 size={15} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">

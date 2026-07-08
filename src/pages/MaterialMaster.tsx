@@ -330,8 +330,81 @@ export default function MaterialMaster() {
           </div>
         </div>
 
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading...</div>
+          ) : data.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">No materials found</div>
+          ) : data.map((row, i) => {
+            const cardColors = [
+              'border-l-blue-500', 'border-l-indigo-500', 'border-l-teal-500',
+              'border-l-emerald-500', 'border-l-purple-500', 'border-l-cyan-500',
+              'border-l-amber-500', 'border-l-rose-500',
+            ];
+            const avatarColors = [
+              'from-blue-500 to-indigo-600', 'from-indigo-500 to-violet-600',
+              'from-teal-500 to-emerald-600', 'from-emerald-500 to-green-600',
+              'from-purple-500 to-fuchsia-600', 'from-cyan-500 to-blue-600',
+              'from-amber-500 to-orange-600', 'from-rose-500 to-pink-600',
+            ];
+            return (
+              <div
+                key={(row as any).id || i}
+                className={`p-4 border-l-4 ${cardColors[i % 8]} hover:bg-blue-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                onClick={() => openPanel(row)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${avatarColors[i % 8]} flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0`}>
+                      {(row.name || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{row.name}</p>
+                      <p className="text-[11px] text-gray-500 font-mono mt-0.5">{(row as any).code}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${TYPE_COLORS[row.type] || 'bg-gray-100 text-gray-600'}`}>
+                      {row.type}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      row.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                      {row.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">UOM:</span>
+                    <span className="text-[11px] text-gray-700 font-medium">{row.uom || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Category:</span>
+                    <span className="text-[11px] text-gray-700 font-medium truncate">{row.category || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Stock:</span>
+                    <span className="text-[11px] text-gray-900 font-semibold">{parseFloat(String((row as any).current_stock || 0)).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Reorder:</span>
+                    <span className="text-[11px] text-gray-700">{parseFloat(String((row as any).reorder_level || 0)).toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+                  <button onClick={(e) => { e.stopPropagation(); openPanel(row); }} className="p-2 rounded-lg text-blue-500 hover:bg-blue-100 transition-all"><Edit2 size={15} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); (row as any).id && setDeleteConfirm({ open: true, id: (row as any).id }); }} className="p-2 rounded-lg text-rose-500 hover:bg-rose-100 transition-all"><Trash2 size={15} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -396,7 +469,7 @@ export default function MaterialMaster() {
       {/* Add/Edit Modal */}
       {showPanel && createPortal(
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] overflow-y-auto" onClick={() => setShowPanel(false)}>
-          <div className="min-h-screen flex items-start justify-center py-6 px-4">
+          <div className="min-h-screen flex items-start justify-center py-4 sm:py-6 px-2 sm:px-4">
             <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
               <div className="sticky top-0 px-6 py-4 border-b border-gray-200 bg-white rounded-t-2xl z-10">
@@ -414,11 +487,11 @@ export default function MaterialMaster() {
                 </div>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="p-4 sm:p-6 space-y-6">
                 {/* Material Information */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">Material Information</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-1 sm:grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                     <Input label="Material Code" value={formData.code} placeholder="Auto-generated" onChange={(e) => update('code', e.target.value)} />
                     <Input label="Material Name" required value={formData.name} placeholder="Enter material name" onChange={(e) => update('name', e.target.value)} />
                     <Select
@@ -431,7 +504,7 @@ export default function MaterialMaster() {
                     <Input label="UOM" required value={formData.uom} placeholder="e.g. Kg, Ltr" onChange={(e) => update('uom', e.target.value)} />
                     <Input label="Category" value={formData.category} placeholder="e.g. Tanning, Dyeing" onChange={(e) => update('category', e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mt-4">
                     <Select
                       label="Chemical Group"
                       options={[{ value: '', label: 'Select chemical group' }, ...CHEMICAL_GROUPS.map(g => ({ value: g, label: g }))]}
@@ -443,7 +516,7 @@ export default function MaterialMaster() {
                     <Input label="pH Value" value={formData.ph_value} placeholder="Enter pH value" onChange={(e) => update('ph_value', e.target.value)} />
                     <Input label="Flash Point (°C)" value={formData.flash_point} placeholder="Enter flash point" onChange={(e) => update('flash_point', e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mt-4">
                     <Input label="HSN Code" value={formData.hsn_code} placeholder="Enter HSN code" onChange={(e) => update('hsn_code', e.target.value)} />
                     <Input label="CAS No." value={formData.cas_number} placeholder="Enter CAS number" onChange={(e) => update('cas_number', e.target.value)} />
                     <Input label="Shelf Life (Months)" type="number" value={formData.shelf_life} placeholder="Enter shelf life" onChange={(e) => update('shelf_life', e.target.value)} />
@@ -465,7 +538,7 @@ export default function MaterialMaster() {
                 {/* Inventory Information */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">Inventory Information</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                     <Select
                       label="Default Warehouse"
                       required
@@ -478,7 +551,7 @@ export default function MaterialMaster() {
                     <Input label="Reorder Level" required type="number" value={formData.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} />
                     <Input label="Maximum Level" type="number" value={formData.maximum_level} onChange={(e) => update('maximum_level', e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mt-4">
                     <Input label="Standard Cost (₹)" type="number" value={formData.standard_cost} onChange={(e) => update('standard_cost', e.target.value)} />
                     <Input label="Last Purchase Price (₹)" type="number" value={formData.last_purchase_price} onChange={(e) => update('last_purchase_price', e.target.value)} />
                     <Select

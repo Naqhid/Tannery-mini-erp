@@ -268,6 +268,59 @@ export default function UsersPage() {
           </button>
         </div>
 
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading...</div>
+          ) : users.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">No users found</div>
+          ) : users.map((user, index) => {
+            const avatarColors = [
+              'from-blue-500 to-indigo-600', 'from-purple-500 to-fuchsia-600',
+              'from-teal-500 to-emerald-600', 'from-rose-500 to-pink-600',
+              'from-amber-500 to-orange-600', 'from-indigo-500 to-violet-600',
+            ];
+            const cardBorders = [
+              'border-l-blue-500', 'border-l-purple-500', 'border-l-teal-500',
+              'border-l-rose-500', 'border-l-amber-500', 'border-l-indigo-500',
+            ];
+            return (
+              <div
+                key={user.id}
+                className={`p-4 border-l-4 ${cardBorders[index % 6]} hover:bg-indigo-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                onClick={() => openPanel(user)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${avatarColors[index % 6]} flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0`}>
+                      {user.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{user.full_name}</p>
+                      <p className="text-[11px] text-indigo-600 font-mono mt-0.5">@{user.username}</p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                    user.status === 'Active'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-red-50 text-red-600 border border-red-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                    {user.status}
+                  </span>
+                </div>
+                {user.email && (
+                  <p className="mt-2 text-[11px] text-gray-500 truncate pl-[52px]">{user.email}</p>
+                )}
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+                  <button onClick={(e) => { e.stopPropagation(); openPanel(user); }} className="p-2 rounded-lg text-blue-500 hover:bg-blue-100 transition-all"><Edit2 size={15} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, id: user.id }); }} className="p-2 rounded-lg text-rose-500 hover:bg-rose-100 transition-all"><Trash2 size={15} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* Table */}
         <div className="hidden md:block overflow-x-hidden">
           <table className="w-full text-sm">
@@ -357,8 +410,8 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Input label="Username" required value={formData.username || ''} onChange={(e) => setFormData({ ...formData, username: e.target.value })} />
                   <Input label="Password" type="password" required={!selectedUser} value={formData.password || ''} placeholder={selectedUser ? 'Leave blank to keep current' : 'Enter password'} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
                   <Input label="Full Name" required value={formData.full_name || ''} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} gridCol={false} />

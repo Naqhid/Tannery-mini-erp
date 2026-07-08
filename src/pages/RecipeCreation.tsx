@@ -682,6 +682,74 @@ export default function RecipeCreation() {
           </button>
         </div>
 
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading...</div>
+          ) : recipes.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">No recipes found</div>
+          ) : recipes.map((r, index) => {
+            const cardColors = [
+              'border-l-violet-500', 'border-l-purple-500', 'border-l-teal-500',
+              'border-l-rose-500', 'border-l-sky-500', 'border-l-amber-500',
+              'border-l-indigo-500', 'border-l-emerald-500',
+            ];
+            const avatarColors = [
+              'bg-violet-500', 'bg-purple-500', 'bg-teal-500', 'bg-rose-500',
+              'bg-sky-500', 'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500',
+            ];
+            return (
+              <div
+                key={r.id || r.code}
+                className={`p-4 border-l-4 ${cardColors[index % 8]} hover:bg-violet-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                onClick={() => openPanel(r)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-10 h-10 rounded-xl ${avatarColors[index % 8]} flex items-center justify-center text-[10px] font-bold text-white shadow-md shrink-0`}>
+                      {r.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{r.name}</p>
+                      <p className="text-[11px] text-violet-600 font-mono mt-0.5">{r.code}</p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                    r.status === 'active' || r.status === 'Active'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-red-50 text-red-600 border border-red-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${r.status === 'active' || r.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                    {r.status}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Leather:</span>
+                    <span className="text-[11px] text-teal-700 font-medium truncate">{r.leather_type_name || r.leather_type || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Process:</span>
+                    <span className="text-[11px] text-blue-600 font-medium capitalize">{r.process_type || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Finish:</span>
+                    <span className="text-[11px] text-sky-700 font-medium truncate">{r.finish_type_name || r.finish_type || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Version:</span>
+                    <span className="text-[11px] text-amber-600 font-semibold">v{r.version}</span>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+                  <button onClick={(e) => { e.stopPropagation(); openPanel(r); }} className="p-2 rounded-lg text-blue-500 hover:bg-blue-100 transition-all"><Edit2 size={15} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); r.id && handleDelete(r.id); }} className="p-2 rounded-lg text-rose-500 hover:bg-rose-100 transition-all"><Trash2 size={15} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* Desktop Table */}
         <div className="hidden md:block overflow-x-hidden">
           <table className="w-full text-sm">
@@ -774,7 +842,7 @@ export default function RecipeCreation() {
       {showPanel && createPortal(
         <>
           <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center" onClick={() => setShowPanel(false)}>
-            <div className="w-full max-w-[1100px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-3" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-[1100px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-2 sm:mx-3" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
               <div className="px-5 py-4 border-b border-violet-100/50 bg-gradient-to-r from-violet-50 via-purple-50 to-fuchsia-50 shrink-0 rounded-t-2xl">
                 <div className="flex items-center justify-between">
@@ -804,7 +872,7 @@ export default function RecipeCreation() {
                 {/* Recipe Identity */}
                 <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
                   <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><FlaskConical size={10} /> Recipe Identity</p>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     <Input label="Recipe Code" value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
                     <Input label="Recipe Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                     <Select
@@ -833,7 +901,7 @@ export default function RecipeCreation() {
                 {/* Process & Finish */}
                 <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
                   <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5"> Process & Finish</p>
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     <Select
                       label="Process Type"
                       required
@@ -910,7 +978,7 @@ export default function RecipeCreation() {
 
                 {/* Validity */}
                 <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Input label="Valid From" type="date" value={formData.valid_from || ''} onChange={(e) => updateField('valid_from', e.target.value)} />
                     <Input label="Valid To" type="date" value={formData.valid_to || ''} onChange={(e) => updateField('valid_to', e.target.value)} />
                     <div>

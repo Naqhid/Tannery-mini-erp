@@ -188,7 +188,73 @@ export default function BusinessUnits() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading...</div>
+          ) : data.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">No business units found</div>
+          ) : data.map((row, i) => {
+            const cardColors = [
+              'border-l-teal-500', 'border-l-cyan-500', 'border-l-emerald-500',
+              'border-l-blue-500', 'border-l-indigo-500', 'border-l-violet-500',
+            ];
+            const avatarColors = [
+              'from-teal-500 to-emerald-600', 'from-cyan-500 to-blue-600',
+              'from-emerald-500 to-green-600', 'from-blue-500 to-indigo-600',
+              'from-indigo-500 to-violet-600', 'from-violet-500 to-purple-600',
+            ];
+            return (
+              <div
+                key={row.id || i}
+                className={`p-4 border-l-4 ${cardColors[i % 6]} hover:bg-teal-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                onClick={() => openPanel(row)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${avatarColors[i % 6]} flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0`}>
+                      {(row.name || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{row.name}</p>
+                      <p className="text-[11px] text-teal-600 font-mono mt-0.5">{row.code}</p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                    row.status === 'Active'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-red-50 text-red-600 border border-red-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                    {row.status}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Company:</span>
+                    <span className="text-[11px] text-gray-700 font-medium truncate">{row.company_name || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">City:</span>
+                    <span className="text-[11px] text-gray-700 font-medium truncate">{row.city || '—'}</span>
+                  </div>
+                  {row.phone && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-400 font-medium">Phone:</span>
+                      <span className="text-[11px] text-gray-700">{row.phone}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+                  <button onClick={(e) => { e.stopPropagation(); openPanel(row); }} className="p-2 rounded-lg text-blue-500 hover:bg-blue-100 transition-all"><Edit2 size={15} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); row.id && setDeleteConfirm({ open: true, id: row.id }); }} className="p-2 rounded-lg text-rose-500 hover:bg-rose-100 transition-all"><Trash2 size={15} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-teal-50/40 border-b border-teal-100/50">
@@ -266,7 +332,7 @@ export default function BusinessUnits() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/50">
               <div className="p-3 rounded-xl bg-teal-50/50 border border-teal-100/50">
                 <p className="text-[10px] font-semibold text-teal-700 uppercase tracking-wider mb-3">Parent Company</p>
                 <Select
@@ -278,7 +344,7 @@ export default function BusinessUnits() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input label="Code" value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))} />
                 <Input label="Business Unit Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} />
                 <div className="col-span-2">

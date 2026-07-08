@@ -333,6 +333,83 @@ export default function MasterPage({
           </button>
         </div>
 
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading...</div>
+          ) : data.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">No records found</div>
+          ) : data.map((row, index) => {
+            const cardColors = [
+              'border-l-blue-500', 'border-l-purple-500', 'border-l-teal-500',
+              'border-l-rose-500', 'border-l-amber-500', 'border-l-indigo-500',
+              'border-l-emerald-500', 'border-l-pink-500',
+            ];
+            const avatarColors = [
+              'from-blue-500 to-indigo-600', 'from-purple-500 to-fuchsia-600',
+              'from-teal-500 to-emerald-600', 'from-rose-500 to-pink-600',
+              'from-amber-500 to-orange-600', 'from-indigo-500 to-violet-600',
+              'from-emerald-500 to-teal-600', 'from-pink-500 to-rose-600',
+            ];
+            return (
+              <div
+                key={row.id || index}
+                className={`p-4 border-l-4 ${cardColors[index % 8]} hover:bg-gradient-to-r hover:from-blue-50/40 hover:to-indigo-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                onClick={() => openPanel(row)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${avatarColors[index % 8]} flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0`}>
+                      {(row.name || row.code || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{row.name || row.code}</p>
+                      {row.code && row.name && (
+                        <p className="text-[11px] text-gray-500 font-mono mt-0.5">{row.code}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {row.status && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        row.status === 'Active'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-red-50 text-red-600 border border-red-200'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                        {row.status}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Show additional columns as key-value pairs */}
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {columns.filter(col => col.key !== 'name' && col.key !== 'code' && col.key !== 'status').slice(0, 4).map(col => (
+                    <div key={col.key} className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-400 font-medium uppercase">{col.header}:</span>
+                      <span className="text-[11px] text-gray-700 font-medium truncate">{row[col.key] || '—'}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openPanel(row); }}
+                    className="p-2 rounded-lg text-blue-500 hover:text-blue-700 hover:bg-blue-100 transition-all"
+                  >
+                    <Edit2 size={15} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); row.id && handleDelete(row.id); }}
+                    className="p-2 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-100 transition-all"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* Desktop Table */}
         <div className="hidden md:block overflow-x-hidden">
           <table className="w-full text-sm">
@@ -480,8 +557,8 @@ export default function MasterPage({
               </div>
 
               {/* Body */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/50">
-                <div className="grid grid-cols-2 gap-3">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {formFields.map((field) => (
                     <div key={field.key} className={field.gridCol === false ? 'col-span-2' : ''}>
                       {field.type === 'textarea' ? (
