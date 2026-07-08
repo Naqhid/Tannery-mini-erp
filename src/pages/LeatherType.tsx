@@ -27,7 +27,7 @@ export default function LeatherType() {
       title="Leather Type"
       subtitle="Manage leather types"
       icon={<Layers size={20} className="text-white" />}
-      iconColor="from-amber-500 to-orange-600"
+      iconColor="from-amber-500 via-orange-500 to-red-500"
       apiEndpoint="/leather-types"
       columns={columns}
       formFields={formFields}

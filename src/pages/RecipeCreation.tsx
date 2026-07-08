@@ -160,7 +160,7 @@ export default function RecipeCreation() {
   const [stageParameters, setStageParameters] = useState<StageParameter[]>([]);
 
   // Active tab in recipe detail
-  const [activeDetailTab, setActiveDetailTab] = useState<'items' | 'stages' | 'parameters' | 'attachments' | 'remarks'>('items');
+  const [activeDetailTab, setActiveDetailTab] = useState<'items' | 'stages' | 'attachments' | 'remarks'>('items');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -598,7 +598,6 @@ export default function RecipeCreation() {
   const detailTabs = [
     { id: 'items' as const, label: 'Recipe Items', icon: <ClipboardList size={14} /> },
     { id: 'stages' as const, label: 'Process Stages', icon: <Settings size={14} /> },
-    { id: 'parameters' as const, label: 'Parameters', icon: <FileText size={14} /> },
     { id: 'attachments' as const, label: 'Attachments', icon: <Paperclip size={14} /> },
     { id: 'remarks' as const, label: 'Remarks', icon: <MessageSquare size={14} /> },
   ];
@@ -681,6 +680,74 @@ export default function RecipeCreation() {
             <Plus size={14} />
             Add Recipe
           </button>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading...</div>
+          ) : recipes.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">No recipes found</div>
+          ) : recipes.map((r, index) => {
+            const cardColors = [
+              'border-l-violet-500', 'border-l-purple-500', 'border-l-teal-500',
+              'border-l-rose-500', 'border-l-sky-500', 'border-l-amber-500',
+              'border-l-indigo-500', 'border-l-emerald-500',
+            ];
+            const avatarColors = [
+              'bg-violet-500', 'bg-purple-500', 'bg-teal-500', 'bg-rose-500',
+              'bg-sky-500', 'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500',
+            ];
+            return (
+              <div
+                key={r.id || r.code}
+                className={`p-4 border-l-4 ${cardColors[index % 8]} hover:bg-violet-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                onClick={() => openPanel(r)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-10 h-10 rounded-xl ${avatarColors[index % 8]} flex items-center justify-center text-[10px] font-bold text-white shadow-md shrink-0`}>
+                      {r.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{r.name}</p>
+                      <p className="text-[11px] text-violet-600 font-mono mt-0.5">{r.code}</p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                    r.status === 'active' || r.status === 'Active'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-red-50 text-red-600 border border-red-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${r.status === 'active' || r.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                    {r.status}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Leather:</span>
+                    <span className="text-[11px] text-teal-700 font-medium truncate">{r.leather_type_name || r.leather_type || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Process:</span>
+                    <span className="text-[11px] text-blue-600 font-medium capitalize">{r.process_type || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Finish:</span>
+                    <span className="text-[11px] text-sky-700 font-medium truncate">{r.finish_type_name || r.finish_type || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-medium">Version:</span>
+                    <span className="text-[11px] text-amber-600 font-semibold">v{r.version}</span>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+                  <button onClick={(e) => { e.stopPropagation(); openPanel(r); }} className="p-2 rounded-lg text-blue-500 hover:bg-blue-100 transition-all"><Edit2 size={15} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); r.id && handleDelete(r.id); }} className="p-2 rounded-lg text-rose-500 hover:bg-rose-100 transition-all"><Trash2 size={15} /></button>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Desktop Table */}
@@ -775,7 +842,7 @@ export default function RecipeCreation() {
       {showPanel && createPortal(
         <>
           <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center" onClick={() => setShowPanel(false)}>
-            <div className="w-full max-w-[1100px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-3" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-[1100px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-2 sm:mx-3" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
               <div className="px-5 py-4 border-b border-violet-100/50 bg-gradient-to-r from-violet-50 via-purple-50 to-fuchsia-50 shrink-0 rounded-t-2xl">
                 <div className="flex items-center justify-between">
@@ -805,7 +872,7 @@ export default function RecipeCreation() {
                 {/* Recipe Identity */}
                 <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
                   <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><FlaskConical size={10} /> Recipe Identity</p>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     <Input label="Recipe Code" value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
                     <Input label="Recipe Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                     <Select
@@ -834,7 +901,7 @@ export default function RecipeCreation() {
                 {/* Process & Finish */}
                 <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
                   <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5"> Process & Finish</p>
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     <Select
                       label="Process Type"
                       required
@@ -911,7 +978,7 @@ export default function RecipeCreation() {
 
                 {/* Validity */}
                 <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Input label="Valid From" type="date" value={formData.valid_from || ''} onChange={(e) => updateField('valid_from', e.target.value)} />
                     <Input label="Valid To" type="date" value={formData.valid_to || ''} onChange={(e) => updateField('valid_to', e.target.value)} />
                     <div>
@@ -964,65 +1031,61 @@ export default function RecipeCreation() {
                           <span className="text-sm font-semibold text-gray-900">Process Stages ({stages.length})</span>
                           <Button size="sm" variant="violet" icon={<Plus size={14} />} onClick={openAddStage}>Add Stage</Button>
                         </div>
-                        <Table columns={processStagesColumns} data={stages} />
+                        {stages.length === 0 ? (
+                          <div className="py-8 text-center text-gray-400 text-sm">
+                            Add process stages to define the workflow.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {stages.map((stage, idx) => (
+                              <div key={stage.id || idx} className="p-4 rounded-xl border border-violet-100 bg-gradient-to-r from-violet-50/50 to-white shadow-sm">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
+                                      {stage.seq}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-900">{stage.process_stage}</p>
+                                      <p className="text-[11px] text-gray-500 mt-0.5">{stage.machine || 'No machine assigned'}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button onClick={() => openEditStage(stage)} className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-all"><Edit2 size={13} /></button>
+                                    <button onClick={() => handleDeleteStage(stage.id!)} className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
+                                  </div>
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-violet-100/50">
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">Duration</span>
+                                      <span className="font-semibold text-gray-800">{stage.duration ? `${stage.duration} min` : '—'}</span>
+                                    </div>
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">Temperature</span>
+                                      <span className="font-semibold text-gray-800">{stage.temperature ? `${stage.temperature}°C` : '—'}</span>
+                                    </div>
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">Speed</span>
+                                      <span className="font-semibold text-gray-800">{stage.speed || '—'}</span>
+                                    </div>
+                                    <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
+                                      <span className="text-gray-500 block">QC Check</span>
+                                      <span className={`font-semibold ${stage.qc_check ? 'text-emerald-600' : 'text-gray-400'}`}>{stage.qc_check ? 'Required' : 'Not Required'}</span>
+                                    </div>
+                                  </div>
+                                  {stage.remarks && (
+                                    <p className="mt-3 text-[11px] text-gray-500 bg-white rounded-lg px-2.5 py-2 border border-gray-100"><span className="font-medium text-gray-600">Remarks:</span> {stage.remarks}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-2 pt-2">
                           <Button variant="outline" size="sm" icon={<ChevronUp size={14} />}>Move Up</Button>
                           <Button variant="outline" size="sm" icon={<ChevronDown size={14} />}>Move Down</Button>
                           <Button variant="outline" size="sm" icon={<Copy size={14} />}>Copy Stage</Button>
                         </div>
-                      </div>
-                    )}
-
-                    {activeDetailTab === 'parameters' && (
-                      <div className="space-y-3">
-                        {stages.length === 0 ? (
-                          <div className="py-8 text-center text-gray-400 text-sm">
-                            Add process stages first to view parameters.
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {stages.map((stage, idx) => (
-                              <div key={stage.id || idx} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50">
-                                <p className="text-xs font-semibold text-violet-600 mb-2">
-                                  Stage {stage.seq}: {stage.process_stage}
-                                </p>
-                                <div className="grid grid-cols-3 gap-3 text-xs">
-                                  {stage.duration ? (
-                                    <div>
-                                      <span className="text-gray-500">Duration:</span>
-                                      <span className="ml-1 font-medium text-gray-800">{stage.duration} min</span>
-                                    </div>
-                                  ) : null}
-                                  {stage.temperature ? (
-                                    <div>
-                                      <span className="text-gray-500">Temperature:</span>
-                                      <span className="ml-1 font-medium text-gray-800">{stage.temperature}°C</span>
-                                    </div>
-                                  ) : null}
-                                  {stage.speed ? (
-                                    <div>
-                                      <span className="text-gray-500">Speed:</span>
-                                      <span className="ml-1 font-medium text-gray-800">{stage.speed}</span>
-                                    </div>
-                                  ) : null}
-                                  {stage.machine ? (
-                                    <div>
-                                      <span className="text-gray-500">Machine:</span>
-                                      <span className="ml-1 font-medium text-gray-800">{stage.machine}</span>
-                                    </div>
-                                  ) : null}
-                                  <div>
-                                    <span className="text-gray-500">QC Check:</span>
-                                    <span className={`ml-1 font-medium ${stage.qc_check ? 'text-emerald-600' : 'text-gray-400'}`}>{stage.qc_check ? 'Yes' : 'No'}</span>
-                                  </div>
-                                </div>
-                                {stage.remarks && (
-                                  <p className="mt-2 text-[11px] text-gray-500"><span className="font-medium">Remarks:</span> {stage.remarks}</p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     )}
 

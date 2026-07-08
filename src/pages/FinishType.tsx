@@ -26,7 +26,7 @@ export default function FinishType() {
       title="Finish Type"
       subtitle="Manage finish types"
       icon={<Sparkles size={20} className="text-white" />}
-      iconColor="from-cyan-500 to-teal-600"
+      iconColor="from-cyan-400 via-teal-500 to-emerald-600"
       apiEndpoint="/finish-types"
       columns={columns}
       formFields={formFields}

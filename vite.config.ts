@@ -2,8 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => ({
-  base: mode === 'production' ? '/Tannery-mini-erp/' : '/',
+export default defineConfig({
+  base: process.env.VITE_BASE || '/',
   plugins: [react()],
   optimizeDeps: {
     include: ['lucide-react', 'jspdf', 'jspdf-autotable'],
@@ -30,4 +30,4 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-}));
+});

@@ -31,7 +31,7 @@ export default function Machine() {
       title="Machine / Equipment"
       subtitle="Manage machines and equipment"
       icon={<Factory size={20} className="text-white" />}
-      iconColor="from-slate-600 to-gray-700"
+      iconColor="from-slate-500 via-gray-600 to-zinc-700"
       apiEndpoint="/machines"
       columns={columns}
       formFields={formFields}

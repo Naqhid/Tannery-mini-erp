@@ -28,7 +28,7 @@ export default function HSNCode() {
       title="HSN Code"
       subtitle="Manage HSN codes for GST"
       icon={<Hash size={20} className="text-white" />}
-      iconColor="from-green-500 to-emerald-600"
+      iconColor="from-green-500 via-emerald-500 to-teal-600"
       apiEndpoint="/hsn-codes"
       columns={columns}
       formFields={formFields}

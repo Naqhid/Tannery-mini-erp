@@ -14,4 +14,16 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
+// Warm up the pool by establishing a connection at startup
+// This prevents the first request from failing due to cold connection delay
+(async () => {
+  try {
+    const connection = await pool.getConnection();
+    console.log('Database connection pool initialized successfully');
+    connection.release();
+  } catch (err) {
+    console.error('Failed to initialize database connection pool:', err.message);
+  }
+})();
+
 export default pool;
