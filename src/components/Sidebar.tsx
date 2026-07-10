@@ -63,6 +63,7 @@ const menuItems: MenuItem[] = [
       { label: 'HSN Code', icon: <Layers size={16} />, path: '/hsn-code' },
       { label: 'Process Stage', icon: <ListChecks size={16} />, path: '/process-stage' },
       { label: 'Machine / Equipment', icon: <Factory size={16} />, path: '/machine' },
+      { label: 'Warehouse / Store Master', icon: <Warehouse size={16} />, path: '/warehouse-master' },
     ],
   },
   {
@@ -76,7 +77,6 @@ const menuItems: MenuItem[] = [
     ],
   },
   { label: 'Inventory', icon: <Package size={20} />, children: [
-      { label: 'Warehouse / Store Master', icon: <Warehouse size={16} />, path: '/warehouse-master' },
       { label: 'Stock Opening Entry', icon: <PackageOpen size={16} />, path: '/stock-opening-entry' },
       { label: 'Material Receipt Entry', icon: <Truck size={16} />, path: '/material-receipt' },
       { label: 'Stock Transfer Entry', icon: <ArrowLeftRight size={16} />, path: '/stock-transfer' },
