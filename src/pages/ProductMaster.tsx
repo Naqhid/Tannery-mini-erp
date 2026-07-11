@@ -21,13 +21,18 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
+  RefreshCw,
+  CheckSquare,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
+import EmptyState from '../components/ui/EmptyState';
+import SkeletonLoader from '../components/ui/SkeletonLoader';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import { exportToExcel } from '../lib/excelExport';
+import { useDebounce } from '../lib/useDebounce';
 import { useDropdowns } from '../lib/useDropdowns';
 import api from '../lib/api';
 
@@ -83,9 +88,11 @@ export default function ProductMaster() {
   const [showPanel, setShowPanel] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<Product>(emptyProduct);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+
+  const debouncedSearch = useDebounce(searchInput, 350);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -114,7 +121,7 @@ export default function ProductMaster() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) {
@@ -130,7 +137,7 @@ export default function ProductMaster() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -142,7 +149,7 @@ export default function ProductMaster() {
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, sortBy, sortOrder, pageSize]);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -186,7 +193,7 @@ export default function ProductMaster() {
         toast.success(res.message || 'Product created successfully!', { position: 'top-right', autoClose: 3000 });
       }
       setShowPanel(false);
-      setSearchQuery('');
+      setSearchInput('');
       setCurrentPage(1);
       fetchProducts();
       fetchStats();
@@ -209,7 +216,7 @@ export default function ProductMaster() {
       const res = await api(`/products/${id}`, { method: 'DELETE' });
       toast.success(res.message || 'Product deleted successfully!', { position: 'top-right', autoClose: 3000 });
       setShowPanel(false);
-      setSearchQuery('');
+      setSearchInput('');
       setCurrentPage(1);
       fetchProducts();
       fetchStats();
@@ -278,8 +285,8 @@ export default function ProductMaster() {
               <input
                 type="text"
                 placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all bg-white"
               />
             </div>
@@ -339,9 +346,9 @@ export default function ProductMaster() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+                <SkeletonLoader rows={5} cols={6} />
               ) : products.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No products found</td></tr>
+                <tr><td colSpan={8}><EmptyState title="No products found" message="Add a new product or adjust your search" actionLabel="Add Product" onAction={() => openPanel()} /></td></tr>
               ) : products.map((p, index) => (
                 <tr key={p.id || p.code} className={`hover:bg-teal-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(p)}>
                   <td className="py-3 px-4 relative">

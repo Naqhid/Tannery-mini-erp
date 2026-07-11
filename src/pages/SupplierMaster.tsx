@@ -23,11 +23,16 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
+  RefreshCw,
+  CheckSquare,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
+import EmptyState from '../components/ui/EmptyState';
+import SkeletonLoader from '../components/ui/SkeletonLoader';
+import { useDebounce } from '../lib/useDebounce';
 import AddressFields from '../components/ui/AddressFields';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import { exportToExcel } from '../lib/excelExport';
@@ -95,9 +100,12 @@ export default function SupplierMaster() {
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [formData, setFormData] = useState<Supplier>(emptySupplier);
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const debouncedSearch = useDebounce(searchInput, 350);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -113,7 +121,7 @@ export default function SupplierMaster() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) {
@@ -129,7 +137,7 @@ export default function SupplierMaster() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -152,7 +160,7 @@ export default function SupplierMaster() {
   useEffect(() => { fetchPricing(); }, [fetchPricing]);
 
   // Reset to page 1 when search or sort changes
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, sortBy, sortOrder, pageSize]);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -211,7 +219,7 @@ export default function SupplierMaster() {
         });
       }
       setShowPanel(false);
-      setSearchQuery(''); // Clear search to see all records including the updated one
+      setSearchInput(''); // Clear search to see all records including the updated one
       setCurrentPage(1);
       fetchSuppliers();
       fetchStats();
@@ -240,7 +248,7 @@ export default function SupplierMaster() {
         autoClose: 3000,
       });
       setShowPanel(false);
-      setSearchQuery('');
+      setSearchInput('');
       setCurrentPage(1);
       fetchSuppliers();
       fetchStats();
@@ -330,8 +338,8 @@ export default function SupplierMaster() {
               <input
                 type="text"
                 placeholder="Search suppliers..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-400 transition-all bg-white"
               />
             </div>
@@ -392,9 +400,9 @@ export default function SupplierMaster() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+                <SkeletonLoader rows={5} cols={6} />
               ) : suppliers.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No suppliers found</td></tr>
+                <tr><td colSpan={8}><EmptyState title="No suppliers found" message="Add a new supplier or adjust your search" actionLabel="Add Supplier" onAction={() => openPanel()} /></td></tr>
               ) : suppliers.map((s, index) => (
                 <tr key={s.id || s.code} className={`hover:bg-orange-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(s)}>
                   <td className="py-3 px-4 relative">

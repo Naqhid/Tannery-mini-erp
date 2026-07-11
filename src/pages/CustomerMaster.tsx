@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import {
@@ -20,14 +20,20 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
+  RefreshCw,
+  CheckSquare,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
 import AddressFields from '../components/ui/AddressFields';
+import EmptyState from '../components/ui/EmptyState';
+import SkeletonLoader from '../components/ui/SkeletonLoader';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import { exportToExcel } from '../lib/excelExport';
+import { useDebounce } from '../lib/useDebounce';
+import { validateField } from '../lib/validators';
 import api from '../lib/api';
 
 interface Customer {
@@ -76,9 +82,10 @@ export default function CustomerMaster() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState<Customer>(emptyCustomer);
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; bulk?: boolean }>({ open: false, id: null });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -90,11 +97,14 @@ export default function CustomerMaster() {
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
+  // Debounced search
+  const debouncedSearch = useDebounce(searchInput, 350);
+
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) {
@@ -110,7 +120,7 @@ export default function CustomerMaster() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -123,7 +133,22 @@ export default function CustomerMaster() {
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
   // Reset to page 1 when search or sort changes
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, sortBy, sortOrder, pageSize]);
+
+  // Ctrl+N keyboard shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !showPanel) { e.preventDefault(); openPanel(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showPanel]);
+
+  // Bulk actions
+  const toggleRow = (id: number) => { setSelectedIds(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; }); };
+  const toggleSelectAll = () => { if (selectedIds.size === customers.length) setSelectedIds(new Set()); else setSelectedIds(new Set(customers.filter(c => c.id).map(c => c.id!))); };
+  const handleBulkDelete = () => { if (selectedIds.size === 0) { toast.error('No rows selected'); return; } setDeleteConfirm({ open: true, id: null, bulk: true }); };
+  const handleRefresh = () => { fetchCustomers(); fetchStats(); toast.info('Refreshed'); };
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -182,7 +207,7 @@ export default function CustomerMaster() {
         });
       }
       setShowPanel(false);
-      setSearchQuery('');
+      setSearchInput('');
       setCurrentPage(1);
       fetchCustomers();
       fetchStats();
@@ -201,8 +226,18 @@ export default function CustomerMaster() {
   };
 
   const confirmDelete = async () => {
-    const id = deleteConfirm.id;
+    const { id, bulk } = deleteConfirm;
     setDeleteConfirm({ open: false, id: null });
+    if (bulk) {
+      try {
+        const ids = Array.from(selectedIds);
+        await api('/customers/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+        toast.success(`${ids.length} customer(s) deleted`);
+        setSelectedIds(new Set());
+        fetchCustomers(); fetchStats();
+      } catch (err) { toast.error('Bulk delete failed: ' + (err as Error).message); }
+      return;
+    }
     if (!id) return;
     try {
       const res = await api(`/customers/${id}`, { method: 'DELETE' });
@@ -211,7 +246,7 @@ export default function CustomerMaster() {
         autoClose: 3000,
       });
       setShowPanel(false);
-      setSearchQuery('');
+      setSearchInput('');
       setCurrentPage(1);
       fetchCustomers();
       fetchStats();
@@ -316,8 +351,8 @@ export default function CustomerMaster() {
               <input
                 type="text"
                 placeholder="Search customers..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all bg-white"
               />
             </div>
@@ -392,9 +427,9 @@ export default function CustomerMaster() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+                <SkeletonLoader rows={5} cols={6} />
               ) : customers.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No customers found</td></tr>
+                <tr><td colSpan={8}><EmptyState title="No customers found" message="Add a new customer or adjust your search" actionLabel="Add Customer" onAction={() => openPanel()} /></td></tr>
               ) : customers.map((c, index) => (
                 <tr key={c.id || c.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(c)}>
                   <td className="py-3 px-4 font-mono text-xs text-indigo-500 font-medium relative">

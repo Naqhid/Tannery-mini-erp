@@ -4,10 +4,14 @@ import { toast } from 'react-toastify';
 import {
   Plus, Search, Edit2, Trash2, ChevronLeft, ChevronRight, RotateCcw, Save,
   X, FlaskConical, ChevronsUpDown, ArrowUp, ArrowDown, Upload, Paperclip,
+  RefreshCw, CheckSquare,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import EmptyState from '../components/ui/EmptyState';
+import SkeletonLoader from '../components/ui/SkeletonLoader';
+import { useDebounce } from '../lib/useDebounce';
 import api from '../lib/api';
 
 interface Supplier { id: number; name: string; code: string; }
@@ -72,7 +76,8 @@ export default function MaterialMaster() {
   const [stats, setStats] = useState({ total: 0, active: 0, chemicals: 0, auxiliaries: 0, packing: 0 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'Chemical' | 'Auxiliary' | 'Packing Material'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 350);
   const [filterCode, setFilterCode] = useState('');
   const [filterName, setFilterName] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -109,7 +114,7 @@ export default function MaterialMaster() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      const search = filterCode || filterName || searchQuery;
+      const search = filterCode || filterName || debouncedSearch;
       if (search) params.set('search', search);
       if (filterType || (activeTab !== 'all')) params.set('type', filterType || activeTab);
       if (filterStatus) params.set('status', filterStatus);
@@ -121,11 +126,11 @@ export default function MaterialMaster() {
       setTotalRecords(res.total || 0);
       setTotalPages(res.totalPages || 0);
     } catch { setData([]); } finally { setLoading(false); }
-  }, [searchQuery, filterCode, filterName, filterType, filterStatus, activeTab, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, filterCode, filterName, filterType, filterStatus, activeTab, currentPage, pageSize, sortBy, sortOrder]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { fetchStats(); fetchSuppliers(); }, [fetchStats, fetchSuppliers]);
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, filterCode, filterName, filterType, filterStatus, activeTab, sortBy, sortOrder, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, filterCode, filterName, filterType, filterStatus, activeTab, sortBy, sortOrder, pageSize]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -316,7 +321,7 @@ export default function MaterialMaster() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setFilterCode(''); setFilterName(''); setFilterType(''); setFilterStatus(''); setSearchQuery(''); }}
+              onClick={() => { setFilterCode(''); setFilterName(''); setFilterType(''); setFilterStatus(''); setSearchInput(''); }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
             >
               <RotateCcw size={12} /> Reset
@@ -418,9 +423,9 @@ export default function MaterialMaster() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={9} className="py-10 text-center text-gray-400 text-sm">Loading...</td></tr>
+                <SkeletonLoader rows={5} cols={7} />
               ) : data.length === 0 ? (
-                <tr><td colSpan={9} className="py-10 text-center text-gray-400 text-sm">No materials found</td></tr>
+                <tr><td colSpan={9}><EmptyState title="No materials found" message="Add a new material or adjust your filters" actionLabel="Add Material" onAction={() => openPanel()} /></td></tr>
               ) : data.map((row, i) => (
                 <tr key={(row as any).id || i} className="hover:bg-blue-50/30 transition-colors cursor-pointer" onClick={() => openPanel(row)}>
                   <td className="py-3 px-4 font-mono text-xs text-gray-700 font-medium">{(row as any).code}</td>

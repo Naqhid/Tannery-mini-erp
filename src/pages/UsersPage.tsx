@@ -24,6 +24,9 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ExportMenu from '../components/ui/ExportMenu';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import { exportToExcel } from '../lib/excelExport';
+import EmptyState from '../components/ui/EmptyState';
+import SkeletonLoader from '../components/ui/SkeletonLoader';
+import { useDebounce } from '../lib/useDebounce';
 import api from '../lib/api';
 
 interface User {
@@ -63,7 +66,8 @@ export default function UsersPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 350);
   const [showPanel, setShowPanel] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<any>({
@@ -90,7 +94,7 @@ export default function UsersPage() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) {
@@ -106,7 +110,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchDropdowns = async () => {
     try {
@@ -240,8 +244,8 @@ export default function UsersPage() {
               <input
                 type="text"
                 placeholder="Search users..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all bg-white"
               />
             </div>
@@ -335,9 +339,9 @@ export default function UsersPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={5} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+                <SkeletonLoader rows={5} cols={4} />
               ) : users.length === 0 ? (
-                <tr><td colSpan={5} className="py-8 text-center text-gray-400 text-sm">No users found</td></tr>
+                <tr><td colSpan={5}><EmptyState title="No users found" message="Add a new user or adjust your search" actionLabel="Add User" onAction={() => openPanel()} /></td></tr>
               ) : users.map((user, index) => (
                 <tr
                   key={user.id}
