@@ -5,7 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import routes from './routes/index.js';
-import settingsRoutes from './routes/settingsRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import { optionalAuth } from './middleware/auth.js';
 
@@ -24,11 +23,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 // Optional auth middleware for all routes (doesn't block if no token)
 app.use(optionalAuth);
 
-// Main API routes (includes all masters)
+// Main API routes (includes all masters + settings)
 app.use('/api', routes);
-
-// Settings routes (users, roles, companies, business units)
-app.use('/api/users', settingsRoutes.usersRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
