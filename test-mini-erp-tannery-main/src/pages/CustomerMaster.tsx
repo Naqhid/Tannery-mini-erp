@@ -1,0 +1,863 @@
+import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { toast } from 'react-toastify';
+import {
+  Plus,
+  Search,
+  Filter,
+  Edit2,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  Users,
+  Building2,
+  Phone,
+  MapPin,
+  CreditCard,
+  Save,
+  X,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
+} from 'lucide-react';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ExportMenu from '../components/ui/ExportMenu';
+import AddressFields from '../components/ui/AddressFields';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
+import api from '../lib/api';
+
+interface Customer {
+  id?: number;
+  code: string;
+  name: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  city: string;
+  status: string;
+  alt_phone?: string;
+  category?: string;
+  currency?: string;
+  notes?: string;
+  billing_address?: string;
+  shipping_address?: string;
+  country?: string;
+  state?: string;
+  pin_code?: string;
+  gstin?: string;
+  pan?: string;
+  payment_terms?: string;
+  credit_limit?: string;
+  country_id?: number | null;
+  state_id?: number | null;
+  city_id?: number | null;
+}
+
+type SortField = 'code' | 'name' | 'contact_person' | 'phone' | 'email' | 'city' | 'status';
+type SortOrder = 'asc' | 'desc';
+
+const emptyCustomer: Customer = {
+  code: '', name: '', contact_person: '', phone: '', email: '', city: '', status: 'Active',
+  alt_phone: '', category: 'domestic', currency: 'inr', notes: '', billing_address: '',
+  shipping_address: '', country: '', state: '', pin_code: '', gstin: '', pan: '', payment_terms: '30', credit_limit: '',
+  country_id: null, state_id: null, city_id: null,
+};
+
+export default function CustomerMaster() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0 });
+  const [loading, setLoading] = useState(true);
+  const [statusToggle, setStatusToggle] = useState(true);
+  const [showPanel, setShowPanel] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [formData, setFormData] = useState<Customer>(emptyCustomer);
+  const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  // Sorting state
+  const [sortBy, setSortBy] = useState<SortField | ''>('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  const fetchCustomers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (searchQuery) params.set('search', searchQuery);
+      params.set('page', String(currentPage));
+      params.set('limit', String(pageSize));
+      if (sortBy) {
+        params.set('sortBy', sortBy);
+        params.set('sortOrder', sortOrder);
+      }
+      const res = await api<{ data: Customer[]; total: number; page: number; totalPages: number }>(`/customers?${params.toString()}`);
+      setCustomers(res.data || []);
+      setTotalRecords(res.total || 0);
+      setTotalPages(res.totalPages || 0);
+    } catch {
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await api<{ data: { total: number; active: number; inactive: number } }>('/customers/stats');
+      setStats(res.data);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  // Reset to page 1 when search or sort changes
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-700 group-hover:text-gray-900" />;
+    return sortOrder === 'asc'
+      ? <ArrowUp size={12} className="text-indigo-600" />
+      : <ArrowDown size={12} className="text-indigo-600" />;
+  };
+
+  const openPanel = (customer?: Customer) => {
+    if (customer) {
+      setSelectedCustomer(customer);
+      // Map API response names to form fields for AddressFields
+      const mapped = {
+        ...emptyCustomer,
+        ...customer,
+        country: (customer as any).country_name || customer.country || '',
+        state: (customer as any).state_name || customer.state || '',
+        city: (customer as any).city_name || customer.city || '',
+      };
+      setFormData(mapped);
+      setStatusToggle(customer.status === 'Active');
+    } else {
+      setSelectedCustomer(null);
+      setFormData(emptyCustomer);
+      setStatusToggle(true);
+    }
+    setActiveTab('basic');
+    setShowPanel(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name || !formData.phone) return;
+    setSaving(true);
+    try {
+      const payload = { ...formData, status: statusToggle ? 'Active' : 'Inactive' };
+      if (selectedCustomer?.id) {
+        const res = await api(`/customers/${selectedCustomer.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Customer updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+      } else {
+        const res = await api('/customers', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Customer created successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+      }
+      setShowPanel(false);
+      setSearchQuery('');
+      setCurrentPage(1);
+      fetchCustomers();
+      fetchStats();
+    } catch (err) {
+      toast.error('Failed to save customer: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeleteConfirm({ open: true, id });
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
+    try {
+      const res = await api(`/customers/${id}`, { method: 'DELETE' });
+      toast.success(res.message || 'Customer deleted successfully!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      setShowPanel(false);
+      setSearchQuery('');
+      setCurrentPage(1);
+      fetchCustomers();
+      fetchStats();
+    } catch (err) {
+      toast.error('Failed to delete customer: ' + (err as Error).message, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    }
+  };
+
+  const updateField = (field: keyof Customer, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Check if a customer has financial transaction data (credit_limit, gstin, pan)
+  const hasFinancialData = (customer: Customer | null) => {
+    if (!customer) return false;
+    return !!(
+      (customer.credit_limit && customer.credit_limit.trim() !== '') ||
+      (customer.gstin && customer.gstin.trim() !== '') ||
+      (customer.pan && customer.pan.trim() !== '')
+    );
+  };
+
+  // Validation helpers for step-by-step navigation
+  const isBasicInfoComplete = () => {
+    return formData.name && formData.phone;
+  };
+
+  const isAddressComplete = () => {
+    return formData.billing_address && (formData.city || formData.city_id);
+  };
+
+  const canAccessTab = (tab: 'basic' | 'address' | 'financial') => {
+    // When editing, allow access to all tabs
+    if (selectedCustomer) return true;
+    // When adding, restrict tabs step-by-step
+    if (tab === 'basic') return true;
+    if (tab === 'address') return isBasicInfoComplete();
+    if (tab === 'financial') return isBasicInfoComplete() && isAddressComplete();
+    return false;
+  };
+
+  const goToNextTab = () => {
+    if (activeTab === 'basic' && isBasicInfoComplete()) {
+      setActiveTab('address');
+    } else if (activeTab === 'address' && isAddressComplete()) {
+      setActiveTab('financial');
+    }
+  };
+
+  const goToPreviousTab = () => {
+    if (activeTab === 'address') {
+      setActiveTab('basic');
+    } else if (activeTab === 'financial') {
+      setActiveTab('address');
+    }
+  };
+
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-200/50">
+            <Users size={20} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Customer Master</h1>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">Manage your customer database</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100 shadow-sm">
+            <div className="p-1 rounded-md bg-blue-100">
+              <Users size={12} className="text-blue-600" />
+            </div>
+            <span className="text-xs text-blue-600 font-medium">Total:</span>
+            <span className="text-sm font-bold text-blue-800">{stats.total}</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-100 shadow-sm">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs text-emerald-600 font-medium">Active:</span>
+            <span className="text-sm font-bold text-emerald-800">{stats.active}</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-100 shadow-sm">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+            <span className="text-xs text-red-600 font-medium">Inactive:</span>
+            <span className="text-sm font-bold text-red-800">{stats.inactive}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Customer List - Full Width */}
+      <div className="bg-white rounded-xl border border-indigo-100 shadow-sm shadow-indigo-100/50 overflow-hidden ring-1 ring-indigo-50">
+        {/* Toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
+          <div className="flex items-center gap-2 flex-1">
+            <div className="relative flex-1 max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" />
+              <input
+                type="text"
+                placeholder="Search customers..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all bg-white"
+              />
+            </div>
+            <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
+              <Filter size={15} />
+            </button>
+            <ExportMenu
+              onPreview={() => {
+                const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
+                const rows = customers.map(c => [c.code, c.name, c.contact_person, c.phone, c.email, c.city, c.status]);
+                previewPDF({ title: 'Customer Master', subtitle: `Total: ${customers.length} customers`, columns, rows, accentColor: [79, 70, 229] });
+              }}
+              onDownload={() => {
+                const columns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
+                const rows = customers.map(c => [c.code, c.name, c.contact_person, c.phone, c.email, c.city, c.status]);
+                downloadPDF({ title: 'Customer Master', subtitle: `Total: ${customers.length} customers`, columns, rows, accentColor: [79, 70, 229], fileName: 'Customer_Master.pdf' });
+              }}
+              onExcel={() => {
+                exportToExcel({
+                  data: customers,
+                  columns: [
+                    { key: 'code', header: 'Code' },
+                    { key: 'name', header: 'Name' },
+                    { key: 'contact_person', header: 'Contact Person' },
+                    { key: 'phone', header: 'Phone' },
+                    { key: 'email', header: 'Email' },
+                    { key: 'city', header: 'City' },
+                    { key: 'status', header: 'Status' },
+                  ],
+                  fileName: 'Customer_Master',
+                });
+              }}
+            />
+          </div>
+          <button
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-300 transition-all active:scale-95"
+            onClick={() => openPanel()}
+          >
+            <Plus size={14} />
+            Add Customer
+          </button>
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-blue-100/50">
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-indigo-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}>
+                  <span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span>
+                </th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}>
+                  <span className="inline-flex items-center gap-1">Customer Name <SortIcon field="name" /></span>
+                </th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('contact_person')}>
+                  <span className="inline-flex items-center gap-1">Contact Person <SortIcon field="contact_person" /></span>
+                </th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('phone')}>
+                  <span className="inline-flex items-center gap-1">Phone <SortIcon field="phone" /></span>
+                </th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider hidden xl:table-cell cursor-pointer group select-none" onClick={() => handleSort('email')}>
+                  <span className="inline-flex items-center gap-1">Email <SortIcon field="email" /></span>
+                </th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('city')}>
+                  <span className="inline-flex items-center gap-1">City <SortIcon field="city" /></span>
+                </th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('status')}>
+                  <span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span>
+                </th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-rose-500 uppercase tracking-wider w-[90px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {loading ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+              ) : customers.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No customers found</td></tr>
+              ) : customers.map((c, index) => (
+                <tr key={c.id || c.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(c)}>
+                  <td className="py-3 px-4 font-mono text-xs text-indigo-500 font-medium relative">
+                    <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${c.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                    {c.code}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${
+                        ['bg-blue-500', 'bg-violet-500', 'bg-teal-500', 'bg-amber-500', 'bg-rose-500', 'bg-indigo-500', 'bg-cyan-500', 'bg-pink-500', 'bg-emerald-500', 'bg-orange-500'][index % 10]
+                      }`}>
+                        {c.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                      </div>
+                      <span className="font-medium text-gray-900">{c.name}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="text-teal-700 font-medium text-xs flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+                      {c.contact_person}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 hidden lg:table-cell">
+                    <span className="text-blue-600 font-medium text-xs">{c.phone}</span>
+                  </td>
+                  <td className="py-3 px-4 hidden xl:table-cell">
+                    <span className="text-purple-500 text-xs hover:text-purple-700 hover:underline cursor-pointer">{c.email}</span>
+                  </td>
+                  <td className="py-3 px-4 hidden lg:table-cell">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-sky-50 text-sky-700 border border-sky-100">
+                      {c.city}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-sm ${
+                      c.status === 'Active'
+                        ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-gradient-to-r from-red-50 to-orange-50 text-red-600 border border-red-200'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${c.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'}`} />
+                      {c.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openPanel(c); }}
+                        className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-100 transition-all"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); c.id && handleDelete(c.id); }}
+                        disabled={hasFinancialData(c)}
+                        title={hasFinancialData(c) ? 'Cannot delete: customer has financial transaction data' : 'Delete customer'}
+                        className={`p-1.5 rounded-lg transition-all ${hasFinancialData(c) ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-50">
+          {customers.map((c) => (
+            <div key={c.id || c.code} className="p-4 hover:bg-gray-50/50 transition-colors active:bg-gray-100" onClick={() => openPanel(c)}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{c.code}</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      c.status === 'Active'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-red-50 text-red-600'
+                    }`}>
+                      <span className={`w-1 h-1 rounded-full ${c.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                      {c.status}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-900 mt-1.5">{c.name}</p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Users size={11} className="text-gray-400" />
+                      {c.contact_person}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Phone size={11} className="text-gray-400" />
+                      {c.phone}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openPanel(c); }}
+                    className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); c.id && handleDelete(c.id); }}
+                    disabled={hasFinancialData(c)}
+                    title={hasFinancialData(c) ? 'Cannot delete: customer has financial transaction data' : 'Delete customer'}
+                    className={`p-2 rounded-lg transition-all ${hasFinancialData(c) ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-blue-100/50 bg-gradient-to-r from-slate-50 to-blue-50/30">
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-indigo-400 font-medium">
+              Showing {totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} entries
+            </p>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="text-xs border border-indigo-200 rounded-lg px-2 py-1 text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            >
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-indigo-300 border border-transparent hover:border-indigo-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => {
+                if (totalPages <= 5) return true;
+                if (p === 1 || p === totalPages) return true;
+                if (Math.abs(p - currentPage) <= 1) return true;
+                return false;
+              })
+              .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-indigo-400">…</span>
+                ) : (
+                  <button
+                    key={item}
+                    onClick={() => setCurrentPage(item)}
+                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                      currentPage === item
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-200'
+                        : 'hover:bg-white hover:shadow-sm text-indigo-600 border border-transparent hover:border-indigo-200'
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-indigo-300 border border-transparent hover:border-indigo-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Slide-over Panel */}
+      {showPanel && createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center"
+            onClick={() => setShowPanel(false)}
+          >
+            {/* Panel */}
+            <div
+              className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+            {/* Panel Header */}
+            <div className="px-5 py-4 border-b border-blue-100/50 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 shrink-0 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-200/50">
+                    <Building2 size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">
+                      {selectedCustomer ? 'Edit Customer' : 'New Customer'}
+                    </h2>
+                    <p className="text-[11px] text-indigo-500 font-medium mt-0.5">
+                      {selectedCustomer ? selectedCustomer.code : 'Add a new customer record'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPanel(false)}
+                  className="p-2 rounded-lg hover:bg-white/70 text-gray-400 hover:text-gray-600 transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex items-center gap-1 mt-4">
+                {[
+                  { id: 'basic' as const, label: 'Basic Info', icon: <Users size={13} />, color: 'from-blue-500 to-blue-600' },
+                  { id: 'address' as const, label: 'Address', icon: <MapPin size={13} />, color: 'from-violet-500 to-purple-600' },
+                  { id: 'financial' as const, label: 'Financial', icon: <CreditCard size={13} />, color: 'from-emerald-500 to-teal-600' },
+                ].map((tab) => {
+                  const isAccessible = canAccessTab(tab.id);
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => isAccessible && setActiveTab(tab.id)}
+                      disabled={!isAccessible}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all ${
+                        !isAccessible
+                          ? 'opacity-40 cursor-not-allowed text-gray-400'
+                          : activeTab === tab.id
+                          ? `bg-gradient-to-r ${tab.color} text-white shadow-md`
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+                      }`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Panel Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/50">
+              {activeTab === 'basic' && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 size={10} /> Customer Identity
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="Customer Code" required value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                      <Input label="Customer Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <Phone size={10} /> Contact Information
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="Contact Person" value={formData.contact_person || ''} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
+                      <Input label="Phone" required value={formData.phone || ''} placeholder="+91 XXXXX XXXXX" onChange={(e) => updateField('phone', e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="Email" value={formData.email || ''} placeholder="email@domain.com" onChange={(e) => updateField('email', e.target.value)} />
+                      <Input label="Alternate Phone" value={formData.alt_phone || ''} placeholder="Optional" onChange={(e) => updateField('alt_phone', e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 size={10} /> Classification
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Select
+                        label="Customer Category"
+                        options={[
+                          { value: '', label: 'Select category' },
+                          { value: 'export', label: 'Export Customer' },
+                          { value: 'domestic', label: 'Domestic Customer' },
+                          { value: 'wholesale', label: 'Wholesale' },
+                        ]}
+                        value={formData.category || ''}
+                        onChange={(e) => updateField('category', e.target.value)}
+                      />
+                      <Select
+                        label="Currency"
+                        options={[
+                          { value: 'inr', label: 'INR - Indian Rupee' },
+                          { value: 'usd', label: 'USD - US Dollar' },
+                          { value: 'eur', label: 'EUR - Euro' },
+                        ]}
+                        value={formData.currency || 'inr'}
+                        onChange={(e) => updateField('currency', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-50/80 to-sky-50/80 border border-cyan-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-cyan-600 uppercase tracking-wider flex items-center gap-1.5">
+                      📝 Notes & Remarks
+                    </p>
+                    <textarea
+                      rows={3}
+                      value={formData.notes || ''}
+                      onChange={(e) => updateField('notes', e.target.value)}
+                      placeholder="Any additional notes..."
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all resize-none placeholder-gray-400 bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'address' && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 border border-emerald-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin size={10} /> Address & Location
+                    </p>
+                    <AddressFields
+                      value={{
+                        country_id: formData.country_id,
+                        state_id: formData.state_id,
+                        city_id: formData.city_id,
+                        country: formData.country,
+                        city: formData.city,
+                        state: formData.state,
+                        pin_code: formData.pin_code,
+                        billing_address: formData.billing_address,
+                        shipping_address: formData.shipping_address,
+                      }}
+                      onChange={(addr) => setFormData(prev => ({ ...prev, ...addr }))}
+                      showBillingShipping={true}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'financial' && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <CreditCard size={10} /> Tax Details
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="GSTIN" value={formData.gstin || ''} placeholder="e.g. 33AAACA1234A1Z5" onChange={(e) => updateField('gstin', e.target.value)} />
+                      <Input label="PAN" value={formData.pan || ''} placeholder="e.g. AAACA1234A" onChange={(e) => updateField('pan', e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-teal-50/80 to-cyan-50/80 border border-teal-100/50 space-y-3">
+                    <p className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider flex items-center gap-1.5">
+                      <CreditCard size={10} /> Credit & Payment
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Select
+                        label="Payment Terms"
+                        options={[
+                          { value: '15', label: '15 Days' },
+                          { value: '30', label: '30 Days' },
+                          { value: '45', label: '45 Days' },
+                          { value: '60', label: '60 Days' },
+                        ]}
+                        value={formData.payment_terms || '30'}
+                        onChange={(e) => updateField('payment_terms', e.target.value)}
+                      />
+                      <Input label="Credit Limit (₹)" value={formData.credit_limit || ''} placeholder="e.g. 5,00,000" onChange={(e) => updateField('credit_limit', e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200">
+                    <p className="text-xs text-amber-700 font-semibold flex items-center gap-1.5">⚠️ Note</p>
+                    <p className="text-[11px] text-amber-600 mt-1">Credit limit and payment terms will be applied to all new sales orders for this customer.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab Navigation */}
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100">
+                <button
+                  onClick={goToPreviousTab}
+                  disabled={activeTab === 'basic'}
+                  className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  ← Previous
+                </button>
+                {activeTab !== 'financial' && (
+                  <button
+                    onClick={goToNextTab}
+                    disabled={!canAccessTab(activeTab === 'basic' ? 'address' : 'financial')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                      activeTab === 'basic'
+                        ? !isBasicInfoComplete()
+                          ? 'bg-red-100 text-red-600 cursor-not-allowed opacity-50'
+                          : 'bg-blue-500 text-white hover:bg-blue-600'
+                        : !isAddressComplete()
+                        ? 'bg-red-100 text-red-600 cursor-not-allowed opacity-50'
+                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
+                  >
+                    Next →
+                  </button>
+                )}
+              </div>
+
+              {/* Status Toggle */}
+              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                <span className="text-xs font-medium text-gray-700">Status</span>
+                <button
+                  onClick={() => setStatusToggle(!statusToggle)}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${statusToggle ? 'bg-gradient-to-r from-emerald-400 to-teal-500' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${statusToggle ? 'translate-x-5' : ''}`} />
+                </button>
+                <span className={`text-xs font-semibold ${statusToggle ? 'text-emerald-600' : 'text-gray-500'}`}>
+                  {statusToggle ? '● Active' : '○ Inactive'}
+                </span>
+              </div>
+            </div>
+
+            {/* Panel Footer */}
+            <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/30 shrink-0 rounded-b-2xl">
+              <div className="flex items-center justify-between">
+                {selectedCustomer ? (
+                  hasFinancialData(selectedCustomer) ? (
+                    <button disabled title="Cannot delete: customer has financial transaction data" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 border border-gray-200 rounded-lg cursor-not-allowed opacity-60">
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  ) : (
+                    <button onClick={() => selectedCustomer?.id && handleDelete(selectedCustomer.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95">
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  )
+                ) : (
+                  <div />
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all active:scale-95"
+                    onClick={() => setShowPanel(false)}
+                  >
+                    <RotateCcw size={13} /> Cancel
+                  </button>
+                  <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-lg shadow-md shadow-indigo-200 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50">
+                    <Save size={13} /> {saving ? 'Saving...' : selectedCustomer ? 'Update' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        title="Delete Customer"
+        message="Are you sure you want to delete this customer? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm({ open: false, id: null })}
+      />
+    </div>
+  );
+}
