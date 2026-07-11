@@ -31,7 +31,10 @@ export async function getAll({ search, status, warehouse_id, page = 1, limit = 1
     [...params, Number(limit), Number(offset)]
   );
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM material_receipts mr WHERE ${where}`, params
+    `SELECT COUNT(*) AS total FROM material_receipts mr
+     LEFT JOIN suppliers s ON mr.supplier_id = s.id
+     LEFT JOIN warehouses w ON mr.warehouse_id = w.id
+     WHERE ${where}`, params
   );
   return { rows, total };
 }

@@ -5,13 +5,14 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
   required?: boolean;
+  gridCol?: boolean;
   options: { value: string; label: string }[];
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, required, options, className = '', ...props }, ref) => {
+  ({ label, error, required, gridCol, options, className = '', ...props }, ref) => {
     return (
-      <div className="w-full">
+      <div className={`w-full ${gridCol === false ? 'col-span-2' : ''}`}>
         {label && (
           <label className="block text-xs font-medium text-gray-900 mb-1">
             {label}
@@ -26,6 +27,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             } ${className}`}
             {...props}
           >
+            <option value="">Select...</option>
             {options.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
