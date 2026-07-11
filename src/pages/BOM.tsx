@@ -28,6 +28,9 @@ import ExportMenu from '../components/ui/ExportMenu';
 import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import { exportToExcel } from '../lib/excelExport';
 import { useDropdowns } from '../lib/useDropdowns';
+import EmptyState from '../components/ui/EmptyState';
+import SkeletonLoader from '../components/ui/SkeletonLoader';
+import { useDebounce } from '../lib/useDebounce';
 import api from '../lib/api';
 
 interface BOMItemRow {
@@ -88,7 +91,8 @@ export default function BOM() {
   const [boms, setBoms] = useState<BOM[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0 });
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 350);
   const [showPanel, setShowPanel] = useState(false);
   const [selectedBOM, setSelectedBOM] = useState<BOM | null>(null);
   const [formData, setFormData] = useState<BOM>(emptyBOM);
@@ -133,7 +137,7 @@ export default function BOM() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) {
@@ -149,7 +153,7 @@ export default function BOM() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -161,7 +165,7 @@ export default function BOM() {
   useEffect(() => { fetchBOMs(); }, [fetchBOMs]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortBy, sortOrder, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, sortBy, sortOrder, pageSize]);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -224,7 +228,7 @@ export default function BOM() {
         toast.success(res.message || 'BOM created successfully!', { position: 'top-right', autoClose: 3000 });
       }
       setShowPanel(false);
-      setSearchQuery('');
+      setSearchInput('');
       setCurrentPage(1);
       fetchBOMs();
       fetchStats();
@@ -247,7 +251,7 @@ export default function BOM() {
       const res = await api(`/boms/${id}`, { method: 'DELETE' });
       toast.success(res.message || 'BOM deleted successfully!', { position: 'top-right', autoClose: 3000 });
       setShowPanel(false);
-      setSearchQuery('');
+      setSearchInput('');
       setCurrentPage(1);
       fetchBOMs();
       fetchStats();
@@ -428,8 +432,8 @@ export default function BOM() {
               <input
                 type="text"
                 placeholder="Search BOMs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all bg-white"
               />
             </div>
@@ -488,9 +492,9 @@ export default function BOM() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">Loading...</td></tr>
+                <SkeletonLoader rows={5} cols={6} />
               ) : boms.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No BOMs found</td></tr>
+                <tr><td colSpan={8}><EmptyState title="No BOMs found" message="Create a new BOM or adjust your search" actionLabel="New BOM" onAction={() => openPanel()} /></td></tr>
               ) : boms.map((b, index) => (
                 <tr key={b.id || b.code} className={`hover:bg-teal-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(b)}>
                   <td className="py-3 px-4 relative">

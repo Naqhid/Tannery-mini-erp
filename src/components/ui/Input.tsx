@@ -4,12 +4,13 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   required?: boolean;
+  gridCol?: boolean;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, required, className = '', ...props }, ref) => {
+  ({ label, error, required, gridCol, className = '', ...props }, ref) => {
     return (
-      <div className="w-full">
+      <div className={`w-full ${gridCol === false ? 'col-span-2' : ''}`}>
         {label && (
           <label className="block text-xs font-medium text-gray-900 mb-1">
             {label}

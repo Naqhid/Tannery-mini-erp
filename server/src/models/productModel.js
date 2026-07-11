@@ -176,3 +176,73 @@ export async function getDropdown() {
   );
   return rows;
 }
+
+export async function softDelete(id) {
+  const [result] = await pool.query(
+    `UPDATE products SET deleted_at = CURRENT_TIMESTAMP, status = 'Inactive' WHERE id = ? AND deleted_at IS NULL`,
+    [id]
+  );
+  return result.affectedRows > 0;
+}
+
+export async function restore(id) {
+  const [result] = await pool.query(
+    `UPDATE products SET deleted_at = NULL, status = 'Active' WHERE id = ?`,
+    [id]
+  );
+  return result.affectedRows > 0;
+}
+
+export async function bulkSoftDelete(ids) {
+  if (!ids || ids.length === 0) return 0;
+  const placeholders = ids.map(() => '?').join(', ');
+  const [result] = await pool.query(
+    `UPDATE products SET deleted_at = CURRENT_TIMESTAMP, status = 'Inactive' WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+    ids
+  );
+  return result.affectedRows;
+}
+
+export async function bulkUpdateStatus(ids, status) {
+  if (!ids || ids.length === 0) return 0;
+  const placeholders = ids.map(() => '?').join(', ');
+  const [result] = await pool.query(
+    `UPDATE products SET status = ? WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+    [status, ...ids]
+  );
+  return result.affectedRows;
+}
+
+export async function bulkArchive(ids) { return bulkSoftDelete(ids); }
+
+export async function duplicate(id) {
+  const original = await getById(id);
+  if (!original) return null;
+  const newCode = await getNextCode();
+  const data = { ...original, code: newCode, name: `${original.name} (Copy)` };
+  delete data.id; delete data.created_at; delete data.updated_at; delete data.deleted_at;
+  delete data.created_by; delete data.updated_by;
+  // Remove joined field names
+  delete data.category_name; delete data.leather_type_name; delete data.uom_name;
+  delete data.thickness_name; delete data.color_name; delete data.finish_type_name;
+  delete data.grade_name; delete data.hsn_name; delete data.standard_size_name;
+  return create(data, null);
+}
+
+export async function checkDuplicate(data, excludeId = null) {
+  if (!data.name) return null;
+  let query = `SELECT id, code, name FROM products WHERE name = ? AND deleted_at IS NULL`;
+  const values = [data.name];
+  if (excludeId) { query += ' AND id != ?'; values.push(excludeId); }
+  const [rows] = await pool.query(query, values);
+  if (rows.length > 0) return { field: 'name', existing: rows[0] };
+  return null;
+}
+
+export async function getAuditInfo(id) {
+  const [rows] = await pool.query(
+    `SELECT id, code, name, created_by, created_at, updated_by, updated_at, deleted_at FROM products WHERE id = ?`,
+    [id]
+  );
+  return rows[0] || null;
+}

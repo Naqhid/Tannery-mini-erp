@@ -3,16 +3,23 @@ import { validateId, validatePagination } from '../middleware/validators.js';
 import * as ctrl from '../controllers/masterControllers.js';
 
 // Helper to create routes for a master controller
-function createMasterRoutes(controller, path) {
+function createMasterRoutes(controller) {
   const router = Router();
 
   router.get('/', validatePagination, controller.list);
   router.get('/dropdown', controller.dropdown);
   router.get('/stats', controller.stats);
+  router.post('/check-duplicate', controller.checkDuplicate);
+  router.post('/bulk-delete', controller.bulkDelete);
+  router.post('/bulk-status', controller.bulkStatus);
+  router.post('/bulk-archive', controller.bulkArchive);
   router.get('/:id', validateId, controller.getOne);
+  router.get('/:id/audit', validateId, controller.audit);
   router.post('/', controller.create);
+  router.post('/:id/duplicate', validateId, controller.duplicateRecord);
   router.put('/:id', validateId, controller.update);
   router.delete('/:id', validateId, controller.remove);
+  router.post('/:id/restore', validateId, controller.restore);
 
   return router;
 }

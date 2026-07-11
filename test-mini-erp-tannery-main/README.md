@@ -1,2 +1,0 @@
-# tannery-erp-mini
-
