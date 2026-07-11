@@ -58,6 +58,7 @@ interface MasterPageProps {
   filterOptions?: FilterOption[];
   uniqueFields?: string[];
   enableArchive?: boolean;
+  renderForm?: (props: { formData: any; setFormData: (d: any) => void; formErrors: Record<string, string>; selectedItem: any; statusToggle: boolean; setStatusToggle: (v: boolean) => void; setFormDirty: (v: boolean) => void }) => React.ReactNode;
 }
 
 type SortField = string;
@@ -77,6 +78,7 @@ export default function MasterPage({
   pdfAccentColor = [79, 70, 229],
   filterOptions = [],
   enableArchive = true,
+  renderForm,
 }: MasterPageProps) {
   const [data, setData] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 });
@@ -980,6 +982,8 @@ export default function MasterPage({
 
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {renderForm ? renderForm({ formData, setFormData, formErrors, selectedItem, statusToggle, setStatusToggle, setFormDirty }) : (
+              <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {formFields.map((field) => (
                   <div key={field.key} className={field.gridCol === false ? 'col-span-2' : ''}>
@@ -1093,6 +1097,8 @@ export default function MasterPage({
                     </div>
                   )}
                 </div>
+              )}
+              </>
               )}
             </div>
 
