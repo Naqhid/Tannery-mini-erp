@@ -674,8 +674,7 @@ export default function MasterPage({
             aria-label={`Add new ${title}`}
           >
             <Plus size={16} /> Add {title}
-            <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-white/20 rounded font-mono">Ctrl+N</kbd>
-          </button>
+                     </button>
         </div>
 
         {/* Active filter chips */}

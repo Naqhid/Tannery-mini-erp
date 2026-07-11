@@ -1,75 +1,63 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Users } from 'lucide-react';
-import MasterPage from '../components/ui/MasterPage';
-import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
+import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
+import { toast } from 'react-toastify';
 
 export default function UsersPage() {
-  const [roles, setRoles] = useState<{ value: string; label: string }[]>([]);
-  const [companies, setCompanies] = useState<{ value: string; label: string }[]>([]);
-  const [businessUnits, setBusinessUnits] = useState<{ value: string; label: string }[]>([]);
+  const [stats, setStats] = useState({ total: 0, active: 0 });
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [rolesRes, companiesRes, buRes] = await Promise.all([
-          api<{ data: any[] }>('/roles/dropdown'),
-          api<{ data: any[] }>('/companies/dropdown'),
-          api<{ data: any[] }>('/business-units/dropdown'),
-        ]);
-        setRoles((rolesRes.data || []).map((r: any) => ({ value: String(r.id), label: r.name })));
-        setCompanies((companiesRes.data || []).map((c: any) => ({ value: String(c.id), label: c.name })));
-        setBusinessUnits((buRes.data || []).map((b: any) => ({ value: String(b.id), label: b.name })));
-      } catch {}
-    })();
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await api<{ data: any[] }>('/users?limit=1000');
+      const users = res.data || [];
+      setStats({ total: users.length, active: users.filter((u: any) => u.status === 'Active').length });
+    } catch {}
   }, []);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const columns = [
-    { key: 'username', header: 'Username', sortable: true },
-    { key: 'full_name', header: 'Full Name', sortable: true },
-    { key: 'email', header: 'Email', sortable: true },
-    { key: 'status', header: 'Status', sortable: true },
+    { key: 'username', header: 'Username', sortable: true, render: (row: any) => <span className="font-mono text-xs font-medium text-blue-700">{row.username}</span> },
+    { key: 'full_name', header: 'Full Name', sortable: true, render: (row: any) => <span className="font-medium text-gray-900">{row.full_name}</span> },
+    { key: 'email', header: 'Email', sortable: true, render: (row: any) => <span className="text-xs text-gray-600">{row.email}</span> },
+    { key: 'status', header: 'Status', sortable: true, render: (row: any) => (
+      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${row.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />
+        {row.status}
+      </span>
+    )},
   ];
 
-  const formFields = [
-    { key: 'username', label: 'Username', required: true },
-    { key: 'full_name', label: 'Full Name', required: true },
-    { key: 'email', label: 'Email', required: true, validate: 'email' as const },
-    { key: 'password', label: 'Password', required: true },
-    { key: 'role_id', label: 'Role', type: 'select' as const, required: true, options: [{ value: '', label: 'Select role' }, ...roles] },
-    { key: 'company_id', label: 'Company', type: 'select' as const, options: [{ value: '', label: 'Select company' }, ...companies] },
-    { key: 'business_unit_id', label: 'Business Unit', type: 'select' as const, options: [{ value: '', label: 'Select BU' }, ...businessUnits] },
-  ];
-
-  const exportColumns = [
-    { key: 'username', header: 'Username' },
-    { key: 'full_name', header: 'Full Name' },
-    { key: 'email', header: 'Email' },
-    { key: 'status', header: 'Status' },
+  const statCards = [
+    { label: 'Total Users', value: stats.total, color: 'text-blue-900', bg: 'bg-blue-50 border-blue-200', iconColor: 'from-blue-500 to-indigo-600' },
+    { label: 'Active', value: stats.active, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200', iconColor: 'from-emerald-500 to-green-600' },
   ];
 
   const filterOptions = [
     { key: 'status', label: 'Status', options: [{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }] },
   ];
 
+  const handleDelete = async (id: number) => {
+    const res = await api(`/users/${id}`, { method: 'DELETE' });
+    toast.success(res.message || 'User deleted!');
+  };
+
   return (
-    <MasterPage
-      title="User"
+    <TransactionListPage
+      title="Users"
       subtitle="Manage system users and access"
       icon={<Users size={20} className="text-white" />}
       iconColor="from-blue-600 to-indigo-700"
       apiEndpoint="/users"
       columns={columns}
-      formFields={formFields}
-      emptyData={{
-        username: '', full_name: '', email: '', password: '',
-        role_id: '', company_id: '', business_unit_id: '', status: 'Active',
-      }}
-      exportColumns={exportColumns}
-      pdfAccentColor={[37, 99, 235]}
+      statCards={statCards}
       filterOptions={filterOptions}
-      enableArchive={true}
+      addButtonLabel="Add User"
+      onDelete={handleDelete}
+      deleteTitle="Delete User"
+      deleteMessage="Are you sure you want to delete this user?"
+      searchPlaceholder="Search users..."
+      enableBulkDelete={false}
     />
   );
 }

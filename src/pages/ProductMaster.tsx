@@ -1,11 +1,9 @@
 import { Package } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
-import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
 import { useDropdowns } from '../lib/useDropdowns';
 
 export default function ProductMaster() {
-  const { dropdowns } = useDropdowns([
+  const dropdowns = useDropdowns([
     'product-categories', 'leather-types', 'uom', 'thickness',
     'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes',
   ]);
