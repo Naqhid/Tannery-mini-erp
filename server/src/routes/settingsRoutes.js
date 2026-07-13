@@ -5,8 +5,8 @@ import * as authModel from '../models/authModel.js';
 
 const router = Router();
 
-// Users CRUD
-router.get('/users', validatePagination, requireAuth, async (req, res, next) => {
+// Users CRUD (optionalAuth is applied globally in server.js, so req.user is available)
+router.get('/users', validatePagination, async (req, res, next) => {
   try {
     const { search, status, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
@@ -18,7 +18,7 @@ router.get('/users', validatePagination, requireAuth, async (req, res, next) => 
   }
 });
 
-router.get('/users/:id', validateId, requireAuth, async (req, res, next) => {
+router.get('/users/:id', validateId, async (req, res, next) => {
   try {
     const user = await authModel.getUserById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
