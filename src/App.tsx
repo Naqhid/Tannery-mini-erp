@@ -6,10 +6,12 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import SupplierMaster from './pages/SupplierMaster';
+import SupplierMasterForm from './pages/SupplierMasterForm';
 import RecipeCreation from './pages/RecipeCreation';
 import BOM from './pages/BOM';
 import ProductMaster from './pages/ProductMaster';
 import CustomerMaster from './pages/CustomerMaster';
+import CustomerMasterForm from './pages/CustomerMasterForm';
 import PlaceholderPage from './pages/PlaceholderPage';
 // New Master Pages
 import ProductCategory from './pages/ProductCategory';
@@ -73,7 +75,11 @@ function App() {
             <Route path="sales-orders/new" element={<SalesOrderDetail />} />
             <Route path="sales-orders/:id" element={<SalesOrderDetail />} />
             <Route path="customer-master" element={<CustomerMaster />} />
+            <Route path="customer-master/new" element={<CustomerMasterForm />} />
+            <Route path="customer-master/:id" element={<CustomerMasterForm />} />
             <Route path="supplier-master" element={<SupplierMaster />} />
+            <Route path="supplier-master/new" element={<SupplierMasterForm />} />
+            <Route path="supplier-master/:id" element={<SupplierMasterForm />} />
             <Route path="product-master" element={<ProductMaster />} />
             <Route path="chemical-master" element={<MaterialMaster />} />
             {/* New Master Pages */}

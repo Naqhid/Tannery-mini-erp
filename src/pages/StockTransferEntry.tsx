@@ -59,9 +59,9 @@ export default function StockTransferEntry() {
       statCards={statCards}
       filterOptions={filterOptions}
       addButtonLabel="New Transfer"
-      onAdd={() => navigate('/stock-transfers/new')}
-      onRowClick={(row) => navigate(`/stock-transfers/${row.id}`)}
-      onEdit={(row) => navigate(`/stock-transfers/${row.id}`)}
+      onAdd={() => navigate('/stock-transfer/new')}
+      onRowClick={(row) => navigate(`/stock-transfer/${row.id}`)}
+      onEdit={(row) => navigate(`/stock-transfer/${row.id}`)}
       onDelete={handleDelete}
       deleteTitle="Delete Stock Transfer"
       deleteMessage="Are you sure? This will remove the stock transfer entry."

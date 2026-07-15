@@ -60,9 +60,9 @@ export default function MaterialIssueToBatch() {
       statCards={statCards}
       filterOptions={filterOptions}
       addButtonLabel="New Issue"
-      onAdd={() => navigate('/material-issues/new')}
-      onRowClick={(row) => navigate(`/material-issues/${row.id}`)}
-      onEdit={(row) => navigate(`/material-issues/${row.id}`)}
+      onAdd={() => navigate('/material-issue/new')}
+      onRowClick={(row) => navigate(`/material-issue/${row.id}`)}
+      onEdit={(row) => navigate(`/material-issue/${row.id}`)}
       onDelete={handleDelete}
       deleteTitle="Delete Material Issue"
       deleteMessage="Are you sure? This will remove the material issue entry."

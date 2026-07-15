@@ -59,9 +59,9 @@ export default function StockOpeningEntry() {
       statCards={statCards}
       filterOptions={filterOptions}
       addButtonLabel="New Opening Entry"
-      onAdd={() => navigate('/stock-opening/new')}
-      onRowClick={(row) => navigate(`/stock-opening/${row.id}`)}
-      onEdit={(row) => navigate(`/stock-opening/${row.id}`)}
+      onAdd={() => navigate('/stock-opening-entry/new')}
+      onRowClick={(row) => navigate(`/stock-opening-entry/${row.id}`)}
+      onEdit={(row) => navigate(`/stock-opening-entry/${row.id}`)}
       onDelete={handleDelete}
       deleteTitle="Delete Opening Entry"
       deleteMessage="Are you sure? This will remove the opening stock entry."

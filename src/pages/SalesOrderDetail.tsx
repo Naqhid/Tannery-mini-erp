@@ -246,11 +246,11 @@ export default function SalesOrderDetail() {
       if (isNew) {
         const res = await api<any>('/sales-orders', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Sales order created!');
-        navigate(`/sales-orders/${res.data.id}`);
+        navigate('/sales-orders');
       } else {
         const res = await api<any>(`/sales-orders/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success(res.message || 'Sales order updated!');
-        fetchOrder();
+        navigate('/sales-orders');
       }
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { setSaving(false); }
@@ -539,7 +539,7 @@ export default function SalesOrderDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                        {['#', 'Item Code', 'Description', 'Leather Type', 'Finish / Color', 'Thickness', 'UOM', 'Qty', 'Rate (₹)', 'Disc %', 'Amount (₹)', ''].map(h => (
+                        {['#', 'Item Code', 'Description', 'Leather Type', 'Finish / Color', 'Thickness', 'UOM', 'Qty', 'Rate (₹)', 'Discount %', 'Amount (₹)', ''].map(h => (
                           <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -608,8 +608,17 @@ export default function SalesOrderDetail() {
                         <span className="text-sm text-gray-600">Sub Total</span>
                         <span className="text-sm font-semibold text-gray-900">{formatCurrency(order.sub_total)}</span>
                       </div>
+                      {(() => {
+                        const itemDiscount = order.items.reduce((sum, i) => sum + ((i.unit_price * i.quantity * i.discount_percent) / 100), 0);
+                        return itemDiscount > 0 ? (
+                          <div className="flex items-center justify-between py-1">
+                            <span className="text-sm text-gray-600">Item Discount</span>
+                            <span className="text-sm text-rose-600 font-medium">-{formatCurrency(parseFloat(itemDiscount.toFixed(2)))}</span>
+                          </div>
+                        ) : null;
+                      })()}
                       <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-600">Discount</span>
+                        <span className="text-sm text-gray-600">Additional Discount</span>
                         <div className="flex items-center gap-2">
                           <input type="number" value={order.discount} onChange={(e) => updateField('discount', Number(e.target.value))} min={0} className="w-20 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                           <span className="text-xs text-gray-500 w-20 text-right">-{formatCurrency(order.discount)}</span>
@@ -956,7 +965,7 @@ export default function SalesOrderDetail() {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-between bg-gradient-to-r from-gray-50/50 to-slate-50/50">
+        <div className="sticky bottom-0 z-10 border-t border-gray-200 px-6 py-4 flex items-center justify-between bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
           {!isNew && order.order_no ? (
             <div className="flex items-center gap-6 text-xs text-gray-500">
               <div><span className="font-semibold text-gray-600">Created</span><p className="mt-0.5">{order.order_date ? new Date(order.order_date).toLocaleDateString('en-IN') : '—'}</p></div>

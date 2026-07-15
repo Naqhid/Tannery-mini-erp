@@ -59,9 +59,9 @@ export default function MaterialReceiptEntry() {
       statCards={statCards}
       filterOptions={filterOptions}
       addButtonLabel="New Receipt"
-      onAdd={() => navigate('/material-receipts/new')}
-      onRowClick={(row) => navigate(`/material-receipts/${row.id}`)}
-      onEdit={(row) => navigate(`/material-receipts/${row.id}`)}
+      onAdd={() => navigate('/material-receipt/new')}
+      onRowClick={(row) => navigate(`/material-receipt/${row.id}`)}
+      onEdit={(row) => navigate(`/material-receipt/${row.id}`)}
       onDelete={handleDelete}
       deleteTitle="Delete Material Receipt"
       deleteMessage="Are you sure? This will remove the receipt entry."
