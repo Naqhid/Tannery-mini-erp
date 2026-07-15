@@ -209,8 +209,6 @@ export default function StockOpeningEntryDetail() {
           </div>
         </div>
       </div>
-        </div>
-      </div>
 
       {/* Section 1: Entry Details */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
