@@ -58,9 +58,9 @@ export default function WarehouseMaster() {
       statCards={statCards}
       filterOptions={filterOptions}
       addButtonLabel="Add Warehouse"
-      onAdd={() => navigate('/warehouses/new')}
-      onRowClick={(row) => navigate(`/warehouses/${row.id}`)}
-      onEdit={(row) => navigate(`/warehouses/${row.id}`)}
+      onAdd={() => navigate('/warehouse-master/new')}
+      onRowClick={(row) => navigate(`/warehouse-master/${row.id}`)}
+      onEdit={(row) => navigate(`/warehouse-master/${row.id}`)}
       onDelete={handleDelete}
       deleteTitle="Delete Warehouse"
       deleteMessage="Are you sure? This will remove the warehouse and all associated bins."

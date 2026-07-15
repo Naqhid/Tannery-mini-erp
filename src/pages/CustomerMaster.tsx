@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Users } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import AddressFields from '../components/ui/AddressFields';
-import api from '../lib/api';
 
 export default function CustomerMaster() {
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
@@ -105,19 +104,31 @@ export default function CustomerMaster() {
 
         {/* Address Tab */}
         {activeTab === 'address' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-900 mb-1">Billing Address</label>
-              <textarea rows={2} value={formData.billing_address || ''} onChange={(e) => updateField('billing_address', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-900 mb-1">Shipping Address</label>
-              <textarea rows={2} value={formData.shipping_address || ''} onChange={(e) => updateField('shipping_address', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
-            </div>
-            <Input label="City" value={formData.city || ''} onChange={(e) => updateField('city', e.target.value)} />
-            <Input label="State" value={formData.state || ''} onChange={(e) => updateField('state', e.target.value)} />
-            <Input label="Country" value={formData.country || ''} onChange={(e) => updateField('country', e.target.value)} />
-            <Input label="Pin Code" value={formData.pin_code || ''} onChange={(e) => updateField('pin_code', e.target.value)} />
+          <div className="space-y-4">
+            <AddressFields
+              value={{
+                billing_address: formData.billing_address || '',
+                shipping_address: formData.shipping_address || '',
+                country: formData.country || '',
+                state: formData.state || '',
+                city: formData.city || '',
+                pin_code: formData.pin_code || '',
+              }}
+              onChange={(data) => {
+                setFormData((prev: any) => ({
+                  ...prev,
+                  billing_address: data.billing_address || '',
+                  shipping_address: data.shipping_address || '',
+                  country: data.country || '',
+                  state: data.state || '',
+                  city: data.city || '',
+                  pin_code: data.pin_code || '',
+                }));
+                setFormDirty(true);
+              }}
+              showBillingShipping={true}
+              showAddressTextarea={false}
+            />
           </div>
         )}
 

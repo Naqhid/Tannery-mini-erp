@@ -3,6 +3,7 @@ import { Truck } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import AddressFields from '../components/ui/AddressFields';
 
 export default function SupplierMaster() {
   const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'financial'>('basic');
@@ -86,15 +87,30 @@ export default function SupplierMaster() {
         )}
 
         {activeTab === 'address' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-900 mb-1">Address</label>
-              <textarea rows={2} value={formData.address || ''} onChange={(e) => updateField('address', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 resize-none" />
-            </div>
-            <Input label="City" value={formData.city || ''} onChange={(e) => updateField('city', e.target.value)} />
-            <Input label="State" value={formData.state || ''} onChange={(e) => updateField('state', e.target.value)} />
-            <Input label="Country" value={formData.country || ''} onChange={(e) => updateField('country', e.target.value)} />
-            <Input label="Pin Code" value={formData.pincode || ''} onChange={(e) => updateField('pincode', e.target.value)} />
+          <div className="space-y-4">
+            <AddressFields
+              value={{
+                address: formData.address || '',
+                country: formData.country || '',
+                state: formData.state || '',
+                city: formData.city || '',
+                pin_code: formData.pincode || '',
+              }}
+              onChange={(data) => {
+                setFormData((prev: any) => ({
+                  ...prev,
+                  address: data.address || '',
+                  country: data.country || '',
+                  state: data.state || '',
+                  city: data.city || '',
+                  pincode: data.pin_code || '',
+                }));
+                setFormDirty(true);
+              }}
+              showBillingShipping={false}
+              showAddressTextarea={true}
+              addressLabel="Address"
+            />
           </div>
         )}
 
