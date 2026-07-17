@@ -238,7 +238,7 @@ export default function MaterialReceiptEntryDetail() {
           <Input label="Challan / Invoice No." value={receipt.challan_no} onChange={(e) => update('challan_no', e.target.value)} placeholder="INV-4587" />
           <Input label="Challan / Invoice Date" type="date" value={receipt.challan_date} onChange={(e) => update('challan_date', e.target.value)} />
           {/* Row 2 */}
-          <Select label="Purchase Order No." options={[{ value: '', label: 'Select PO' }]} value={receipt.purchase_order_no} onChange={(e) => update('purchase_order_no', e.target.value)} />
+          <Input label="Purchase Order No." value={receipt.purchase_order_no} onChange={(e) => update('purchase_order_no', e.target.value)} placeholder="Enter PO No." />
           <Input label="PO Date" type="date" value={receipt.po_date} onChange={(e) => update('po_date', e.target.value)} />
           <Input label="LR / GRN No." value={receipt.lr_grn_no} onChange={(e) => update('lr_grn_no', e.target.value)} placeholder="LR-7896" />
           <Input label="LR / GRN Date" type="date" value={receipt.lr_grn_date} onChange={(e) => update('lr_grn_date', e.target.value)} />

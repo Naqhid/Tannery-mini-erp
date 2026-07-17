@@ -22,7 +22,8 @@ export async function getAll({ search, status, customer_id, page = 1, limit = 10
        so.customer_po_no, so.order_type, so.payment_terms, so.currency,
        so.sales_person, so.status, so.sub_total, so.discount, so.freight,
        so.tax_percent, so.tax_amount, so.grand_total, so.created_at,
-       c.name AS customer_name, c.code AS customer_code
+       c.name AS customer_name, c.code AS customer_code,
+       COALESCE((SELECT SUM(soi.quantity) FROM sales_order_items soi WHERE soi.sales_order_id = so.id), 0) AS total_quantity
      FROM sales_orders so
      LEFT JOIN customers c ON so.customer_id = c.id
      WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,

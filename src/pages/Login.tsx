@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/authContext';
-import { Lock, User, Eye, EyeOff, LogIn, AlertCircle, Sparkles, Factory, Shield } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, LogIn, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -32,54 +32,41 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-blue-900 via-indigo-900 to-blue-950 flex items-center justify-center p-4">
-      {/* Animated background elements */}
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 flex items-center justify-center p-4">
+      {/* Background pattern */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-indigo-500/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-blue-400/20 to-cyan-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-blue-500/10 to-indigo-600/10 rounded-full blur-3xl" />
+        {/* Large gradient orbs */}
+        <div className="absolute -top-48 -right-48 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-[100px]" />
+        <div className="absolute -bottom-48 -left-48 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-[100px]" />
+        <div className="absolute top-1/4 left-1/3 w-72 h-72 bg-cyan-500/8 rounded-full blur-[80px]" />
 
-        {/* Floating icons */}
-        <div className="absolute top-20 left-20 animate-bounce" style={{ animationDuration: '3s' }}>
-          <Factory size={32} className="text-blue-400/30" />
-        </div>
-        <div className="absolute bottom-32 right-24 animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}>
-          <Sparkles size={28} className="text-cyan-400/30" />
-        </div>
-        <div className="absolute top-1/3 right-32 animate-bounce" style={{ animationDuration: '3.5s', animationDelay: '1s' }}>
-          <Shield size={24} className="text-blue-400/30" />
-        </div>
+        {/* Subtle grid overlay */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
       </div>
 
-      <div className="w-full max-w-md relative z-10">
+      <div className="w-full max-w-[420px] relative z-10">
         {/* Logo and Title */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-28 h-28 rounded-3xl bg-gradient-to-br from-blue-400/20 via-indigo-500/20 to-blue-500/20 backdrop-blur-xl shadow-2xl shadow-blue-900/50 mb-5 p-3 border border-white/10">
-            <div className="w-full h-full rounded-2xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center">
-              <img
-                src={`${import.meta.env.BASE_URL}images/company-logo.png`}
-                alt="Corix"
-                className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                  (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-4xl font-black bg-gradient-to-r from-blue-200 to-indigo-200 bg-clip-text text-transparent">C</span>';
-                }}
-              />
-            </div>
+        <div className="text-center mb-6">
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <svg width="40" height="32" viewBox="0 0 40 32" fill="none" className="text-white">
+              <path d="M0 16L10 0L20 16L10 32L0 16Z" fill="currentColor"/>
+              <path d="M12 16L22 0L32 16L22 32L12 16Z" fill="currentColor" opacity="0.7"/>
+            </svg>
+            <span className="text-2xl font-bold text-white tracking-wide">AKM LEATHER</span>
           </div>
-          <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-200 via-indigo-200 to-cyan-200 mb-2 tracking-tight">Corix</h1>
-          <p className="text-blue-300/70 text-sm font-semibold tracking-[0.2em] uppercase">Tannery Management System</p>
+          <h1 className="text-3xl font-black text-white mb-1.5 tracking-tight">Corix</h1>
+          <p className="text-blue-300/60 text-xs font-semibold tracking-[0.25em] uppercase">Tannery Management System</p>
         </div>
 
-        {/* Login Form */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl border border-white/10 ring-1 ring-white/5">
-          <div className="text-center mb-6">
-            <h2 className="text-xl font-bold text-white mb-1">Welcome Back</h2>
-            <p className="text-blue-300/60 text-xs">Sign in to continue to your dashboard</p>
+        {/* Login Card */}
+        <div className="bg-white/[0.07] backdrop-blur-xl rounded-2xl p-8 shadow-2xl shadow-black/20 border border-white/[0.08]">
+          <div className="text-center mb-7">
+            <h2 className="text-lg font-bold text-white">Welcome Back</h2>
+            <p className="text-blue-300/50 text-xs mt-1">Sign in to continue to your dashboard</p>
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-300 text-sm backdrop-blur-sm">
+            <div className="mb-5 p-3.5 bg-red-500/15 border border-red-400/20 rounded-xl flex items-center gap-2.5 text-red-300 text-sm">
               <AlertCircle size={16} className="shrink-0" />
               {error}
             </div>
@@ -87,91 +74,84 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-blue-200/80 mb-2 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-blue-200/70 mb-2 uppercase tracking-wider">
                 Username
               </label>
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                <div className="relative flex items-center">
-                  <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400/60 group-focus-within:text-blue-300 transition-colors" />
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-blue-300/40 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all backdrop-blur-sm"
-                    placeholder="Enter your username"
-                    required
-                    autoFocus
-                  />
-                </div>
+                <User size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400/50 group-focus-within:text-blue-300 transition-colors z-10" />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-blue-300/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
+                  placeholder="Enter your username"
+                  required
+                  autoFocus
+                />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-blue-200/80 mb-2 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-blue-200/70 mb-2 uppercase tracking-wider">
                 Password
               </label>
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                <div className="relative flex items-center">
-                  <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400/60 group-focus-within:text-blue-300 transition-colors" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-blue-300/40 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all backdrop-blur-sm"
-                    placeholder="Enter your password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400/60 hover:text-blue-300 transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
+                <Lock size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400/50 group-focus-within:text-blue-300 transition-colors z-10" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-11 pr-12 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-blue-300/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
+                  placeholder="Enter your password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400/50 hover:text-blue-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 px-6 relative overflow-hidden bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 hover:from-blue-400 hover:via-indigo-400 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group/btn"
+              className="w-full py-3.5 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-900/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-7"
             >
-              <span className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover/btn:opacity-100 transition-opacity" />
               {loading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="w-4.5 h-4.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   <span>Signing in...</span>
                 </>
               ) : (
                 <>
-                  <LogIn size={18} className="group-hover/btn:translate-x-0.5 transition-transform" />
+                  <LogIn size={17} />
                   <span>Sign In</span>
                 </>
               )}
             </button>
           </form>
 
-          {/* Default credentials hint */}
-          <div className="mt-6 p-4 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-xl backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles size={12} className="text-blue-400" />
-              <p className="text-xs font-semibold text-blue-200">Demo Credentials</p>
+          {/* Demo credentials */}
+          <div className="mt-6 p-3.5 bg-blue-500/[0.08] border border-blue-400/10 rounded-xl">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Sparkles size={11} className="text-blue-400/70" />
+              <p className="text-[11px] font-semibold text-blue-300/70 uppercase tracking-wide">Demo Credentials</p>
             </div>
-            <p className="text-xs text-blue-300/60 ml-5">
-              <span className="font-mono font-bold text-blue-300">admin</span>
-              <span className="mx-1.5">/</span>
-              <span className="font-mono font-bold text-blue-300">admin@123</span>
+            <p className="text-xs text-blue-300/50 ml-[18px]">
+              <span className="font-mono font-bold text-blue-200/80">admin</span>
+              <span className="mx-1.5 text-blue-400/30">/</span>
+              <span className="font-mono font-bold text-blue-200/80">admin@123</span>
             </p>
           </div>
         </div>
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-blue-400/40 text-xs font-medium">
-            © 2024 Corix Tannery Solutions. All rights reserved.
+          <p className="text-blue-400/30 text-[11px] font-medium">
+            © 2026 Corix Tannery Solutions. All rights reserved.
           </p>
         </div>
       </div>
