@@ -295,14 +295,6 @@ export default function WarehouseMasterForm() {
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">{form.code || 'Auto-generated code'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/warehouse-master')} className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
-            <X size={14} /> Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
-            <Save size={14} /> {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
       </div>
 
       {/* Section 1: Basic Information */}
@@ -608,6 +600,16 @@ export default function WarehouseMasterForm() {
             <p className="text-sm text-gray-400">Save the warehouse first to upload documents.</p>
           </div>
         )}
+      </div>
+
+      {/* Sticky Bottom Bar */}
+      <div className="sticky bottom-0 z-10 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] rounded-2xl p-4 flex items-center justify-end gap-3">
+        <button onClick={() => navigate('/warehouse-master')} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+          <X size={14} /> Cancel
+        </button>
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+          <Save size={14} /> {saving ? 'Saving...' : 'Save'}
+        </button>
       </div>
     </div>
   );

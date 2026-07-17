@@ -10,9 +10,8 @@ export default function Grade() {
   ];
 
   const formFields = [
-    { key: 'code', label: 'Code', required: false },
-    { key: 'name', label: 'Name', required: true },
-    { key: 'rank', label: 'Rank', type: 'text' as const, placeholder: '1-4' },
+    { key: 'name', label: 'Grade Name', required: true },
+    { key: 'rank', label: 'Ranking', type: 'text' as const, placeholder: '1-4' },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
   ];
 

@@ -79,17 +79,17 @@ const menuItems: MenuItem[] = [
   { label: 'Inventory', icon: <Package size={20} />, children: [
       { label: 'Stock Opening Entry', icon: <PackageOpen size={16} />, path: '/stock-opening-entry' },
       { label: 'Material Receipt Entry', icon: <Truck size={16} />, path: '/material-receipt' },
+      { label: 'Physical Stock Entry', icon: <ClipboardList size={16} />, path: '/physical-stock-entry' },
       { label: 'Stock Transfer Entry', icon: <ArrowLeftRight size={16} />, path: '/stock-transfer' },
       { label: 'Material Issue to Production', icon: <Factory size={16} />, path: '/material-issue' },
-      { label: 'Stock Overview', icon: <Box size={16} />, path: '/inventory' },
-      { label: 'Stock In', icon: <Package size={16} />, path: '/stock-in' },
-      { label: 'Stock Out', icon: <Package size={16} />, path: '/stock-out' },
     ],
   },
   { label: 'Production', icon: <Factory size={20} />, children: [
-      { label: 'Production Orders', icon: <ClipboardList size={16} />, path: '/production' },
-      { label: 'Work Orders', icon: <ListChecks size={16} />, path: '/work-orders' },
-      { label: 'Batch Tracking', icon: <Layers size={16} />, path: '/batch-tracking' },
+      { label: 'Production Plan', icon: <ClipboardList size={16} />, path: '/production-plan' },
+      { label: 'Batch Creation', icon: <ListChecks size={16} />, path: '/production-plan/new' },
+      { label: 'Material Issue', icon: <Factory size={16} />, path: '/material-issue' },
+      { label: 'Batch Process', icon: <Layers size={16} />, path: '/batch-process' },
+      { label: 'Batch Completion', icon: <ListChecks size={16} />, path: '/batch-completion' },
     ],
   },
   { label: 'Reports', icon: <FileBarChart size={20} />, children: [

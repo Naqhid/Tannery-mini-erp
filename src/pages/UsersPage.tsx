@@ -1,11 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Users } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Users, X } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
 
+interface UserForm {
+  username: string;
+  password: string;
+  confirm_password: string;
+  full_name: string;
+  email: string;
+  status: string;
+}
+
+const emptyForm: UserForm = { username: '', password: '', confirm_password: '', full_name: '', email: '', status: 'Active' };
+
 export default function UsersPage() {
   const [stats, setStats] = useState({ total: 0, active: 0 });
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -14,7 +31,62 @@ export default function UsersPage() {
       setStats({ total: users.length, active: users.filter((u: any) => u.status === 'Active').length });
     } catch {}
   }, []);
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { fetchStats(); }, [fetchStats, refreshKey]);
+
+  const openAdd = () => {
+    setEditingUser(null);
+    setForm(emptyForm);
+    setShowModal(true);
+  };
+
+  const openEdit = (row: any) => {
+    setEditingUser(row);
+    setForm({
+      username: row.username || '',
+      password: '',
+      confirm_password: '',
+      full_name: row.full_name || '',
+      email: row.email || '',
+      status: row.status || 'Active',
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.username.trim() || !form.full_name.trim()) {
+      toast.error('Username and Full Name are required');
+      return;
+    }
+    if (!editingUser && !form.password.trim()) {
+      toast.error('Password is required for new users');
+      return;
+    }
+    if (form.password && form.password !== form.confirm_password) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editingUser) {
+        const body: any = { ...form };
+        delete body.confirm_password;
+        if (!body.password) delete body.password;
+        await api(`/users/${editingUser.id}`, { method: 'PUT', body: JSON.stringify(body) });
+        toast.success('User updated successfully!');
+      } else {
+        const { confirm_password, ...payload } = form;
+        await api('/users', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success('User created successfully!');
+      }
+      setShowModal(false);
+      setRefreshKey(k => k + 1);
+      fetchStats();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save user');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const columns = [
     { key: 'username', header: 'Username', sortable: true, render: (row: any) => <span className="font-mono text-xs font-medium text-blue-700">{row.username}</span> },
@@ -40,24 +112,119 @@ export default function UsersPage() {
   const handleDelete = async (id: number) => {
     const res = await api(`/users/${id}`, { method: 'DELETE' });
     toast.success(res.message || 'User deleted!');
+    fetchStats();
   };
 
   return (
-    <TransactionListPage
-      title="Users"
-      subtitle="Manage system users and access"
-      icon={<Users size={20} className="text-white" />}
-      iconColor="from-blue-600 to-indigo-700"
-      apiEndpoint="/users"
-      columns={columns}
-      statCards={statCards}
-      filterOptions={filterOptions}
-      addButtonLabel="Add User"
-      onDelete={handleDelete}
-      deleteTitle="Delete User"
-      deleteMessage="Are you sure you want to delete this user?"
-      searchPlaceholder="Search users..."
-      enableBulkDelete={false}
-    />
+    <>
+      <TransactionListPage
+        key={refreshKey}
+        title="Users"
+        subtitle="Manage system users and access"
+        icon={<Users size={20} className="text-white" />}
+        iconColor="from-blue-600 to-indigo-700"
+        apiEndpoint="/users"
+        columns={columns}
+        statCards={statCards}
+        filterOptions={filterOptions}
+        addButtonLabel="Add User"
+        onAdd={openAdd}
+        onEdit={openEdit}
+        onDelete={handleDelete}
+        deleteTitle="Delete User"
+        deleteMessage="Are you sure you want to delete this user?"
+        searchPlaceholder="Search users..."
+        enableBulkDelete={false}
+      />
+
+      {/* Add/Edit User Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div ref={modalRef} className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <h2 className="text-lg font-bold text-gray-900">{editingUser ? 'Edit User' : 'Add User'}</h2>
+              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 transition-all">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Username <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={form.username}
+                  onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                  placeholder="Enter username"
+                  disabled={!!editingUser}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={form.full_name}
+                  onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                  placeholder="Enter full name"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                  placeholder="Enter email"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Password {!editingUser && <span className="text-red-500">*</span>}</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                  placeholder={editingUser ? 'Leave blank to keep current' : 'Enter password'}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Confirm Password {!editingUser && <span className="text-red-500">*</span>}</label>
+                <input
+                  type="password"
+                  value={form.confirm_password}
+                  onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 ${form.password && form.confirm_password && form.password !== form.confirm_password ? 'border-red-300 bg-red-50/30' : 'border-gray-200'}`}
+                  placeholder="Re-enter password"
+                />
+                {form.password && form.confirm_password && form.password !== form.confirm_password && (
+                  <p className="mt-1 text-xs text-red-500">Passwords do not match</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
+                <select
+                  value={form.status}
+                  onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all">
+                Cancel
+              </button>
+              <button onClick={handleSave} disabled={saving} className="px-5 py-2 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-700 rounded-lg shadow hover:shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:pointer-events-none">
+                {saving ? 'Saving...' : editingUser ? 'Update User' : 'Create User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import {
   Plus, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown,
-  ChevronsUpDown, RefreshCw, X, Trash2, CheckSquare, Filter,
+  ChevronsUpDown, RefreshCw, X, Trash2, CheckSquare, Filter, Edit2,
 } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
 import EmptyState from './EmptyState';
@@ -369,7 +369,7 @@ export default function TransactionListPage({
                     <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                       {rowActions ? rowActions(row) : (
                         <div className="flex items-center gap-1">
-                          {onEdit && <button onClick={() => onEdit(row)} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all" aria-label="Edit"><Search size={14} /></button>}
+                          {onEdit && <button onClick={() => onEdit(row)} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all" aria-label="Edit"><Edit2 size={14} /></button>}
                           {onDelete && <button onClick={() => setDeleteConfirm({ open: true, id: row.id })} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all" aria-label="Delete"><Trash2 size={14} /></button>}
                         </div>
                       )}

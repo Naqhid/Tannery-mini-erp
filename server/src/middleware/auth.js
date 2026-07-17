@@ -50,6 +50,8 @@ export function authMiddleware(req, res, next) {
 }
 
 export function requireAuth(req, res, next) {
+  // If optionalAuth already verified the user, skip re-verification
+  if (req.user) return next();
   return authMiddleware(req, res, next);
 }
 

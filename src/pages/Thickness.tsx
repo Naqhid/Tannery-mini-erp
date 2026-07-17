@@ -10,8 +10,7 @@ export default function Thickness() {
   ];
 
   const formFields = [
-    { key: 'code', label: 'Code', required: false },
-    { key: 'name', label: 'Name', required: true },
+    { key: 'name', label: 'Thickness Name', required: true },
     { key: 'value_mm', label: 'Value (mm)', type: 'text' as const, placeholder: 'e.g. 1.2' },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
   ];

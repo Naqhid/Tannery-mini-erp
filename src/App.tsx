@@ -6,10 +6,12 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import SupplierMaster from './pages/SupplierMaster';
+import SupplierMasterForm from './pages/SupplierMasterForm';
 import RecipeCreation from './pages/RecipeCreation';
 import BOM from './pages/BOM';
 import ProductMaster from './pages/ProductMaster';
 import CustomerMaster from './pages/CustomerMaster';
+import CustomerMasterForm from './pages/CustomerMasterForm';
 import PlaceholderPage from './pages/PlaceholderPage';
 // New Master Pages
 import ProductCategory from './pages/ProductCategory';
@@ -43,6 +45,9 @@ import StockTransferEntry from './pages/StockTransferEntry';
 import StockTransferEntryDetail from './pages/StockTransferEntryDetail';
 import MaterialIssueToBatch from './pages/MaterialIssueToBatch';
 import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
+// Production Plan Pages
+import ProductionPlan from './pages/ProductionPlan';
+import ProductionPlanDetail from './pages/ProductionPlanDetail';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -73,7 +78,11 @@ function App() {
             <Route path="sales-orders/new" element={<SalesOrderDetail />} />
             <Route path="sales-orders/:id" element={<SalesOrderDetail />} />
             <Route path="customer-master" element={<CustomerMaster />} />
+            <Route path="customer-master/new" element={<CustomerMasterForm />} />
+            <Route path="customer-master/:id" element={<CustomerMasterForm />} />
             <Route path="supplier-master" element={<SupplierMaster />} />
+            <Route path="supplier-master/new" element={<SupplierMasterForm />} />
+            <Route path="supplier-master/:id" element={<SupplierMasterForm />} />
             <Route path="product-master" element={<ProductMaster />} />
             <Route path="chemical-master" element={<MaterialMaster />} />
             {/* New Master Pages */}
@@ -93,6 +102,7 @@ function App() {
             <Route path="recipe-creation" element={<RecipeCreation />} />
             <Route path="bom-revision" element={<PlaceholderPage />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
+            <Route path="physical-stock-entry" element={<PlaceholderPage />} />
             {/* Inventory */}
             <Route path="warehouse-master" element={<WarehouseMaster />} />
             <Route path="warehouse-master/new" element={<WarehouseMasterForm />} />
@@ -109,13 +119,12 @@ function App() {
             <Route path="material-issue" element={<MaterialIssueToBatch />} />
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
-            <Route path="inventory" element={<PlaceholderPage />} />
-            <Route path="stock-in" element={<PlaceholderPage />} />
-            <Route path="stock-out" element={<PlaceholderPage />} />
             {/* Production */}
-            <Route path="production" element={<PlaceholderPage />} />
-            <Route path="work-orders" element={<PlaceholderPage />} />
-            <Route path="batch-tracking" element={<PlaceholderPage />} />
+            <Route path="production-plan" element={<ProductionPlan />} />
+            <Route path="production-plan/new" element={<ProductionPlanDetail />} />
+            <Route path="production-plan/:id" element={<ProductionPlanDetail />} />
+            <Route path="batch-process" element={<PlaceholderPage />} />
+            <Route path="batch-completion" element={<PlaceholderPage />} />
             {/* Reports */}
             <Route path="reports" element={<PlaceholderPage />} />
             <Route path="inventory-reports" element={<PlaceholderPage />} />
