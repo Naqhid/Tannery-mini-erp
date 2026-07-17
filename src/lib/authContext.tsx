@@ -7,6 +7,8 @@ interface User {
   full_name: string;
   email: string;
   role_id: number;
+  role_code: string | null;
+  access_level: 'read_write' | 'read_only';
   company_id: number;
   business_unit_id: number;
 }

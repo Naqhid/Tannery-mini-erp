@@ -134,18 +134,7 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 p-3.5 bg-blue-500/[0.08] border border-blue-400/10 rounded-xl">
-            <div className="flex items-center gap-2 mb-1.5">
-              <Sparkles size={11} className="text-blue-400/70" />
-              <p className="text-[11px] font-semibold text-blue-300/70 uppercase tracking-wide">Demo Credentials</p>
-            </div>
-            <p className="text-xs text-blue-300/50 ml-[18px]">
-              <span className="font-mono font-bold text-blue-200/80">admin</span>
-              <span className="mx-1.5 text-blue-400/30">/</span>
-              <span className="font-mono font-bold text-blue-200/80">admin@123</span>
-            </p>
-          </div>
+         
         </div>
 
         {/* Footer */}

@@ -31,6 +31,7 @@ import { useDropdowns } from '../lib/useDropdowns';
 import EmptyState from '../components/ui/EmptyState';
 import SkeletonLoader from '../components/ui/SkeletonLoader';
 import { useDebounce } from '../lib/useDebounce';
+import { usePermission } from '../lib/usePermission';
 import api from '../lib/api';
 
 interface BOMItemRow {
@@ -88,6 +89,7 @@ const emptyBOM: BOM = {
 };
 
 export default function BOM() {
+  const { canWrite, isReadOnly } = usePermission();
   const [boms, setBoms] = useState<BOM[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0 });
   const [loading, setLoading] = useState(true);
@@ -468,8 +470,10 @@ export default function BOM() {
             />
           </div>
           <button
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md shadow-teal-200 hover:shadow-lg hover:shadow-teal-300 transition-all active:scale-95"
-            onClick={() => openPanel()}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'shadow-teal-200 hover:shadow-lg hover:shadow-teal-300 active:scale-95'}`}
+            onClick={canWrite ? () => openPanel() : undefined}
+            disabled={isReadOnly}
+            title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
           >
             <Plus size={14} />
             Add BOM
@@ -532,8 +536,8 @@ export default function BOM() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1">
-                      <button onClick={(e) => { e.stopPropagation(); openPanel(b); }} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-100 transition-all"><Edit2 size={14} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); b.id && handleDelete(b.id); }} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-all"><Trash2 size={14} /></button>
+                      <button onClick={canWrite ? (e) => { e.stopPropagation(); openPanel(b); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-100'}`}><Edit2 size={14} /></button>
+                      <button onClick={canWrite ? (e) => { e.stopPropagation(); b.id && handleDelete(b.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -565,8 +569,8 @@ export default function BOM() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={(e) => { e.stopPropagation(); openPanel(b); }} className="p-2 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"><Edit2 size={14} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); b.id && handleDelete(b.id); }} className="p-2 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={14} /></button>
+                  <button onClick={canWrite ? (e) => { e.stopPropagation(); openPanel(b); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}><Edit2 size={14} /></button>
+                  <button onClick={canWrite ? (e) => { e.stopPropagation(); b.id && handleDelete(b.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50'}`}><Trash2 size={14} /></button>
                 </div>
               </div>
             </div>
@@ -737,7 +741,7 @@ export default function BOM() {
                   ) : <div />}
                   <div className="flex items-center gap-2">
                     <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all active:scale-95" onClick={() => setShowPanel(false)}><RotateCcw size={13} /> Cancel</button>
-                    <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md shadow-teal-200 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50"><Save size={13} /> {saving ? 'Saving...' : selectedBOM ? 'Update' : 'Save BOM'}</button>
+                    <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly} title={isReadOnly ? 'You have read-only access' : undefined} className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'shadow-teal-200 hover:shadow-lg active:scale-95'}`}><Save size={13} /> {saving ? 'Saving...' : selectedBOM ? 'Update' : 'Save BOM'}</button>
                   </div>
                 </div>
               </div>

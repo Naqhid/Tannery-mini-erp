@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Factory, RotateCcw, Printer, Package, Layers, ClipboardList, TrendingDown, BarChart3 } from 'lucide-react';
 import api from '../lib/api';
+import { usePermission } from '../lib/usePermission';
 
 interface Customer { id: number; name: string; }
 interface SalesOrder { id: number; order_no: string; customer_id?: number; customer_name?: string; }
@@ -57,6 +58,7 @@ export default function ProductionPlanDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = !id || id === 'new';
+  const { canWrite, isReadOnly } = usePermission();
 
   const [plan, setPlan] = useState<PlanData>(emptyPlan);
   const [stages, setStages] = useState<StageItem[]>([]);
@@ -287,9 +289,10 @@ export default function ProductionPlanDetail() {
               Clear
             </button>
             <button
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
+              onClick={canWrite ? handleSave : undefined}
+              disabled={saving || isReadOnly}
+              title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'hover:bg-blue-700'}`}
             >
               <Save size={13} /> {saving ? 'Saving...' : 'Save'}
             </button>

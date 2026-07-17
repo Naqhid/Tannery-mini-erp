@@ -91,7 +91,7 @@ export const machineModel = createMasterModel(
 export const roleModel = createMasterModel(
   'roles',
   'ROLE',
-  ['id', 'code', 'name', 'description', 'status', 'created_at', 'updated_at'],
+  ['id', 'code', 'name', 'description', 'access_level', 'status', 'created_at', 'updated_at'],
   ['name', 'code'],
   { uniqueFields: [{ fields: ['name'] }] }
 );

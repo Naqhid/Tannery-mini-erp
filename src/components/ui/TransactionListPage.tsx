@@ -8,6 +8,7 @@ import ConfirmDialog from './ConfirmDialog';
 import EmptyState from './EmptyState';
 import SkeletonLoader from './SkeletonLoader';
 import { useDebounce } from '../../lib/useDebounce';
+import { usePermission } from '../../lib/usePermission';
 import api from '../../lib/api';
 
 interface Column {
@@ -74,6 +75,7 @@ export default function TransactionListPage({
   rowActions,
   formatRow,
 }: TransactionListPageProps) {
+  const { canWrite, isReadOnly } = usePermission();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
@@ -216,7 +218,13 @@ export default function TransactionListPage({
             <RefreshCw size={16} />
           </button>
           {onAdd && (
-            <button onClick={onAdd} className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r ${iconColor} rounded-xl shadow-lg hover:shadow-xl hover:scale-105 transition-all active:scale-95`} aria-label={addButtonLabel}>
+            <button
+              onClick={canWrite ? onAdd : undefined}
+              disabled={isReadOnly}
+              title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
+              className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r ${iconColor} rounded-xl shadow-lg transition-all active:scale-95 ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-xl hover:scale-105'}`}
+              aria-label={addButtonLabel}
+            >
               <Plus size={14} /> {addButtonLabel}
             </button>
           )}
@@ -244,7 +252,12 @@ export default function TransactionListPage({
           <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 hover:underline ml-2">Clear</button>
           <div className="ml-auto flex items-center gap-2">
             {enableBulkDelete && (
-              <button onClick={handleBulkDelete} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-lg hover:bg-rose-600 transition-all">
+              <button
+                onClick={canWrite ? handleBulkDelete : undefined}
+                disabled={isReadOnly}
+                title={isReadOnly ? 'You have read-only access' : undefined}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-lg transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-rose-600'}`}
+              >
                 <Trash2 size={13} /> Delete Selected
               </button>
             )}
@@ -369,8 +382,28 @@ export default function TransactionListPage({
                     <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                       {rowActions ? rowActions(row) : (
                         <div className="flex items-center gap-1">
-                          {onEdit && <button onClick={() => onEdit(row)} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all" aria-label="Edit"><Edit2 size={14} /></button>}
-                          {onDelete && <button onClick={() => setDeleteConfirm({ open: true, id: row.id })} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all" aria-label="Delete"><Trash2 size={14} /></button>}
+                          {onEdit && (
+                            <button
+                              onClick={canWrite ? () => onEdit(row) : undefined}
+                              disabled={isReadOnly}
+                              title={isReadOnly ? 'Read-only access' : 'Edit'}
+                              className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                              aria-label="Edit"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                          {onDelete && (
+                            <button
+                              onClick={canWrite ? () => setDeleteConfirm({ open: true, id: row.id }) : undefined}
+                              disabled={isReadOnly}
+                              title={isReadOnly ? 'Read-only access' : 'Delete'}
+                              className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50'}`}
+                              aria-label="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>

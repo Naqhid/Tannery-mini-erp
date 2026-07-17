@@ -10,10 +10,17 @@ interface UserForm {
   confirm_password: string;
   full_name: string;
   email: string;
+  role_id: string;
   status: string;
 }
 
-const emptyForm: UserForm = { username: '', password: '', confirm_password: '', full_name: '', email: '', status: 'Active' };
+interface Role {
+  id: number;
+  code: string;
+  name: string;
+}
+
+const emptyForm: UserForm = { username: '', password: '', confirm_password: '', full_name: '', email: '', role_id: '', status: 'Active' };
 
 export default function UsersPage() {
   const [stats, setStats] = useState({ total: 0, active: 0 });
@@ -22,6 +29,7 @@ export default function UsersPage() {
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [roles, setRoles] = useState<Role[]>([]);
   const modalRef = useRef<HTMLDivElement>(null);
 
   const fetchStats = useCallback(async () => {
@@ -31,7 +39,15 @@ export default function UsersPage() {
       setStats({ total: users.length, active: users.filter((u: any) => u.status === 'Active').length });
     } catch {}
   }, []);
-  useEffect(() => { fetchStats(); }, [fetchStats, refreshKey]);
+
+  const fetchRoles = useCallback(async () => {
+    try {
+      const res = await api<{ data: Role[] }>('/roles/dropdown');
+      setRoles(res.data || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchStats(); fetchRoles(); }, [fetchStats, fetchRoles, refreshKey]);
 
   const openAdd = () => {
     setEditingUser(null);
@@ -47,6 +63,7 @@ export default function UsersPage() {
       confirm_password: '',
       full_name: row.full_name || '',
       email: row.email || '',
+      role_id: String(row.role_id || ''),
       status: row.status || 'Active',
     });
     setShowModal(true);
@@ -68,13 +85,14 @@ export default function UsersPage() {
     setSaving(true);
     try {
       if (editingUser) {
-        const body: any = { ...form };
+        const body: any = { ...form, role_id: form.role_id ? Number(form.role_id) : null };
         delete body.confirm_password;
         if (!body.password) delete body.password;
         await api(`/users/${editingUser.id}`, { method: 'PUT', body: JSON.stringify(body) });
         toast.success('User updated successfully!');
       } else {
-        const { confirm_password, ...payload } = form;
+        const { confirm_password, ...rest } = form;
+        const payload = { ...rest, role_id: form.role_id ? Number(form.role_id) : null };
         await api('/users', { method: 'POST', body: JSON.stringify(payload) });
         toast.success('User created successfully!');
       }
@@ -140,14 +158,14 @@ export default function UsersPage() {
       {/* Add/Edit User Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div ref={modalRef} className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+          <div ref={modalRef} className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
               <h2 className="text-lg font-bold text-gray-900">{editingUser ? 'Edit User' : 'Add User'}</h2>
               <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 transition-all">
                 <X size={18} />
               </button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Username <span className="text-red-500">*</span></label>
                 <input
@@ -178,6 +196,19 @@ export default function UsersPage() {
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                   placeholder="Enter email"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Role</label>
+                <select
+                  value={form.role_id}
+                  onChange={e => setForm(f => ({ ...f, role_id: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                >
+                  <option value="">Select Role</option>
+                  {roles.map(r => (
+                    <option key={r.id} value={String(r.id)}>{r.name} ({r.code})</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Password {!editingUser && <span className="text-red-500">*</span>}</label>

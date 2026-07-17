@@ -17,6 +17,7 @@ import { exportToExcel } from '../../lib/excelExport';
 import { previewPDF, downloadPDF } from '../../lib/pdfExport';
 import { useDebounce } from '../../lib/useDebounce';
 import { validateField } from '../../lib/validators';
+import { usePermission } from '../../lib/usePermission';
 import api from '../../lib/api';
 
 interface Column {
@@ -80,6 +81,7 @@ export default function MasterPage({
   enableArchive = true,
   renderForm,
 }: MasterPageProps) {
+  const { canWrite, isReadOnly } = usePermission();
   const [data, setData] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 });
   const [loading, setLoading] = useState(true);
@@ -669,8 +671,10 @@ export default function MasterPage({
             </div>
           </div>
           <button
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95"
-            onClick={() => openPanel()}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg active:scale-95'}`}
+            onClick={canWrite ? () => openPanel() : undefined}
+            disabled={isReadOnly}
+            title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : `Add new ${title}`}
             aria-label={`Add new ${title}`}
           >
             <Plus size={16} /> Add {title}
@@ -801,28 +805,53 @@ export default function MasterPage({
                     ))}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); openPanel(row); }} className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-100 transition-all" aria-label={`Edit ${title}`} title="Edit">
+                        <button
+                          onClick={canWrite ? (e) => { e.stopPropagation(); openPanel(row); } : undefined}
+                          disabled={isReadOnly}
+                          className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-100'}`}
+                          aria-label={`Edit ${title}`}
+                          title={isReadOnly ? 'Read-only access' : 'Edit'}
+                        >
                           <Edit2 size={15} />
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(row.id); }} className="p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-100 transition-all" aria-label={`Duplicate ${title}`} title="Duplicate">
+                        <button
+                          onClick={canWrite ? (e) => { e.stopPropagation(); handleDuplicate(row.id); } : undefined}
+                          disabled={isReadOnly}
+                          className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100'}`}
+                          aria-label={`Duplicate ${title}`}
+                          title={isReadOnly ? 'Read-only access' : 'Duplicate'}
+                        >
                           <Copy size={15} />
                         </button>
                         {row.status && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleQuickStatusToggle(row); }}
-                            className={`p-1.5 rounded-lg transition-all ${row.status === 'Active' ? 'text-emerald-500 hover:bg-emerald-100' : 'text-gray-400 hover:bg-gray-100'}`}
+                            onClick={canWrite ? (e) => { e.stopPropagation(); handleQuickStatusToggle(row); } : undefined}
+                            disabled={isReadOnly}
+                            className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : row.status === 'Active' ? 'text-emerald-500 hover:bg-emerald-100' : 'text-gray-400 hover:bg-gray-100'}`}
                             aria-label={`Toggle status: ${row.status}`}
-                            title={`Status: ${row.status} (click to toggle)`}
+                            title={isReadOnly ? 'Read-only access' : `Status: ${row.status} (click to toggle)`}
                           >
                             <div className={`w-3 h-3 rounded-full ${row.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-300'}`} />
                           </button>
                         )}
                         {showArchived ? (
-                          <button onClick={(e) => { e.stopPropagation(); handleRestore(row.id); }} className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-100 transition-all" aria-label={`Restore ${title}`} title="Restore">
+                          <button
+                            onClick={canWrite ? (e) => { e.stopPropagation(); handleRestore(row.id); } : undefined}
+                            disabled={isReadOnly}
+                            className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-emerald-500 hover:bg-emerald-100'}`}
+                            aria-label={`Restore ${title}`}
+                            title={isReadOnly ? 'Read-only access' : 'Restore'}
+                          >
                             <ArchiveRestore size={15} />
                           </button>
                         ) : (
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }} className="p-1.5 rounded-lg text-red-400 hover:bg-red-100 hover:text-red-600 transition-all" aria-label={`Delete ${title}`} title="Archive">
+                          <button
+                            onClick={canWrite ? (e) => { e.stopPropagation(); handleDelete(row.id); } : undefined}
+                            disabled={isReadOnly}
+                            className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-100 hover:text-red-600'}`}
+                            aria-label={`Delete ${title}`}
+                            title={isReadOnly ? 'Read-only access' : 'Archive'}
+                          >
                             <Trash2 size={15} />
                           </button>
                         )}
@@ -1107,8 +1136,10 @@ export default function MasterPage({
                 <div className="flex items-center gap-2">
                   {selectedItem && (
                     <button
-                      onClick={() => handleDelete(selectedItem.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-all"
+                      onClick={canWrite ? () => handleDelete(selectedItem.id) : undefined}
+                      disabled={isReadOnly}
+                      title={isReadOnly ? 'You have read-only access' : 'Archive this record'}
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold border rounded-lg transition-all ${isReadOnly ? 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed' : 'text-red-600 bg-white border-red-200 hover:bg-red-50'}`}
                     >
                       <Trash2 size={14} /> Archive
                     </button>
@@ -1129,9 +1160,10 @@ export default function MasterPage({
                     Cancel
                   </button>
                   <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50"
+                    onClick={canWrite ? handleSave : undefined}
+                    disabled={saving || isReadOnly}
+                    title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
+                    className={`inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'hover:shadow-lg active:scale-95'}`}
                   >
                     <Save size={14} /> {saving ? 'Saving...' : selectedItem ? 'Update' : 'Save'}
                   </button>

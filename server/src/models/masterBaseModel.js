@@ -119,7 +119,7 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     const values = [code];
 
     const knownFields = [
-      'name', 'description', 'status', 'value_mm', 'rank', 'hex_code', 'seq',
+      'name', 'description', 'status', 'access_level', 'value_mm', 'rank', 'hex_code', 'seq',
       'gst_rate', 'machine_type', 'capacity', 'process_stage_id', 'parameter_name',
       'unit', 'default_value', 'min_value', 'max_value', 'required',
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',
@@ -150,7 +150,7 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     const values = [];
 
     const knownFields = [
-      'code', 'name', 'description', 'status', 'value_mm', 'rank', 'hex_code', 'seq',
+      'code', 'name', 'description', 'status', 'access_level', 'value_mm', 'rank', 'hex_code', 'seq',
       'gst_rate', 'machine_type', 'capacity', 'process_stage_id', 'parameter_name',
       'unit', 'default_value', 'min_value', 'max_value', 'required',
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',

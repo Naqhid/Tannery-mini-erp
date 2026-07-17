@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validateId, validatePagination } from '../middleware/validators.js';
+import { requireWriteAccess } from '../middleware/auth.js';
 import * as ctrl from '../controllers/productionPlanController.js';
 
 const router = Router();
@@ -9,9 +10,9 @@ router.get('/next-no', ctrl.nextNo);
 router.get('/filter-options', ctrl.filterOptions);
 router.get('/', validatePagination, ctrl.list);
 router.get('/:id', validateId, ctrl.getOne);
-router.post('/', ctrl.create);
-router.post('/bulk-delete', ctrl.bulkDelete);
-router.put('/:id', validateId, ctrl.update);
-router.delete('/:id', validateId, ctrl.remove);
+router.post('/', requireWriteAccess, ctrl.create);
+router.post('/bulk-delete', requireWriteAccess, ctrl.bulkDelete);
+router.put('/:id', validateId, requireWriteAccess, ctrl.update);
+router.delete('/:id', validateId, requireWriteAccess, ctrl.remove);
 
 export default router;

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validateId, validatePagination } from '../middleware/validators.js';
+import { requireWriteAccess } from '../middleware/auth.js';
 import * as ctrl from '../controllers/masterControllers.js';
 
 // Helper to create routes for a master controller
@@ -10,16 +11,16 @@ function createMasterRoutes(controller) {
   router.get('/dropdown', controller.dropdown);
   router.get('/stats', controller.stats);
   router.post('/check-duplicate', controller.checkDuplicate);
-  router.post('/bulk-delete', controller.bulkDelete);
-  router.post('/bulk-status', controller.bulkStatus);
-  router.post('/bulk-archive', controller.bulkArchive);
+  router.post('/bulk-delete', requireWriteAccess, controller.bulkDelete);
+  router.post('/bulk-status', requireWriteAccess, controller.bulkStatus);
+  router.post('/bulk-archive', requireWriteAccess, controller.bulkArchive);
   router.get('/:id', validateId, controller.getOne);
   router.get('/:id/audit', validateId, controller.audit);
-  router.post('/', controller.create);
-  router.post('/:id/duplicate', validateId, controller.duplicateRecord);
-  router.put('/:id', validateId, controller.update);
-  router.delete('/:id', validateId, controller.remove);
-  router.post('/:id/restore', validateId, controller.restore);
+  router.post('/', requireWriteAccess, controller.create);
+  router.post('/:id/duplicate', validateId, requireWriteAccess, controller.duplicateRecord);
+  router.put('/:id', validateId, requireWriteAccess, controller.update);
+  router.delete('/:id', validateId, requireWriteAccess, controller.remove);
+  router.post('/:id/restore', validateId, requireWriteAccess, controller.restore);
 
   return router;
 }

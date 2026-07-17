@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as ctrl from '../controllers/customerController.js';
 import { validateId, validatePagination } from '../middleware/validators.js';
+import { requireWriteAccess } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -8,15 +9,15 @@ router.get('/', validatePagination, ctrl.list);
 router.get('/stats', ctrl.stats);
 router.get('/dropdown', ctrl.dropdown);
 router.post('/check-duplicate', ctrl.checkDuplicate);
-router.post('/bulk-delete', ctrl.bulkDelete);
-router.post('/bulk-status', ctrl.bulkStatus);
-router.post('/bulk-archive', ctrl.bulkArchive);
+router.post('/bulk-delete', requireWriteAccess, ctrl.bulkDelete);
+router.post('/bulk-status', requireWriteAccess, ctrl.bulkStatus);
+router.post('/bulk-archive', requireWriteAccess, ctrl.bulkArchive);
 router.get('/:id', validateId, ctrl.getOne);
 router.get('/:id/audit', validateId, ctrl.audit);
-router.post('/', ctrl.create);
-router.post('/:id/duplicate', validateId, ctrl.duplicateRecord);
-router.put('/:id', validateId, ctrl.update);
-router.delete('/:id', validateId, ctrl.remove);
-router.post('/:id/restore', validateId, ctrl.restore);
+router.post('/', requireWriteAccess, ctrl.create);
+router.post('/:id/duplicate', validateId, requireWriteAccess, ctrl.duplicateRecord);
+router.put('/:id', validateId, requireWriteAccess, ctrl.update);
+router.delete('/:id', validateId, requireWriteAccess, ctrl.remove);
+router.post('/:id/restore', validateId, requireWriteAccess, ctrl.restore);
 
 export default router;

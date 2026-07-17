@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import api from '../lib/api';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import { usePermission } from '../lib/usePermission';
 
 const STATUS_COLORS: Record<string, string> = {
   Draft: 'bg-slate-100 text-slate-700',
@@ -29,6 +30,7 @@ interface Customer { id: number; name: string; }
 
 export default function ProductionPlan() {
   const navigate = useNavigate();
+  const { canWrite, isReadOnly } = usePermission();
 
   // Data
   const [data, setData] = useState<any[]>([]);
@@ -152,8 +154,10 @@ export default function ProductionPlan() {
             <span className="text-sm font-bold">Filters</span>
           </div>
           <button
-            onClick={() => navigate('/production-plan/new')}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all shadow-sm"
+            onClick={canWrite ? () => navigate('/production-plan/new') : undefined}
+            disabled={isReadOnly}
+            title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg transition-all shadow-sm ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
           >
             <Plus size={14} /> New Production Plan
           </button>

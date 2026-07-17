@@ -3,7 +3,11 @@ import { hashPassword, comparePassword, generateToken } from '../middleware/auth
 
 export async function authenticateUser(username, password) {
   const [rows] = await pool.query(
-    'SELECT id, username, password_hash, full_name, email, role_id, company_id, business_unit_id, status FROM users WHERE username = ?',
+    `SELECT u.id, u.username, u.password_hash, u.full_name, u.email, u.role_id, u.company_id, u.business_unit_id, u.status,
+       r.code AS role_code, r.access_level
+     FROM users u
+     LEFT JOIN roles r ON u.role_id = r.id
+     WHERE u.username = ?`,
     [username]
   );
 
@@ -38,6 +42,8 @@ export async function authenticateUser(username, password) {
     id: user.id,
     username: user.username,
     role_id: user.role_id,
+    role_code: user.role_code || null,
+    access_level: user.access_level || 'read_write',
     company_id: user.company_id,
     business_unit_id: user.business_unit_id,
   });
@@ -51,6 +57,8 @@ export async function authenticateUser(username, password) {
       full_name: user.full_name,
       email: user.email,
       role_id: user.role_id,
+      role_code: user.role_code || null,
+      access_level: user.access_level || 'read_write',
       company_id: user.company_id,
       business_unit_id: user.business_unit_id,
     },

@@ -17,6 +17,8 @@ export function generateToken(user) {
     id: user.id,
     username: user.username,
     role_id: user.role_id,
+    role_code: user.role_code || null,
+    access_level: user.access_level || 'read_write',
     company_id: user.company_id,
     business_unit_id: user.business_unit_id,
   };
@@ -84,6 +86,18 @@ export function requireRole(...allowedRoles) {
 
     next();
   };
+}
+
+export function requireWriteAccess(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  if (req.user.access_level === 'read_only') {
+    return res.status(403).json({ error: 'Access denied. You have read-only access.' });
+  }
+
+  next();
 }
 
 export function getCurrentUserId(req) {
