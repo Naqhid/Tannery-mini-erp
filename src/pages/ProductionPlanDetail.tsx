@@ -1,0 +1,582 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { Save, X, ArrowLeft, Factory, RotateCcw, Printer, Package, Layers, ClipboardList, TrendingDown, BarChart3 } from 'lucide-react';
+import api from '../lib/api';
+
+interface Customer { id: number; name: string; }
+interface SalesOrder { id: number; order_no: string; customer_id?: number; customer_name?: string; }
+interface ProcessStage { id: number; code: string; name: string; }
+
+interface PlanData {
+  id?: number;
+  plan_no: string;
+  plan_date: string;
+  sales_order_id: string;
+  customer_id: string;
+  customer_order_no: string;
+  article: string;
+  color: string;
+  finish: string;
+  order_qty: string;
+  planned_qty: string;
+  batch_qty: string;
+  status: string;
+}
+
+interface StageItem {
+  _key: string;
+  seq: number;
+  stage_id: string;
+  stage_name: string;
+  capacity: string;
+  planned_qty: string;
+  planned_percent: string;
+  receipt_qty: string;
+  rejection_qty: string;
+  output_qty: string;
+  output_percent: number;
+  wip_qty: number;
+  status: string;
+}
+
+const emptyPlan: PlanData = {
+  plan_no: '', plan_date: new Date().toISOString().split('T')[0],
+  sales_order_id: '', customer_id: '', customer_order_no: '',
+  article: '', color: '', finish: '',
+  order_qty: '', planned_qty: '', batch_qty: '', status: 'Draft',
+};
+
+const STAGE_STATUSES = ['In-Process', 'Completed', 'Pending', 'On Hold'];
+
+let _kc = 0;
+const genKey = () => `stg_${++_kc}_${Date.now()}`;
+const fmt = (n: number) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+
+export default function ProductionPlanDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const isNew = !id || id === 'new';
+
+  const [plan, setPlan] = useState<PlanData>(emptyPlan);
+  const [stages, setStages] = useState<StageItem[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
+  const [processStages, setProcessStages] = useState<ProcessStage[]>([]);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+
+  const fetchDropdowns = useCallback(async () => {
+    try {
+      const [cust, so, ps] = await Promise.all([
+        api<{ data: Customer[] }>('/customers?limit=500'),
+        api<{ data: SalesOrder[] }>('/sales-orders?limit=500'),
+        api<{ data: ProcessStage[] }>('/process-stages?limit=100'),
+      ]);
+      setCustomers(cust.data || []);
+      setSalesOrders(so.data || []);
+      const stageList = ps.data || [];
+      setProcessStages(stageList);
+      // If new and no stages, pre-populate with all process stages
+      if (isNew && stageList.length > 0) {
+        setStages(stageList.map((s, i) => ({
+          _key: genKey(),
+          seq: i + 1,
+          stage_id: String(s.id),
+          stage_name: s.name,
+          capacity: '',
+          planned_qty: '',
+          planned_percent: '100.00',
+          receipt_qty: '0',
+          rejection_qty: '0',
+          output_qty: '0',
+          output_percent: 0,
+          wip_qty: 0,
+          status: 'In-Process',
+        })));
+      }
+    } catch { toast.error('Failed to load dropdowns'); }
+  }, [isNew]);
+
+  const fetchPlan = useCallback(async () => {
+    if (isNew) {
+      try {
+        const res = await api<{ data: { plan_no: string } }>('/production-plans/next-no');
+        setPlan((p) => ({ ...p, plan_no: res.data.plan_no }));
+      } catch {}
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await api<{ data: any }>(`/production-plans/${id}`);
+      const d = res.data;
+      setPlan({
+        ...emptyPlan,
+        id: d.id,
+        plan_no: d.plan_no || '',
+        plan_date: d.plan_date?.split('T')[0] || '',
+        sales_order_id: String(d.sales_order_id || ''),
+        customer_id: String(d.customer_id || ''),
+        customer_order_no: d.customer_order_no || '',
+        article: d.article || '',
+        color: d.color || '',
+        finish: d.finish || '',
+        order_qty: String(d.order_qty || ''),
+        planned_qty: String(d.planned_qty || ''),
+        batch_qty: String(d.batch_qty || ''),
+        status: d.status || 'Draft',
+      });
+      if (d.stages && d.stages.length > 0) {
+        setStages(d.stages.map((s: any) => ({
+          _key: genKey(),
+          seq: s.seq || 1,
+          stage_id: String(s.stage_id || ''),
+          stage_name: s.stage_name || s.process_stage_name || '',
+          capacity: String(s.capacity || ''),
+          planned_qty: String(s.planned_qty || ''),
+          planned_percent: String(s.planned_percent || '100.00'),
+          receipt_qty: String(s.receipt_qty || '0'),
+          rejection_qty: String(s.rejection_qty || '0'),
+          output_qty: String(s.output_qty || '0'),
+          output_percent: parseFloat(s.output_percent) || 0,
+          wip_qty: parseFloat(s.wip_qty) || 0,
+          status: s.status || 'In-Process',
+        })));
+      }
+    } catch { toast.error('Failed to load production plan'); }
+    finally { setLoading(false); }
+  }, [id, isNew]);
+
+  useEffect(() => { fetchDropdowns(); fetchPlan(); }, [fetchDropdowns, fetchPlan]);
+
+  const update = (key: string, value: any) => setPlan((p) => ({ ...p, [key]: value }));
+
+  // Calculations
+  const orderQty = parseFloat(plan.order_qty) || 0;
+  const plannedQty = parseFloat(plan.planned_qty) || 0;
+  const batchQty = parseFloat(plan.batch_qty) || 0;
+  const noOfBatches = batchQty > 0 ? Math.ceil(plannedQty / batchQty) : 0;
+  const balanceQty = Math.max(0, orderQty - plannedQty);
+
+  const handleSalesOrderChange = (value: string) => {
+    const so = salesOrders.find((s) => String(s.id) === value);
+    update('sales_order_id', value);
+    if (so?.customer_name) {
+      const cust = customers.find((c) => c.name === so.customer_name);
+      if (cust) update('customer_id', String(cust.id));
+    }
+  };
+
+  const updateStage = (key: string, field: string, value: any) => {
+    setStages((prev) => prev.map((s) => {
+      if (s._key !== key) return s;
+      const updated = { ...s, [field]: value };
+      if (field === 'stage_id') {
+        const ps = processStages.find((p) => String(p.id) === value);
+        if (ps) updated.stage_name = ps.name;
+      }
+      // Recalc output_percent and wip_qty
+      const receipt = parseFloat(updated.receipt_qty) || 0;
+      const rej = parseFloat(updated.rejection_qty) || 0;
+      const output = parseFloat(updated.output_qty) || 0;
+      const pQty = parseFloat(updated.planned_qty) || 0;
+      updated.output_percent = pQty > 0 ? parseFloat(((output / pQty) * 100).toFixed(2)) : 0;
+      updated.wip_qty = Math.max(0, pQty - output);
+      return updated;
+    }));
+  };
+
+  const handleClear = () => {
+    setPlan(emptyPlan);
+    if (processStages.length > 0) {
+      setStages(processStages.map((s, i) => ({
+        _key: genKey(),
+        seq: i + 1,
+        stage_id: String(s.id),
+        stage_name: s.name,
+        capacity: '',
+        planned_qty: '',
+        planned_percent: '100.00',
+        receipt_qty: '0',
+        rejection_qty: '0',
+        output_qty: '0',
+        output_percent: 0,
+        wip_qty: 0,
+        status: 'In-Process',
+      })));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!plan.plan_date) { toast.error('Plan date is required'); return; }
+    setSaving(true);
+    try {
+      const payload = {
+        ...plan,
+        sales_order_id: plan.sales_order_id ? Number(plan.sales_order_id) : null,
+        customer_id: plan.customer_id ? Number(plan.customer_id) : null,
+        product_id: null,
+        warehouse_id: null,
+        uom: 'Sq.Ft.',
+        order_qty: orderQty,
+        planned_qty: plannedQty,
+        batch_qty: batchQty,
+        no_of_batches: noOfBatches,
+        balance_qty: balanceQty,
+        output_qty: 0,
+        output_percent: 0,
+        wip_qty: 0,
+        items: [],
+        stages: stages.map((s) => ({
+          seq: s.seq,
+          stage_id: s.stage_id ? Number(s.stage_id) : null,
+          stage_name: s.stage_name,
+          capacity: parseFloat(s.capacity) || 0,
+          planned_qty: parseFloat(s.planned_qty) || 0,
+          planned_percent: parseFloat(s.planned_percent) || 100,
+          receipt_qty: parseFloat(s.receipt_qty) || 0,
+          rejection_qty: parseFloat(s.rejection_qty) || 0,
+          output_qty: parseFloat(s.output_qty) || 0,
+          output_percent: s.output_percent,
+          wip_qty: s.wip_qty,
+          status: s.status,
+        })),
+      };
+
+      if (isNew) {
+        const res = await api<any>('/production-plans', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Production plan created!');
+      } else {
+        const res = await api<any>(`/production-plans/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Production plan updated!');
+      }
+      navigate('/production-plan');
+    } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const STATUS_STAGE_COLORS: Record<string, string> = {
+    'Completed': 'bg-emerald-100 text-emerald-700',
+    'In-Process': 'bg-amber-100 text-amber-700',
+    'Pending': 'bg-slate-100 text-slate-600',
+    'On Hold': 'bg-violet-100 text-violet-700',
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Section 1: Plan Information */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-blue-800">1. Plan Information</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { /* Print batches */ }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
+            >
+              <Printer size={13} /> Print Batches
+            </button>
+            <button onClick={handleClear} className="px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all">
+              Clear
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
+            >
+              <Save size={13} /> {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+
+        {/* Row 1 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Sales Order No.</label>
+            <select
+              value={plan.sales_order_id}
+              onChange={(e) => handleSalesOrderChange(e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+            >
+              <option value="">Select SO</option>
+              {salesOrders.map((s) => (
+                <option key={s.id} value={String(s.id)}>{s.order_no}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Plan No.</label>
+            <input
+              type="text"
+              value={plan.plan_no}
+              readOnly
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-700"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Plan Date</label>
+            <input
+              type="date"
+              value={plan.plan_date}
+              onChange={(e) => update('plan_date', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Customer</label>
+            <input
+              type="text"
+              value={customers.find((c) => String(c.id) === plan.customer_id)?.name || ''}
+              readOnly
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-700"
+              placeholder="Auto from SO"
+            />
+          </div>
+        </div>
+
+        {/* Row 2 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Article</label>
+            <input
+              type="text"
+              value={plan.article}
+              onChange={(e) => update('article', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="e.g. Crust"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Color</label>
+            <input
+              type="text"
+              value={plan.color}
+              onChange={(e) => update('color', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="e.g. Black"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Finish</label>
+            <input
+              type="text"
+              value={plan.finish}
+              onChange={(e) => update('finish', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="e.g. Full Chrome"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Order Qty (Sq.Ft.)</label>
+            <input
+              type="number"
+              value={plan.order_qty}
+              onChange={(e) => update('order_qty', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <ClipboardList size={18} className="text-blue-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-gray-500 uppercase">Planned Qty (Sq.Ft.)</p>
+              <p className="text-lg font-black text-blue-700">{fmt(plannedQty)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <Package size={18} className="text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-gray-500 uppercase">Batch Qty (Sq.Ft.)</p>
+              <p className="text-lg font-black text-emerald-700">{fmt(batchQty)}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <Layers size={18} className="text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-gray-500 uppercase">No. of Batches</p>
+              <p className="text-lg font-black text-indigo-700">{noOfBatches}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-xl p-3">
+            <div className="p-2 bg-rose-100 rounded-lg">
+              <TrendingDown size={18} className="text-rose-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-gray-500 uppercase">Balance Qty (Sq.Ft.)</p>
+              <p className="text-lg font-black text-rose-700">{fmt(balanceQty)}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Hidden fields for planned_qty and batch_qty */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Planned Qty (Sq.Ft.)</label>
+            <input
+              type="number"
+              value={plan.planned_qty}
+              onChange={(e) => update('planned_qty', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Batch Qty (Sq.Ft.)</label>
+            <input
+              type="number"
+              value={plan.batch_qty}
+              onChange={(e) => update('batch_qty', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Section 2: Plan Line Items (Stages) */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100">
+          <h2 className="text-sm font-bold text-blue-800">2. Plan Line Items (Stages)</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-gray-200">
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase w-10">#</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Stages <span className="text-rose-500">*</span></th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Capacity (Sq.Ft./Day)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Planned Qty (Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Planned %</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Receipt Qty (Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Rej Qty (Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Output Qty (Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Output %</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">WIP Qty (Sq.Ft.)</th>
+                <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Status <span className="text-rose-500">*</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {stages.map((stage, idx) => (
+                <tr key={stage._key} className="hover:bg-blue-50/30 transition-all">
+                  <td className="py-2 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
+                  <td className="py-2 px-3">
+                    <select
+                      value={stage.stage_id}
+                      onChange={(e) => updateStage(stage._key, 'stage_id', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[140px]"
+                    >
+                      <option value="">Select stage</option>
+                      {processStages.map((ps) => (
+                        <option key={ps.id} value={String(ps.id)}>{ps.name}</option>
+                      ))}
+                    </select>
+                  </td>
+
+                  <td className="py-2 px-3">
+                    <input type="number" value={stage.capacity} onChange={(e) => updateStage(stage._key, 'capacity', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+                  </td>
+                  <td className="py-2 px-3">
+                    <input type="number" value={stage.planned_qty} onChange={(e) => updateStage(stage._key, 'planned_qty', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+                  </td>
+                  <td className="py-2 px-3 text-xs text-gray-700 text-right font-medium">{stage.planned_percent}%</td>
+                  <td className="py-2 px-3">
+                    <input type="number" value={stage.receipt_qty} onChange={(e) => updateStage(stage._key, 'receipt_qty', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+                  </td>
+                  <td className="py-2 px-3">
+                    <input type="number" value={stage.rejection_qty} onChange={(e) => updateStage(stage._key, 'rejection_qty', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+                  </td>
+                  <td className="py-2 px-3">
+                    <input type="number" value={stage.output_qty} onChange={(e) => updateStage(stage._key, 'output_qty', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+                  </td>
+                  <td className="py-2 px-3 text-xs text-gray-700 text-right font-medium">{stage.output_percent}%</td>
+                  <td className="py-2 px-3 text-xs text-gray-700 text-right font-bold">{fmt(stage.wip_qty)}</td>
+                  <td className="py-2 px-3">
+                    <select
+                      value={stage.status}
+                      onChange={(e) => updateStage(stage._key, 'status', e.target.value)}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg min-w-[100px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${STATUS_STAGE_COLORS[stage.status] || ''}`}
+                    >
+                      {STAGE_STATUSES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Bottom Summary Cards */}
+        <div className="flex flex-wrap items-center gap-4 px-5 py-4 border-t border-gray-100 bg-slate-50/50">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+            <ClipboardList size={14} className="text-blue-600" />
+            <div>
+              <p className="text-[9px] font-medium text-gray-500 uppercase">Total Order Qty (Sq.Ft.)</p>
+              <p className="text-sm font-black text-gray-900">{fmt(orderQty)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+            <BarChart3 size={14} className="text-emerald-600" />
+            <div>
+              <p className="text-[9px] font-medium text-gray-500 uppercase">Planned Qty (Sq.Ft.)</p>
+              <p className="text-sm font-black text-emerald-700">{fmt(plannedQty)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
+            <Package size={14} className="text-amber-600" />
+            <div>
+              <p className="text-[9px] font-medium text-gray-500 uppercase">Batch Qty (Sq.Ft.)</p>
+              <p className="text-sm font-black text-amber-700">{fmt(batchQty)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-lg px-3 py-2">
+            <Layers size={14} className="text-indigo-600" />
+            <div>
+              <p className="text-[9px] font-medium text-gray-500 uppercase">No. of Batches</p>
+              <p className="text-sm font-black text-indigo-700">{noOfBatches}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-rose-200 rounded-lg px-3 py-2">
+            <TrendingDown size={14} className="text-rose-600" />
+            <div>
+              <p className="text-[9px] font-medium text-gray-500 uppercase">Balance Qty (Sq.Ft.)</p>
+              <p className="text-sm font-black text-rose-700">{fmt(balanceQty)}</p>
+            </div>
+          </div>
+          <div className="ml-auto">
+            <button
+              onClick={() => { /* Print batches */ }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
+            >
+              <Printer size={14} /> Print Batches
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

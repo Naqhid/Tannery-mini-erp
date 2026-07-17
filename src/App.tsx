@@ -45,6 +45,9 @@ import StockTransferEntry from './pages/StockTransferEntry';
 import StockTransferEntryDetail from './pages/StockTransferEntryDetail';
 import MaterialIssueToBatch from './pages/MaterialIssueToBatch';
 import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
+// Production Plan Pages
+import ProductionPlan from './pages/ProductionPlan';
+import ProductionPlanDetail from './pages/ProductionPlanDetail';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -99,6 +102,7 @@ function App() {
             <Route path="recipe-creation" element={<RecipeCreation />} />
             <Route path="bom-revision" element={<PlaceholderPage />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
+            <Route path="physical-stock-entry" element={<PlaceholderPage />} />
             {/* Inventory */}
             <Route path="warehouse-master" element={<WarehouseMaster />} />
             <Route path="warehouse-master/new" element={<WarehouseMasterForm />} />
@@ -115,13 +119,12 @@ function App() {
             <Route path="material-issue" element={<MaterialIssueToBatch />} />
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
-            <Route path="inventory" element={<PlaceholderPage />} />
-            <Route path="stock-in" element={<PlaceholderPage />} />
-            <Route path="stock-out" element={<PlaceholderPage />} />
             {/* Production */}
-            <Route path="production" element={<PlaceholderPage />} />
-            <Route path="work-orders" element={<PlaceholderPage />} />
-            <Route path="batch-tracking" element={<PlaceholderPage />} />
+            <Route path="production-plan" element={<ProductionPlan />} />
+            <Route path="production-plan/new" element={<ProductionPlanDetail />} />
+            <Route path="production-plan/:id" element={<ProductionPlanDetail />} />
+            <Route path="batch-process" element={<PlaceholderPage />} />
+            <Route path="batch-completion" element={<PlaceholderPage />} />
             {/* Reports */}
             <Route path="reports" element={<PlaceholderPage />} />
             <Route path="inventory-reports" element={<PlaceholderPage />} />
