@@ -119,7 +119,7 @@ export default function PhysicalStockEntry() {
   useEffect(() => {
     (async () => {
       try {
-        const godowns = await api<{ data: any[] }>('/warehouse-master?limit=500');
+        const godowns = await api<{ data: any[] }>('/warehouses?limit=500');
         setFilterOptions(prev => ({
           ...prev,
           godowns: godowns.data || [],
@@ -481,8 +481,8 @@ export default function PhysicalStockEntry() {
                 <tr>
                   <td colSpan={6} className="text-right font-medium">Total Variance Value:</td>
                   <td colSpan={5} className="text-right">
-                    <span className={`font-bold ${entry.total_variance_value >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {entry.total_variance_value >= 0 ? '+' : ''}{entry.total_variance_value.toFixed(2)}
+                    <span className={`font-bold ${Number(entry.total_variance_value || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {Number(entry.total_variance_value || 0) >= 0 ? '+' : ''}{Number(entry.total_variance_value || 0).toFixed(2)}
                     </span>
                   </td>
                 </tr>
@@ -518,7 +518,7 @@ export default function PhysicalStockEntry() {
               <div className="text-sm font-medium text-rose-700 mt-1">Variance Items</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl">
-              <div className="text-3xl font-bold text-amber-600">{entry.total_variance_value.toFixed(2)}</div>
+              <div className="text-3xl font-bold text-amber-600">{Number(entry.total_variance_value || 0).toFixed(2)}</div>
               <div className="text-sm font-medium text-amber-700 mt-1">Total Variance Value</div>
             </div>
           </div>
@@ -583,7 +583,7 @@ export default function PhysicalStockEntry() {
           <div className="text-sm text-gray-500 mt-1">Variance Items</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-amber-600">{dashboardStats.total_variance_value.toFixed(2)}</div>
+          <div className="text-3xl font-bold text-amber-600">{Number(dashboardStats.total_variance_value || 0).toFixed(2)}</div>
           <div className="text-sm text-gray-500 mt-1">Total Variance Value</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
@@ -711,9 +711,9 @@ export default function PhysicalStockEntry() {
                     <td className="text-right text-emerald-600 font-medium">{entry.matched_items}</td>
                     <td className="text-right text-rose-600 font-medium">{entry.variance_items}</td>
                     <td className={`text-right font-medium ${
-                      entry.total_variance_value >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                      Number(entry.total_variance_value || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
                     }`}>
-                      {entry.total_variance_value >= 0 ? '+' : ''}{entry.total_variance_value.toFixed(2)}
+                      {Number(entry.total_variance_value || 0) >= 0 ? '+' : ''}{Number(entry.total_variance_value || 0).toFixed(2)}
                     </td>
                     <td>
                       <span className={`px-2 py-1 rounded-full text-xs ${STATUS_COLORS[entry.status] || 'bg-gray-100'}`}>

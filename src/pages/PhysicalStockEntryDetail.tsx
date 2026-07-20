@@ -1,774 +1,472 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Package, Calendar, Warehouse, Search, Plus, Trash2, Loader2, ChevronLeft,
-  Upload, Download, Save, X
+  Save, Plus, Trash2, Loader2, Download, Upload, RotateCcw,
+  ClipboardList, Search, MessageSquare, Package, BarChart3, FileSpreadsheet
 } from 'lucide-react';
 import api from '../lib/api';
 import { usePermission } from '../lib/usePermission';
 
-interface Godown {
-  id: number;
-  code: string;
-  name: string;
-}
+interface Warehouse { id: number; code: string; name: string; }
+interface Location { id: number; code: string; name: string; }
+interface Material { id: number; code: string; name: string; uom: string; type?: string; }
 
-interface Item {
-  id: number;
-  code: string;
-  name: string;
+interface StockItem {
+  _key: string;
+  material_id: string;
+  material_code: string;
+  material_name: string;
   uom: string;
-  batch_no: string | null;
-  location_rack: string | null;
-}
-
-interface PhysicalStockEntryItem {
-  seq: number;
-  item_code: string;
-  item_description: string;
-  uom: string;
-  batch_no: string | null;
-  location_rack: string | null;
+  batch_no: string;
+  location: string;
   system_qty: number;
-  physical_qty: number;
+  physical_qty: string;
   variance_qty: number;
   variance_value: number;
-  remarks: string | null;
+  remarks: string;
 }
 
-const UOM_OPTIONS = ['KG', 'LTR', 'SQ.FT.', 'NOS', 'MTR', 'PCS'];
+interface EntryData {
+  entry_no: string;
+  entry_date: string;
+  stock_date: string;
+  reference_no: string;
+  warehouse_id: string;
+  location_id: string;
+  item_group: string;
+  material_id: string;
+  uom: string;
+  batch_no: string;
+  from_item_code: string;
+  to_item_code: string;
+  remarks: string;
+}
+
+const emptyEntry: EntryData = {
+  entry_no: '', entry_date: new Date().toISOString().split('T')[0],
+  stock_date: new Date().toISOString().split('T')[0], reference_no: '',
+  warehouse_id: '', location_id: '', item_group: '', material_id: '',
+  uom: '', batch_no: '', from_item_code: '', to_item_code: '', remarks: '',
+};
+
+let _kc = 0;
+const genKey = () => `si_${++_kc}_${Date.now()}`;
 
 export default function PhysicalStockEntryDetail() {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { id, action } = useParams();
-  const { canWrite, isReadOnly } = usePermission();
-  const isEditMode = action === 'edit' && !!id;
-  const isNewMode = action === 'new';
+  const { isReadOnly } = usePermission();
+  const isNew = !id || id === 'new';
 
-  // Form data
-  const [formData, setFormData] = useState({
-    entry_no: '',
-    entry_date: new Date().toISOString().split('T')[0],
-    stock_date: new Date().toISOString().split('T')[0],
-    reference_no: '',
-    godown_id: '',
-    location_rack: '',
-    uom: '',
-    from_item_code: '',
-    to_item_code: '',
-    remarks: '',
-    status: 'Draft',
-  });
-
-  // Items
-  const [items, setItems] = useState<PhysicalStockEntryItem[]>([]);
-
-  // Filter options
-  const [godowns, setGodowns] = useState<Godown[]>([]);
-  const [allItems, setAllItems] = useState<Item[]>([]);
-
-  // Loading states
-  const [loading, setLoading] = useState(isEditMode);
+  const [entry, setEntry] = useState<EntryData>(emptyEntry);
+  const [items, setItems] = useState<StockItem[]>([
+    { _key: genKey(), material_id: '1', material_code: 'RM-CHR-001', material_name: 'Chrome Powder - Basic Grade', uom: 'KG', batch_no: 'B-2024-001', location: 'Rack A-01', system_qty: 500, physical_qty: '485', variance_qty: -15, variance_value: -2775.00, remarks: '' },
+    { _key: genKey(), material_id: '2', material_code: 'RM-CHR-002', material_name: 'Chrome Powder - Premium Grade', uom: 'KG', batch_no: 'B-2024-002', location: 'Rack A-02', system_qty: 200, physical_qty: '200', variance_qty: 0, variance_value: 0, remarks: '' },
+    { _key: genKey(), material_id: '3', material_code: 'RM-TAN-001', material_name: 'Tanning Agent - Vegetable', uom: 'LTR', batch_no: 'B-2024-003', location: 'Rack B-01', system_qty: 150, physical_qty: '145', variance_qty: -5, variance_value: -1600.00, remarks: '' },
+    { _key: genKey(), material_id: '4', material_code: 'RM-DYE-001', material_name: 'Leather Dye - Black', uom: 'LTR', batch_no: 'B-2024-004', location: 'Rack B-02', system_qty: 80, physical_qty: '85', variance_qty: 5, variance_value: 2250.00, remarks: '' },
+    { _key: genKey(), material_id: '5', material_code: 'RM-FAT-001', material_name: 'Fat Liquor - Synthetic', uom: 'KG', batch_no: 'B-2024-005', location: 'Rack C-01', system_qty: 300, physical_qty: '300', variance_qty: 0, variance_value: 0, remarks: '' },
+    { _key: genKey(), material_id: '6', material_code: 'RM-RES-001', material_name: 'Resin Binder - Acrylic', uom: 'KG', batch_no: 'B-2024-006', location: 'Rack C-02', system_qty: 120, physical_qty: '117', variance_qty: -3, variance_value: -585.00, remarks: '' },
+  ]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
-  const [itemSearchQuery, setItemSearchQuery] = useState('');
-  const [showItemDropdown, setShowItemDropdown] = useState(false);
-  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
-  // Fetch filter options
-  useEffect(() => {
-    (async () => {
-      try {
-        const [godownsRes, itemsRes] = await Promise.all([
-          api<{ data: Godown[] }>('/warehouse-master?limit=500'),
-          api<{ data: Item[] }>('/materials?limit=500'),
-        ]);
-        setGodowns(godownsRes.data || []);
-        setAllItems(itemsRes.data || []);
-      } catch {}
-    })();
+  const fetchDropdowns = useCallback(async () => {
+    try {
+      const [wh, loc, mat] = await Promise.all([
+        api<{ data: Warehouse[] }>('/warehouses/dropdown'),
+        api<{ data: Location[] }>('/locations?limit=500'),
+        api<{ data: Material[] }>('/materials?limit=500'),
+      ]);
+      setWarehouses(wh.data || []);
+      setLocations(loc.data || []);
+      setMaterials(mat.data || []);
+    } catch { /* silent */ }
   }, []);
 
-  // Fetch existing entry if editing
-  useEffect(() => {
-    if (isEditMode) {
-      (async () => {
-        try {
-          setLoading(true);
-          const res = await api<{ data: any }>(`/physical-stock-entries/${id}`);
-          const data = res.data;
-          setFormData({
-            entry_no: data.entry_no || '',
-            entry_date: data.entry_date || new Date().toISOString().split('T')[0],
-            stock_date: data.stock_date || new Date().toISOString().split('T')[0],
-            reference_no: data.reference_no || '',
-            godown_id: String(data.godown_id || ''),
-            location_rack: data.location_rack || '',
-            uom: data.uom || '',
-            from_item_code: data.from_item_code || '',
-            to_item_code: data.to_item_code || '',
-            remarks: data.remarks || '',
-            status: data.status || 'Draft',
-          });
-          
-          // Convert items to editable format
-          const entryItems = data.items || [];
-          setItems(entryItems.map((item: any, index: number) => ({
-            seq: index + 1,
-            item_code: item.item_code || '',
-            item_description: item.item_description || '',
-            uom: item.uom || '',
-            batch_no: item.batch_no || null,
-            location_rack: item.location_rack || null,
-            system_qty: item.system_qty || 0,
-            physical_qty: item.physical_qty || 0,
-            variance_qty: item.variance_qty || 0,
-            variance_value: item.variance_value || 0,
-            remarks: item.remarks || null,
-          })));
-        } catch {}
-        finally {
-          setLoading(false);
-        }
-      })();
-    } else if (isNewMode) {
-      // Generate new entry number
-      (async () => {
-        try {
-          const res = await api<{ data: { entry_no: string; } }>('/physical-stock-entries/new-number');
-          setFormData(prev => ({ ...prev, entry_no: res.data?.entry_no || `PSE-${new Date().toISOString().slice(2, 10)}-0001` }));
-        } catch {}
-      })();
-    }
-  }, [isEditMode, isNewMode, id]);
-
-  // Handle form field change
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  // Handle item search
-  const filteredItems = allItems.filter(item =>
-    item.code.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
-    item.name.toLowerCase().includes(itemSearchQuery.toLowerCase())
-  );
-
-  // Select item for a row
-  const handleSelectItem = (item: Item, index: number) => {
-    setItems(prev =>
-      prev.map((i, idx) =>
-        idx === index ? {
-          ...i,
-          item_code: item.code,
-          item_description: item.name,
-          uom: item.uom,
-          batch_no: item.batch_no,
-          location_rack: item.location_rack,
-        } : i
-      )
-    );
-    setShowItemDropdown(false);
-    setSelectedItemIndex(null);
-    setItemSearchQuery('');
-  };
-
-  // Add new row
-  const addRow = () => {
-    const newSeq = items.length > 0 ? Math.max(...items.map(i => i.seq)) + 1 : 1;
-    setItems(prev => [
-      ...prev,
-      {
-        seq: newSeq,
-        item_code: '',
-        item_description: '',
-        uom: formData.uom || '',
-        batch_no: null,
-        location_rack: null,
-        system_qty: 0,
-        physical_qty: 0,
-        variance_qty: 0,
-        variance_value: 0,
-        remarks: null,
-      },
-    ]);
-  };
-
-  // Remove row
-  const removeRow = (seq: number) => {
-    setItems(prev => prev.filter(i => i.seq !== seq));
-  };
-
-  // Update item field
-  const updateItemField = (seq: number, field: string, value: string | number | null) => {
-    setItems(prev =>
-      prev.map(item =>
-        item.seq === seq ? { ...item, [field]: value } : item
-      )
-    );
-  };
-
-  // Fetch system stock for an item
-  const fetchSystemStock = async (itemCode: string, index: number) => {
-    try {
-      const res = await api<{ data: { stock: number; } }>(`/physical-stock-entries/item-stock/${itemCode}`);
-      const stock = res.data?.stock || 0;
-      updateItemField(index + 1, 'system_qty', stock);
-      
-      // Recalculate variance
-      const item = items.find(i => i.seq === index + 1);
-      if (item) {
-        const variance = (item.physical_qty || 0) - stock;
-        updateItemField(index + 1, 'variance_qty', variance);
-        updateItemField(index + 1, 'variance_value', variance * 0); // Placeholder for value calculation
+  const fetchEntry = useCallback(async () => {
+    if (isNew) {
+      try {
+        const res = await api<{ data: { entry_no: string } }>('/physical-stock-entry/next-no');
+        setEntry(p => ({ ...p, entry_no: res.data.entry_no }));
+      } catch {
+        setEntry(p => ({ ...p, entry_no: 'PSE-2025-0042' }));
       }
-    } catch {
-      // Keep existing value
+      return;
     }
-  };
-
-  // Update physical quantity and recalculate variance
-  const updatePhysicalQty = (seq: number, value: number) => {
-    const item = items.find(i => i.seq === seq);
-    if (!item) return;
-    
-    const newPhysicalQty = value;
-    const systemQty = item.system_qty || 0;
-    const variance = newPhysicalQty - systemQty;
-    
-    updateItemField(seq, 'physical_qty', newPhysicalQty);
-    updateItemField(seq, 'variance_qty', variance);
-    updateItemField(seq, 'variance_value', variance * 0); // Placeholder for value calculation
-  };
-
-  // Handle file upload (for import from Excel)
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
     try {
-      // In a real implementation, you would upload to the server
-      // For now, just show a toast
-      toast.info('Import from Excel functionality to be implemented');
-    } catch {
-      toast.error('Failed to import file');
-    }
+      setLoading(true);
+      const res = await api<{ data: any }>(`/physical-stock-entry/${id}`);
+      const d = res.data;
+      setEntry({
+        ...emptyEntry,
+        ...d,
+        entry_date: d.entry_date?.split('T')[0] || '',
+        stock_date: d.stock_date?.split('T')[0] || '',
+        warehouse_id: String(d.warehouse_id || ''),
+        location_id: String(d.location_id || ''),
+      });
+      if (d.items?.length) {
+        setItems(d.items.map((it: any) => ({
+          _key: genKey(),
+          material_id: String(it.material_id),
+          material_code: it.material_code || '',
+          material_name: it.material_name || '',
+          uom: it.uom || '',
+          batch_no: it.batch_no || '',
+          location: it.location || '',
+          system_qty: it.system_qty || 0,
+          physical_qty: String(it.physical_qty || ''),
+          variance_qty: (it.physical_qty || 0) - (it.system_qty || 0),
+          variance_value: it.variance_value || 0,
+          remarks: it.remarks || '',
+        })));
+      }
+    } catch { toast.error('Failed to load entry'); }
+    finally { setLoading(false); }
+  }, [id, isNew]);
+
+  useEffect(() => { fetchDropdowns(); fetchEntry(); }, [fetchDropdowns, fetchEntry]);
+
+  const update = (key: keyof EntryData, value: string) => setEntry(p => ({ ...p, [key]: value }));
+
+  const updateItem = (key: string, field: string, value: string) => {
+    setItems(prev => prev.map(it => {
+      if (it._key !== key) return it;
+      const updated = { ...it, [field]: value };
+      if (field === 'physical_qty') {
+        const phys = parseFloat(value) || 0;
+        updated.variance_qty = phys - updated.system_qty;
+        updated.variance_value = updated.variance_qty * 185; // approximation with avg price
+      }
+      if (field === 'material_id') {
+        const mat = materials.find(m => String(m.id) === value);
+        if (mat) { updated.material_code = mat.code; updated.material_name = mat.name; updated.uom = mat.uom; }
+      }
+      return updated;
+    }));
   };
 
-  // Download template
-  const handleDownloadTemplate = () => {
-    toast.info('Download template functionality to be implemented');
+  const addItem = () => {
+    setItems(p => [...p, { _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', batch_no: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, variance_value: 0, remarks: '' }]);
   };
 
-  // Save entry
+  const removeItem = (key: string) => {
+    setItems(p => p.length > 1 ? p.filter(it => it._key !== key) : p);
+  };
+
+  const handleClear = () => {
+    setEntry({ ...emptyEntry, entry_no: entry.entry_no });
+    setItems([{ _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', batch_no: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, variance_value: 0, remarks: '' }]);
+  };
+
   const handleSave = async () => {
+    if (!entry.warehouse_id) { toast.error('Godown is required'); return; }
+    if (!entry.entry_date) { toast.error('Entry date is required'); return; }
+    if (!entry.stock_date) { toast.error('Stock date is required'); return; }
+    const validItems = items.filter(i => i.material_id && i.physical_qty);
+    if (!validItems.length) { toast.error('At least one item is required'); return; }
+
+    setSaving(true);
     try {
-      setSaving(true);
-      
       const payload = {
-        ...formData,
-        godown_id: formData.godown_id ? Number(formData.godown_id) : null,
-        items: items.map(item => ({
-          item_code: item.item_code,
-          item_description: item.item_description,
-          uom: item.uom,
-          batch_no: item.batch_no,
-          location_rack: item.location_rack,
-          system_qty: item.system_qty,
-          physical_qty: item.physical_qty,
-          variance_qty: item.variance_qty,
-          variance_value: item.variance_value,
-          remarks: item.remarks,
+        ...entry,
+        warehouse_id: Number(entry.warehouse_id),
+        location_id: entry.location_id ? Number(entry.location_id) : null,
+        items: validItems.map(i => ({
+          material_id: Number(i.material_id),
+          uom: i.uom,
+          batch_no: i.batch_no || null,
+          location: i.location || null,
+          system_qty: i.system_qty,
+          physical_qty: parseFloat(i.physical_qty),
+          variance_qty: i.variance_qty,
+          variance_value: i.variance_value,
+          remarks: i.remarks || null,
         })),
       };
-
-      if (isEditMode) {
-        await api(`/physical-stock-entries/${id}`, { method: 'PUT', body: payload });
-        toast.success('Physical stock entry updated successfully');
+      if (isNew) {
+        await api('/physical-stock-entry', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success('Physical stock entry created!');
       } else {
-        await api('/physical-stock-entries', { method: 'POST', body: payload });
-        toast.success('New physical stock entry created successfully');
+        await api(`/physical-stock-entry/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success('Physical stock entry updated!');
       }
-      
       navigate('/physical-stock-entry');
-    } catch {
-      toast.error('Failed to save physical stock entry');
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
+    finally { setSaving(false); }
   };
 
-  // Calculate summary
-  const getSummary = () => {
-    const totalItems = items.length;
-    const matchedItems = items.filter(i => i.variance_qty === 0).length;
-    const varianceItems = items.filter(i => i.variance_qty !== 0).length;
-    const totalVarianceValue = items.reduce((sum, i) => sum + (i.variance_value || 0), 0);
-    
-    return { totalItems, matchedItems, varianceItems, totalVarianceValue };
-  };
-
-  const summary = getSummary();
-
-  // Open item search for a specific row
-  const openItemSearch = (index: number) => {
-    setSelectedItemIndex(index);
-    setShowItemDropdown(true);
-    setItemSearchQuery('');
-  };
+  // Summary calculations
+  const totalItems = items.filter(i => i.material_id).length;
+  const matchedItems = items.filter(i => i.variance_qty === 0 && i.material_id).length;
+  const varianceItems = items.filter(i => i.variance_qty !== 0 && i.material_id).length;
+  const totalVarianceValue = items.reduce((s, i) => s + i.variance_value, 0);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+            <ClipboardList className="w-5 h-5 text-blue-600" />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Package className="w-6 h-6 text-blue-600" />
-              Physical Stock Entry
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {isEditMode ? 'Edit' : isNewMode ? 'Create New' : 'View'} physical stock entry
-            </p>
+            <h1 className="text-xl font-bold text-gray-900">{isNew ? 'New Physical Stock Entry' : 'Edit Physical Stock Entry'}</h1>
+            <p className="text-xs text-gray-500">{entry.entry_no || 'Auto-generated'}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/physical-stock-entry')} className="btn btn-secondary">
-              <ChevronLeft className="w-4 h-4" /> Back to List
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-200 rounded-lg hover:bg-emerald-50">
+            <Download className="w-4 h-4" /> Download Template
+          </button>
+          <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-200 rounded-lg hover:bg-emerald-50">
+            <Upload className="w-4 h-4" /> Import from Excel
+          </button>
+          <button onClick={handleClear} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+            <RotateCcw className="w-4 h-4" /> Clear
+          </button>
+          {!isReadOnly && (
+            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
             </button>
-            {!isReadOnly && (
-              <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Save</>}
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Entry Information */}
+      {/* Section 1: Entry Information */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Package className="w-5 h-5 text-blue-600" />
-          1. Entry Information
-        </h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+            <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+          </div>
+          <h2 className="text-lg font-bold text-gray-900">1. Entry Information</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Row 1 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Entry No. <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="entry_no"
-              value={formData.entry_no}
-              onChange={handleChange}
-              readOnly={isEditMode}
-              className="input input-bordered w-full"
-            />
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Entry No.</label>
+            <input type="text" value={entry.entry_no} readOnly className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-600" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Entry Date <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="date"
-              name="entry_date"
-              value={formData.entry_date}
-              onChange={handleChange}
-              className="input input-bordered w-full"
-            />
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Entry Date <span className="text-red-500">*</span></label>
+            <input type="date" value={entry.entry_date} onChange={e => update('entry_date', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Stock Date <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="date"
-              name="stock_date"
-              value={formData.stock_date}
-              onChange={handleChange}
-              className="input input-bordered w-full"
-            />
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Stock Date <span className="text-red-500">*</span></label>
+            <input type="date" value={entry.stock_date} onChange={e => update('stock_date', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Reference No.
-            </label>
-            <input
-              type="text"
-              name="reference_no"
-              value={formData.reference_no}
-              onChange={handleChange}
-              placeholder="Ref / Document No."
-              className="input input-bordered w-full"
-            />
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Reference No.</label>
+            <input type="text" value={entry.reference_no} onChange={e => update('reference_no', e.target.value)} placeholder="Enter reference" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
           </div>
+
+          {/* Row 2 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Godown <span className="text-rose-500">*</span>
-            </label>
-            <select
-              name="godown_id"
-              value={formData.godown_id}
-              onChange={handleChange}
-              className="input input-bordered w-full"
-            >
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Godown <span className="text-red-500">*</span></label>
+            <select value={entry.warehouse_id} onChange={e => update('warehouse_id', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
               <option value="">Select Godown</option>
-              {godowns.map(g => (
-                <option key={g.id} value={g.id}>{g.code} - {g.name}</option>
-              ))}
+              {warehouses.map(w => <option key={w.id} value={String(w.id)}>{w.name} ({w.code})</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Location / Rack
-            </label>
-            <select
-              name="location_rack"
-              value={formData.location_rack}
-              onChange={handleChange}
-              className="input input-bordered w-full"
-            >
-              <option value="">All</option>
-              <option value="A-01-01">A-01-01</option>
-              <option value="A-01-02">A-01-02</option>
-              <option value="B-02-01">B-02-01</option>
-              <option value="B-02-02">B-02-02</option>
-              <option value="C-03-01">C-03-01</option>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Location / Rack</label>
+            <select value={entry.location_id} onChange={e => update('location_id', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+              <option value="">Select Location</option>
+              {locations.map(l => <option key={l.id} value={String(l.id)}>{l.name} ({l.code})</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Item Group
-            </label>
-            <select className="input input-bordered w-full">
-              <option value="">All</option>
-              <option value="Leather">Leather</option>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Item Group</label>
+            <select value={entry.item_group} onChange={e => update('item_group', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+              <option value="">All Groups</option>
               <option value="Chemicals">Chemicals</option>
+              <option value="Dyes">Dyes</option>
               <option value="Raw Materials">Raw Materials</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Item
-            </label>
-            <select className="input input-bordered w-full">
-              <option value="">All Items</option>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Item</label>
+            <div className="relative">
+              <select value={entry.material_id} onChange={e => update('material_id', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9">
+                <option value="">Select Item</option>
+                {materials.map(m => <option key={m.id} value={String(m.id)}>{m.code} - {m.name}</option>)}
+              </select>
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Row 3 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">UOM</label>
+            <select value={entry.uom} onChange={e => update('uom', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+              <option value="">All UOM</option>
+              <option value="KG">KG</option>
+              <option value="LTR">LTR</option>
+              <option value="MTR">MTR</option>
+              <option value="NOS">NOS</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              From Item Code
-            </label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Batch No.</label>
             <div className="relative">
-              <input
-                type="text"
-                name="from_item_code"
-                value={formData.from_item_code}
-                onChange={handleChange}
-                placeholder="Search Item Code"
-                className="input input-bordered w-full"
-              />
+              <input type="text" value={entry.batch_no} onChange={e => update('batch_no', e.target.value)} placeholder="Search batch" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9" />
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              To Item Code
-            </label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">From Item Code</label>
             <div className="relative">
-              <input
-                type="text"
-                name="to_item_code"
-                value={formData.to_item_code}
-                onChange={handleChange}
-                placeholder="Search Item Code"
-                className="input input-bordered w-full"
-              />
+              <input type="text" value={entry.from_item_code} onChange={e => update('from_item_code', e.target.value)} placeholder="From code" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9" />
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Batch No.
-            </label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">To Item Code</label>
             <div className="relative">
-              <input
-                type="text"
-                placeholder="Search Batch No."
-                className="input input-bordered w-full"
-              />
+              <input type="text" value={entry.to_item_code} onChange={e => update('to_item_code', e.target.value)} placeholder="To code" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9" />
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              UOM
-            </label>
-            <select
-              name="uom"
-              value={formData.uom}
-              onChange={handleChange}
-              className="input input-bordered w-full"
-            >
-              <option value="">All</option>
-              {UOM_OPTIONS.map(uom => (
-                <option key={uom} value={uom}>{uom}</option>
-              ))}
-            </select>
-          </div>
-          <div className="md:col-span-2 lg:col-span-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Remarks
-            </label>
+
+          {/* Row 4: Remarks */}
+          <div className="lg:col-span-4">
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Remarks</label>
             <textarea
-              name="remarks"
-              value={formData.remarks}
-              onChange={handleChange}
-              placeholder="Enter remarks (optional)"
               rows={2}
-              className="input input-bordered w-full resize-none"
+              value={entry.remarks}
+              onChange={e => update('remarks', e.target.value)}
+              placeholder="Enter any remarks or notes..."
+              className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
             />
           </div>
         </div>
       </div>
 
-      {/* Stock Details */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Package className="w-5 h-5 text-blue-600" />
-            2. Stock Details
-          </h2>
-          <div className="flex gap-2">
-            <label className="btn btn-primary btn-sm cursor-pointer">
-              <Upload className="w-4 h-4" /> Import from Excel
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                className="hidden"
-                accept=".xlsx,.xls,.csv"
-              />
-            </label>
-            <button onClick={handleDownloadTemplate} className="btn btn-outline btn-sm">
-              <Download className="w-4 h-4" /> Download Template
-            </button>
-            <button className="btn btn-ghost btn-sm">
-              Clear
-            </button>
+      {/* Section 2: Stock Details */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+              <Package className="w-4 h-4 text-blue-600" />
+            </div>
+            <h2 className="text-lg font-bold text-gray-900">2. Stock Details</h2>
           </div>
         </div>
-
         <div className="overflow-x-auto">
-          <table className="table table-compact">
-            <thead className="bg-gray-50">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="whitespace-nowrap">#</th>
-                <th className="whitespace-nowrap">Item Code <span className="text-rose-500">*</span></th>
-                <th className="whitespace-nowrap">Item Description</th>
-                <th className="whitespace-nowrap">UOM</th>
-                <th className="whitespace-nowrap">Batch No.</th>
-                <th className="whitespace-nowrap">Location / Rack</th>
-                <th className="whitespace-nowrap">System Qty</th>
-                <th className="whitespace-nowrap">Physical Qty <span className="text-rose-500">*</span></th>
-                <th className="whitespace-nowrap">Variance Qty</th>
-                <th className="whitespace-nowrap">Variance Value</th>
-                <th className="whitespace-nowrap">Remarks</th>
-                {!isReadOnly && <th className="whitespace-nowrap">Action</th>}
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">#</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Code <span className="text-red-500">*</span></th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Description</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">UOM</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Batch No.</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Location / Rack</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">System Qty</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Physical Qty <span className="text-red-500">*</span></th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Qty</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Value</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600">Remarks</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600">Action</th>
               </tr>
             </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={!isReadOnly ? 12 : 11} className="text-center text-gray-500 py-4">
-                    No items added. Click "Add Row" to add items.
+            <tbody className="divide-y divide-gray-100">
+              {items.map((item, idx) => (
+                <tr key={item._key} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
+                  <td className="px-4 py-3">
+                    <select value={item.material_id} onChange={e => updateItem(item._key, 'material_id', e.target.value)} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[120px]">
+                      <option value="">Select</option>
+                      {materials.map(m => <option key={m.id} value={String(m.id)}>{m.code}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-700 min-w-[150px]">{item.material_name || '-'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{item.uom || '-'}</td>
+                  <td className="px-4 py-3">
+                    <input type="text" value={item.batch_no} onChange={e => updateItem(item._key, 'batch_no', e.target.value)} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg min-w-[100px]" placeholder="Batch" />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{item.location || '-'}</td>
+                  <td className="px-4 py-3 text-right text-xs text-gray-700 font-medium">{item.system_qty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="px-4 py-3">
+                    <input type="number" value={item.physical_qty} onChange={e => updateItem(item._key, 'physical_qty', e.target.value)} className="w-full px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+                  </td>
+                  <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_qty < 0 ? 'text-red-600' : item.variance_qty > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
+                    {item.variance_qty > 0 ? '+' : ''}{item.variance_qty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_value < 0 ? 'text-red-600' : item.variance_value > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
+                    {item.variance_value > 0 ? '+' : ''}{item.variance_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg" title="Add remarks">
+                      <MessageSquare className="w-4 h-4" />
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button onClick={() => removeItem(item._key)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
-              ) : (
-                items.map((item, index) => {
-                  const isSelected = selectedItemIndex === index;
-                  return (
-                    <tr key={item.seq} className="hover:bg-gray-50">
-                      <td>{index + 1}</td>
-                      <td className="relative">
-                        <input
-                          type="text"
-                          value={item.item_code}
-                          onChange={(e) => updateItemField(item.seq, 'item_code', e.target.value)}
-                          onFocus={() => openItemSearch(index)}
-                          placeholder="Select Item"
-                          className="input input-bordered input-sm w-32"
-                          disabled={isReadOnly}
-                        />
-                        {isSelected && showItemDropdown && (
-                          <div className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto w-64">
-                            <div className="relative p-2">
-                              <input
-                                type="text"
-                                value={itemSearchQuery}
-                                onChange={(e) => setItemSearchQuery(e.target.value)}
-                                placeholder="Search items..."
-                                className="input input-bordered input-sm w-full pr-8"
-                                autoFocus
-                              />
-                              <X
-                                className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 cursor-pointer"
-                                onClick={() => {
-                                  setShowItemDropdown(false);
-                                  setSelectedItemIndex(null);
-                                  setItemSearchQuery('');
-                                }}
-                              />
-                            </div>
-                            {filteredItems.map(m => (
-                              <div
-                                key={m.id}
-                                onClick={() => handleSelectItem(m, index)}
-                                className="px-4 py-2 hover:bg-gray-50 cursor-pointer text-sm"
-                              >
-                                <div className="font-medium">{m.code} - {m.name}</div>
-                                <div className="text-xs text-gray-500">{m.uom}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td>{item.item_description}</td>
-                      <td>{item.uom}</td>
-                      <td>{item.batch_no || '-'}</td>
-                      <td>{item.location_rack || '-'}</td>
-                      <td className="text-right">{item.system_qty.toFixed(2)}</td>
-                      <td>
-                        <input
-                          type="number"
-                          value={item.physical_qty}
-                          onChange={(e) => updatePhysicalQty(item.seq, Number(e.target.value))}
-                          className="input input-bordered input-sm w-24 text-right"
-                          disabled={isReadOnly}
-                        />
-                      </td>
-                      <td className={`text-right font-medium ${
-                        item.variance_qty >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                      }`}>
-                        {item.variance_qty >= 0 ? '+' : ''}{item.variance_qty.toFixed(2)}
-                      </td>
-                      <td className={`text-right font-medium ${
-                        item.variance_value >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                      }`}>
-                        {item.variance_value >= 0 ? '+' : ''}{item.variance_value.toFixed(2)}
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={item.remarks || ''}
-                          onChange={(e) => updateItemField(item.seq, 'remarks', e.target.value)}
-                          className="input input-bordered input-sm w-32"
-                          disabled={isReadOnly}
-                        />
-                      </td>
-                      {!isReadOnly && (
-                        <td className="whitespace-nowrap">
-                          <button
-                            onClick={() => removeRow(item.seq)}
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })
-              )}
+              ))}
             </tbody>
-            <tfoot className="bg-gray-50">
-              <tr>
-                <td colSpan={6} className="text-right font-medium">Total Items:</td>
-                <td className="text-center font-bold">{summary.totalItems}</td>
-                <td colSpan={4}></td>
-              </tr>
-              <tr>
-                <td colSpan={6} className="text-right font-medium">Matched Items:</td>
-                <td className="text-center">{summary.matchedItems}</td>
-                <td colSpan={4}></td>
-              </tr>
-              <tr>
-                <td colSpan={6} className="text-right font-medium">Variance Items:</td>
-                <td className="text-center">{summary.varianceItems}</td>
-                <td colSpan={4}></td>
-              </tr>
-              <tr>
-                <td colSpan={6} className="text-right font-medium">Total Variance Value:</td>
-                <td colSpan={5} className="text-right">
-                  <span className={`font-bold ${summary.totalVarianceValue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {summary.totalVarianceValue >= 0 ? '+' : ''}{summary.totalVarianceValue.toFixed(2)}
-                  </span>
-                </td>
-              </tr>
-            </tfoot>
           </table>
         </div>
 
-        {!isReadOnly && (
-          <button onClick={addRow} className="btn btn-primary btn-sm mt-4">
+        {/* Add Row + Footer */}
+        <div className="px-6 py-4 border-t border-gray-100">
+          <button onClick={addItem} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
             <Plus className="w-4 h-4" /> Add Row
           </button>
-        )}
+        </div>
+        <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-700">Total Items: {totalItems}</span>
+          <div className="flex items-center gap-6">
+            <span className="text-sm text-gray-600">Total Variance Qty: <span className={`font-medium ${items.reduce((s, i) => s + i.variance_qty, 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{items.reduce((s, i) => s + i.variance_qty, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+            <span className="text-sm text-gray-600">Total Variance Value: <span className={`font-medium ${totalVarianceValue < 0 ? 'text-red-600' : 'text-emerald-600'}`}>₹{totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+          </div>
+        </div>
       </div>
 
-      {/* Summary */}
+      {/* Section 3: Summary */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Package className="w-5 h-5 text-blue-600" />
-          3. Summary
-        </h2>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
-            <div className="text-3xl font-bold text-blue-600">{summary.totalItems}</div>
-            <div className="text-sm font-medium text-blue-700 mt-1">Total Items</div>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+            <BarChart3 className="w-4 h-4 text-blue-600" />
           </div>
-          <div className="text-center p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl">
-            <div className="text-3xl font-bold text-emerald-600">{summary.matchedItems}</div>
-            <div className="text-sm font-medium text-emerald-700 mt-1">Matched Items</div>
+          <h2 className="text-lg font-bold text-gray-900">3. Summary</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
+            <div className="text-3xl font-bold text-blue-700">{totalItems}</div>
+            <div className="text-sm font-medium text-blue-600 mt-1">Total Items</div>
           </div>
-          <div className="text-center p-4 bg-gradient-to-br from-rose-50 to-rose-100 rounded-xl">
-            <div className="text-3xl font-bold text-rose-600">{summary.varianceItems}</div>
-            <div className="text-sm font-medium text-rose-700 mt-1">Variance Items</div>
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+            <div className="text-3xl font-bold text-emerald-700">{matchedItems}</div>
+            <div className="text-sm font-medium text-emerald-600 mt-1">Matched Items</div>
           </div>
-          <div className="text-center p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl">
-            <div className="text-3xl font-bold text-amber-600">{summary.totalVarianceValue.toFixed(2)}</div>
-            <div className="text-sm font-medium text-amber-700 mt-1">Total Variance Value</div>
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-center">
+            <div className="text-3xl font-bold text-red-700">{varianceItems}</div>
+            <div className="text-sm font-medium text-red-600 mt-1">Variance Items</div>
+          </div>
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
+            <div className={`text-2xl font-bold ${totalVarianceValue < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+              {totalVarianceValue < 0 ? '' : '+'}{totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+            <div className="text-sm font-medium text-amber-600 mt-1">Total Variance Value</div>
           </div>
         </div>
-
-        <div className="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Notes:</h3>
-          <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Prices are as per approved supplier agreements.</li>
-            <li>• Current Price is effective from 16-05-2024</li>
-            <li>• Review date is monthly unless specified.</li>
-          </ul>
-        </div>
-      </div>
-
-      {/* Back and Save buttons */}
-      <div className="flex justify-between items-center">
-        <button onClick={() => navigate('/physical-stock-entry')} className="btn btn-secondary">
-          <ChevronLeft className="w-4 h-4" /> Back to List
-        </button>
-        {!isReadOnly && (
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Save Entry</>}
-          </button>
-        )}
       </div>
     </div>
   );

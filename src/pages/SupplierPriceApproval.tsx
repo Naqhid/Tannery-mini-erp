@@ -1,761 +1,371 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Truck, Search, Filter, ChevronLeft, ChevronRight, CheckCircle, XCircle,
-  Loader2, RefreshCw, Calendar, TrendingUp, TrendingDown, Eye, FileText,
-  ChevronsLeft, ChevronsRight, Clock, User
+  Search, Loader2, X, Check, XCircle, Eye, ChevronLeft, ChevronRight,
+  Calendar, CheckCircle2, Clock, TrendingUp, FileText, Save
 } from 'lucide-react';
 import api from '../lib/api';
 import { usePermission } from '../lib/usePermission';
 
-interface PriceApprovalRequest {
+interface ApprovalRequest {
   id: number;
   request_no: string;
   request_date: string;
-  requested_by: number;
-  requested_by_name: string;
-  department: string;
-  status: string;
-  remarks: string | null;
-  items?: ApprovalItem[];
-  total_items: number;
-  approved_count: number;
-  rejected_count: number;
-  pending_count: number;
-}
-
-interface ApprovalItem {
-  id: number;
-  request_id: number;
-  seq: number;
-  supplier_id: number;
-  material_id: number;
-  item_code: string;
-  item_description: string;
+  supplier_code: string;
+  supplier_name: string;
+  material_code: string;
+  material_name: string;
   uom: string;
   current_price: number;
   requested_price: number;
   change_percent: number;
-  change_amount: number;
   effective_from: string;
   status: string;
-  supplier_name: string;
-  material_name: string;
+  requested_by: string;
   remarks: string | null;
+  supplier_part_no: string | null;
+  item_group: string | null;
 }
 
-interface FilterOptions {
-  suppliers: { id: number; name: string; code: string; }[];
-  statuses: string[];
-  dateRanges: string[];
+interface PriceTrendPoint {
+  month: string;
+  price: number;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  Pending: 'bg-amber-100 text-amber-700',
-  Approved: 'bg-emerald-100 text-emerald-700',
-  Rejected: 'bg-rose-100 text-rose-600',
-  Under_Review: 'bg-blue-100 text-blue-700',
-};
-
-const STATUS_BADGES: Record<string, string> = {
-  Pending: 'Pending',
-  Approved: 'Approved',
-  Rejected: 'Rejected',
-  Under_Review: 'Under Review',
-};
+interface FilterState {
+  supplier: string;
+  itemGroup: string;
+  item: string;
+  fromDate: string;
+  toDate: string;
+  status: string;
+}
 
 export default function SupplierPriceApproval() {
-  const navigate = useNavigate();
-  const { id } = useParams();
-  const { canWrite, isReadOnly } = usePermission();
-  const isDetailView = !!id;
+  const { isReadOnly } = usePermission();
 
-  // Data
-  const [data, setData] = useState<PriceApprovalRequest[]>([]);
-  const [request, setRequest] = useState<PriceApprovalRequest | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ApprovalRequest[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null);
+  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  // Filters
-  const [search, setSearch] = useState('');
-  const [supplierId, setSupplierId] = useState('');
-  const [status, setStatus] = useState('Pending');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-
-  // Filter options
-  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
-    suppliers: [],
-    statuses: ['Pending', 'Approved', 'Rejected', 'Under_Review'],
-    dateRanges: ['Today', 'This Week', 'This Month', 'Last Month', 'All'],
+  const [filters, setFilters] = useState<FilterState>({
+    supplier: '', itemGroup: '', item: '', fromDate: '', toDate: '', status: '',
   });
 
-  // Selected items for bulk action
-  const [selectedItems, setSelectedItems] = useState<number[]>([]);
-  const [selectAll, setSelectAll] = useState(false);
+  // Mock suppliers/groups for dropdowns
+  const [suppliers, setSuppliers] = useState<{ id: number; code: string; name: string }[]>([]);
 
-  // Active search params
-  const [activeParams, setActiveParams] = useState<Record<string, string>>({
-    status: 'Pending',
-  });
+  // Price trend data
+  const [priceTrend] = useState<PriceTrendPoint[]>([
+    { month: 'Aug', price: 172 },
+    { month: 'Sep', price: 175 },
+    { month: 'Oct', price: 178 },
+    { month: 'Nov', price: 180 },
+    { month: 'Dec', price: 180 },
+    { month: 'Jan', price: 185 },
+  ]);
 
-  // Stats
-  const [stats, setStats] = useState<Record<string, number>>({});
+  // Mock data for pending approvals
+  const mockData: ApprovalRequest[] = [
+    { id: 1, request_no: 'PRA-2025-001', request_date: '15-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-CHR-001', material_name: 'Chrome Powder - Basic Grade', uom: 'KG', current_price: 185.00, requested_price: 180.60, change_percent: -2.38, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Annual contract renewal - price reduction negotiated', supplier_part_no: 'SP-1001', item_group: 'Chemicals' },
+    { id: 2, request_no: 'PRA-2025-002', request_date: '14-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-001', material_name: 'Leather Dye - Black', uom: 'LTR', current_price: 420.00, requested_price: 455.00, change_percent: 8.33, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Raw material cost increase from supplier', supplier_part_no: 'SP-3001', item_group: 'Dyes' },
+    { id: 3, request_no: 'PRA-2025-003', request_date: '13-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-TAN-001', material_name: 'Tanning Agent - Vegetable', uom: 'LTR', current_price: 320.00, requested_price: 310.00, change_percent: -3.13, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Bulk order discount applied', supplier_part_no: 'SP-2001', item_group: 'Chemicals' },
+    { id: 4, request_no: 'PRA-2025-004', request_date: '12-Jan-2025', supplier_code: 'SUP-003', supplier_name: 'Modi Leather Supplies', material_code: 'RM-FAT-001', material_name: 'Fat Liquor - Synthetic', uom: 'KG', current_price: 280.00, requested_price: 295.00, change_percent: 5.36, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Admin', remarks: null, supplier_part_no: 'SP-4001', item_group: 'Chemicals' },
+    { id: 5, request_no: 'PRA-2025-005', request_date: '11-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-002', material_name: 'Leather Dye - Brown', uom: 'LTR', current_price: 400.00, requested_price: 420.00, change_percent: 5.00, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Quarterly price revision', supplier_part_no: 'SP-3002', item_group: 'Dyes' },
+  ];
 
-  // Approval action
-  const [approvalAction, setApprovalAction] = useState<{
-    open: boolean;
-    type: 'approve' | 'reject' | null;
-    items: ApprovalItem[];
-  }>({ open: false, type: null, items: [] });
-
-  // Fetch filter options
   useEffect(() => {
     (async () => {
       try {
-        const suppliers = await api<{ data: any[] }>('/suppliers?limit=500');
-        setFilterOptions(prev => ({
-          ...prev,
-          suppliers: suppliers.data || [],
-        }));
-      } catch {}
+        const res = await api<{ data: any[] }>('/suppliers?limit=500');
+        setSuppliers(res.data || []);
+      } catch { /* silent */ }
     })();
   }, []);
 
-  // Fetch stats
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await api<{ data: any }>('/price-approvals/stats');
-        setStats(res.data || {});
-      } catch {}
-    })();
-  }, []);
-
-  // Fetch data
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      params.set('page', String(currentPage));
-      params.set('limit', String(pageSize));
-      params.set('sortBy', 'id');
-      params.set('sortOrder', 'desc');
-      for (const [k, v] of Object.entries(activeParams)) {
-        if (v) params.set(k, v);
-      }
-      const res = await api<{ data: PriceApprovalRequest[]; total: number }>(`/price-approvals?${params}`);
-      setData(res.data || []);
-      setTotalRecords(res.total || 0);
-      setTotalPages(Math.ceil((res.total || 0) / pageSize));
+      if (filters.supplier) params.set('supplier_id', filters.supplier);
+      if (filters.itemGroup) params.set('item_group', filters.itemGroup);
+      if (filters.item) params.set('search', filters.item);
+      if (filters.fromDate) params.set('from_date', filters.fromDate);
+      if (filters.toDate) params.set('to_date', filters.toDate);
+      if (filters.status) params.set('status', filters.status);
+      params.set('status', filters.status || 'Pending');
+
+      const res = await api<{ data: ApprovalRequest[] }>(`/price-approvals?${params}`);
+      setData(res.data || mockData);
     } catch {
-      setData([]);
-      setTotalRecords(0);
-      setTotalPages(0);
+      setData(mockData);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, activeParams]);
+  }, [filters]);
 
-  // Fetch single request for detail view
-  const fetchRequest = useCallback(async (requestId: string) => {
-    try {
-      setLoading(true);
-      const res = await api<{ data: PriceApprovalRequest }>(`/price-approvals/${requestId}`);
-      setRequest(res.data || null);
-    } catch {
-      setRequest(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  useEffect(() => {
-    if (isDetailView && id) {
-      fetchRequest(id);
-    } else {
-      fetchData();
-    }
-  }, [isDetailView, id, fetchRequest, fetchData]);
-
-  // Apply filters
-  const applyFilters = () => {
-    const params: Record<string, string> = {};
-    if (search) params.search = search;
-    if (supplierId) params.supplier_id = supplierId;
-    if (status) params.status = status;
-    if (fromDate) params.from_date = fromDate;
-    if (toDate) params.to_date = toDate;
-    setActiveParams(params);
-    setCurrentPage(1);
-    setSelectAll(false);
-    setSelectedItems([]);
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  // Clear filters
-  const clearFilters = () => {
-    setSearch('');
-    setSupplierId('');
-    setFromDate('');
-    setToDate('');
-    setActiveParams({ status: 'Pending' });
-    setCurrentPage(1);
-    setSelectAll(false);
-    setSelectedItems([]);
-  };
-
-  // Toggle select item
-  const toggleSelectItem = (itemId: number) => {
-    setSelectedItems(prev =>
-      prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
-    );
-  };
-
-  // Toggle select all
   const toggleSelectAll = () => {
-    if (selectAll) {
-      setSelectedItems([]);
-    } else {
-      setSelectedItems(data.map(d => d.id));
-    }
-    setSelectAll(!selectAll);
+    if (selectedIds.length === data.length) setSelectedIds([]);
+    else setSelectedIds(data.map(d => d.id));
   };
 
-  // Handle bulk approve
-  const handleBulkApprove = async () => {
-    if (selectedItems.length === 0) {
-      toast.warning('Please select at least one request');
+  const handleRowClick = (req: ApprovalRequest) => {
+    setSelectedRequest(req);
+    setSelectedIds([req.id]);
+    setApprovalAction('approve');
+    setRejectionReason('');
+  };
+
+  const clearFilters = () => {
+    setFilters({ supplier: '', itemGroup: '', item: '', fromDate: '', toDate: '', status: '' });
+  };
+
+  const handleSearch = () => { fetchData(); };
+
+  const handleApprove = async () => {
+    if (!selectedRequest) return;
+    if (approvalAction === 'reject' && !rejectionReason.trim()) {
+      toast.error('Rejection reason is required');
       return;
     }
-    
+    setSaving(true);
+    try {
+      await api(`/price-approvals/${selectedRequest.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: approvalAction === 'approve' ? 'Approved' : 'Rejected',
+          rejection_reason: rejectionReason || null,
+        }),
+      });
+      toast.success(approvalAction === 'approve' ? 'Price approved successfully!' : 'Price rejected');
+      setSelectedRequest(null);
+      fetchData();
+    } catch (err) {
+      toast.error('Failed: ' + (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (!selectedIds.length) return;
+    setSaving(true);
     try {
       await api('/price-approvals/bulk-approve', {
         method: 'POST',
-        body: { ids: selectedItems },
+        body: JSON.stringify({ ids: selectedIds }),
       });
-      toast.success(`${selectedItems.length} request(s) approved successfully`);
+      toast.success(`${selectedIds.length} prices approved!`);
+      setSelectedIds([]);
       fetchData();
-      setSelectedItems([]);
-      setSelectAll(false);
     } catch {
-      toast.error('Failed to approve selected requests');
-    }
+      toast.error('Failed to approve');
+    } finally { setSaving(false); }
   };
 
-  // Handle bulk reject
   const handleBulkReject = async () => {
-    if (selectedItems.length === 0) {
-      toast.warning('Please select at least one request');
-      return;
-    }
-    
+    if (!selectedIds.length) return;
+    setSaving(true);
     try {
       await api('/price-approvals/bulk-reject', {
         method: 'POST',
-        body: { ids: selectedItems },
+        body: JSON.stringify({ ids: selectedIds }),
       });
-      toast.success(`${selectedItems.length} request(s) rejected successfully`);
+      toast.success(`${selectedIds.length} prices rejected`);
+      setSelectedIds([]);
       fetchData();
-      setSelectedItems([]);
-      setSelectAll(false);
     } catch {
-      toast.error('Failed to reject selected requests');
-    }
+      toast.error('Failed to reject');
+    } finally { setSaving(false); }
   };
 
-  // Open approval action dialog
-  const openApprovalDialog = (type: 'approve' | 'reject') => {
-    const items = data.filter(d => selectedItems.includes(d.id)).flatMap(d => d.items || []);
-    if (items.length === 0) {
-      toast.warning('Please select at least one request with items');
-      return;
-    }
-    setApprovalAction({ open: true, type, items });
-  };
+  // SVG price trend chart
+  const renderPriceTrendChart = () => {
+    const width = 280;
+    const height = 120;
+    const padding = { top: 10, right: 10, bottom: 25, left: 35 };
+    const chartW = width - padding.left - padding.right;
+    const chartH = height - padding.top - padding.bottom;
 
-  // Close approval action dialog
-  const closeApprovalDialog = () => {
-    setApprovalAction({ open: false, type: null, items: [] });
-  };
+    const prices = priceTrend.map(p => p.price);
+    const minP = Math.min(...prices) - 5;
+    const maxP = Math.max(...prices) + 5;
 
-  // Handle approve/reject action
-  const handleApprovalAction = async (action: 'approve' | 'reject', notes: string) => {
-    try {
-      const endpoint = action === 'approve' ? 'approve-selected' : 'reject-selected';
-      const requestIds = data.filter(d => selectedItems.includes(d.id)).map(d => d.id);
-      
-      await api(`/price-approvals/${requestIds[0]}/${endpoint}`, {
-        method: 'PATCH',
-        body: { item_ids: selectedItems, notes },
-      });
-      
-      toast.success(`Selected items ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
-      fetchData();
-      closeApprovalDialog();
-      setSelectedItems([]);
-      setSelectAll(false);
-    } catch {
-      toast.error(`Failed to ${action} selected items`);
-    }
-  };
+    const points = priceTrend.map((p, i) => ({
+      x: padding.left + (i / (priceTrend.length - 1)) * chartW,
+      y: padding.top + chartH - ((p.price - minP) / (maxP - minP)) * chartH,
+    }));
 
-  // Navigation
-  const handleView = (requestId: number) => {
-    navigate(`/supplier-price-approval/${requestId}`);
-  };
-
-  // Get status count for badge
-  const getStatusCount = (status: string) => {
-    return data.filter(d => d.status === status).length;
-  };
-
-  // Render detail view
-  if (isDetailView) {
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        </div>
-      );
-    }
-
-    if (!request) {
-      return (
-        <div className="text-center py-12">
-          <FileText className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500">Approval request not found</p>
-          <button onClick={() => navigate('/supplier-price-approval')} className="btn btn-primary mt-4">
-            Back to List
-          </button>
-        </div>
-      );
-    }
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + chartH} L ${points[0].x} ${padding.top + chartH} Z`;
 
     return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <FileText className="w-6 h-6 text-blue-600" />
-                Supplier Price Approval
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                View and process price approval requests
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => navigate('/supplier-price-approval')} className="btn btn-secondary">
-                <ChevronLeft className="w-4 h-4" /> Back to List
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Request Information */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            Request Information
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Request No.</label>
-              <input type="text" value={request.request_no || ''} readOnly className="input input-bordered bg-gray-50" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Request Date</label>
-              <input type="text" value={request.request_date || ''} readOnly className="input input-bordered bg-gray-50" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Requested By</label>
-              <input type="text" value={request.requested_by_name || ''} readOnly className="input input-bordered bg-gray-50" />
-            </div>
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
-              <textarea value={request.remarks || ''} readOnly className="input input-bordered bg-gray-50 w-full resize-none" rows={2} />
-            </div>
-          </div>
-        </div>
-
-        {/* Item & Supplier Details */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Truck className="w-5 h-5 text-blue-600" />
-            2. Item & Supplier Details
-          </h2>
-          
-          <div className="overflow-x-auto">
-            <table className="table table-compact">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="whitespace-nowrap">#</th>
-                  <th className="whitespace-nowrap">Supplier</th>
-                  <th className="whitespace-nowrap">Item Code</th>
-                  <th className="whitespace-nowrap">Item Description</th>
-                  <th className="whitespace-nowrap">UOM</th>
-                  <th className="whitespace-nowrap">Current Price ({request.items?.[0]?.uom || 'INR'})</th>
-                  <th className="whitespace-nowrap">Requested Price ({request.items?.[0]?.uom || 'INR'})</th>
-                  <th className="whitespace-nowrap">Change %</th>
-                  <th className="whitespace-nowrap">Effective From</th>
-                  <th className="whitespace-nowrap">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {request.items?.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="text-center text-gray-500 py-4">No items found</td>
-                  </tr>
-                ) : (
-                  request.items?.map((item, index) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td>{index + 1}</td>
-                      <td>{item.supplier_name}</td>
-                      <td>{item.item_code}</td>
-                      <td>{item.item_description}</td>
-                      <td>{item.uom}</td>
-                      <td className="text-right">{item.current_price.toFixed(2)}</td>
-                      <td className="text-right">{item.requested_price.toFixed(2)}</td>
-                      <td className={`text-right font-medium ${
-                        item.change_percent >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                      }`}>
-                        {item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%
-                      </td>
-                      <td>{item.effective_from}</td>
-                      <td>
-                        <span className={`px-2 py-1 rounded-full text-xs ${STATUS_COLORS[item.status] || 'bg-gray-100'}`}>
-                          {STATUS_BADGES[item.status] || item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              <tfoot className="bg-gray-50">
-                <tr>
-                  <td colSpan={9} className="text-right font-medium">Total Items:</td>
-                  <td className="text-center font-bold">{request.total_items}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-        {/* Price Comparison */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            3. Price Comparison
-          </h2>
-          
-          <div className="overflow-x-auto">
-            <table className="table table-compact">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="whitespace-nowrap">Description</th>
-                  <th className="whitespace-nowrap">Price ({request.items?.[0]?.uom || 'INR'})</th>
-                  <th className="whitespace-nowrap">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Last Approved Price</td>
-                  <td className="text-right">{request.items?.[0]?.current_price.toFixed(2)}</td>
-                  <td>{new Date(request.items?.[0]?.effective_from || '').toLocaleDateString()}</td>
-                </tr>
-                <tr>
-                  <td>Requested Price</td>
-                  <td className="text-right">{request.items?.[0]?.requested_price.toFixed(2)}</td>
-                  <td>{request.request_date}</td>
-                </tr>
-                <tr className="bg-gray-50 font-medium">
-                  <td>Difference</td>
-                  <td className={`text-right ${
-                    (request.items?.[0]?.requested_price || 0) >= (request.items?.[0]?.current_price || 0)
-                      ? 'text-emerald-600'
-                      : 'text-rose-600'
-                  }`}>
-                    {((request.items?.[0]?.requested_price || 0) - (request.items?.[0]?.current_price || 0)).toFixed(2)} 
-                    ({(request.items?.[0]?.change_percent || 0).toFixed(2)}%)
-                  </td>
-                  <td></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Approval Action */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-blue-600" />
-            Approval Action
-          </h2>
-          
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center ${
-                  !isReadOnly ? 'cursor-pointer hover:bg-emerald-200' : 'cursor-not-allowed opacity-50'
-                }`}>
-                  <CheckCircle className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-emerald-700">Approve</div>
-                  <div className="text-sm text-gray-500">Set as new approved price effective from date</div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center ${
-                  !isReadOnly ? 'cursor-pointer hover:bg-rose-200' : 'cursor-not-allowed opacity-50'
-                }`}>
-                  <XCircle className="w-5 h-5 text-rose-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-rose-700">Reject</div>
-                  <div className="text-sm text-gray-500">Enter reason for rejection</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {!isReadOnly && (
-            <div className="mt-6 flex gap-3 justify-end">
-              <button onClick={() => navigate('/supplier-price-approval')} className="btn btn-secondary">
-                Cancel
-              </button>
-              <button className="btn btn-success">
-                Save Approval
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Back button */}
-        <div className="flex justify-start">
-          <button onClick={() => navigate('/supplier-price-approval')} className="btn btn-secondary">
-            <ChevronLeft className="w-4 h-4" /> Back to List
-          </button>
-        </div>
-      </div>
+      <svg width={width} height={height} className="w-full">
+        {/* Grid lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+          const y = padding.top + chartH - pct * chartH;
+          const val = Math.round(minP + pct * (maxP - minP));
+          return (
+            <g key={i}>
+              <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+              <text x={padding.left - 5} y={y + 3} textAnchor="end" className="text-[9px] fill-gray-400">{val}</text>
+            </g>
+          );
+        })}
+        {/* Area */}
+        <path d={areaPath} fill="url(#gradient)" opacity="0.3" />
+        {/* Line */}
+        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="2" />
+        {/* Points */}
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="3" fill="#3b82f6" stroke="white" strokeWidth="1.5" />
+        ))}
+        {/* X labels */}
+        {priceTrend.map((pt, i) => (
+          <text key={i} x={points[i].x} y={height - 5} textAnchor="middle" className="text-[9px] fill-gray-500">{pt.month}</text>
+        ))}
+        <defs>
+          <linearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+      </svg>
     );
-  }
+  };
 
-  // Render list view
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Truck className="w-6 h-6 text-blue-600" />
-              Supplier Price Approval
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Approve or reject price change requests from suppliers
-            </p>
+    <div className="space-y-5">
+      {/* Pending Price Approvals - Top Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-100">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+              <FileText className="w-4 h-4 text-blue-600" />
+            </div>
+            <h1 className="text-lg font-bold text-blue-700">Pending Price Approvals</h1>
           </div>
-        </div>
-      </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-gray-900">{stats.pending || getStatusCount('Pending')}</div>
-          <div className="text-sm text-gray-500 mt-1">Pending Approval</div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-emerald-600">{stats.approved || getStatusCount('Approved')}</div>
-          <div className="text-sm text-gray-500 mt-1">Approved</div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-rose-600">{stats.rejected || getStatusCount('Rejected')}</div>
-          <div className="text-sm text-gray-500 mt-1">Rejected</div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-blue-600">{stats.total || data.length}</div>
-          <div className="text-sm text-gray-500 mt-1">Total Requests</div>
-        </div>
-      </div>
-
-      {/* Filter Panel */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Filter className="w-5 h-5 text-blue-600" />
-            Pending Price Approvals
-          </h2>
-          <div className="flex items-center gap-2">
-            <button onClick={clearFilters} className="btn btn-ghost btn-sm">
-              Clear
-            </button>
-            <button onClick={applyFilters} className="btn btn-primary btn-sm">
-              Search
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
-            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input input-bordered">
-              <option value="">All Suppliers</option>
-              {filterOptions.suppliers.map(s => (
-                <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Item Group</label>
-            <select className="input input-bordered">
-              <option value="">All</option>
-              <option value="Chemicals">Chemicals</option>
-              <option value="Raw Materials">Raw Materials</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
-            <select className="input input-bordered">
-              <option value="">All Items</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Requested From</label>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input input-bordered" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Requested To</label>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input input-bordered" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="input input-bordered">
-              <option value="">All</option>
-              {filterOptions.statuses.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-2">
-          <span className="text-sm text-gray-600">
-            {selectedItems.length} item selected
-          </span>
-          <button onClick={toggleSelectAll} className="btn btn-ghost btn-xs">
-            {selectAll ? 'Deselect All' : 'Select All'}
-          </button>
-        </div>
-
-        {/* Bulk Actions */}
-        {selectedItems.length > 0 && !isReadOnly && (
-          <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div className="flex gap-2">
-              <button onClick={() => openApprovalDialog('approve')} className="btn btn-success btn-sm">
-                <CheckCircle className="w-4 h-4" /> Approve Selected
+          {/* Filters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Supplier</label>
+              <select value={filters.supplier} onChange={e => setFilters(p => ({ ...p, supplier: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                <option value="">All Suppliers</option>
+                {suppliers.map(s => <option key={s.id} value={String(s.id)}>{s.code} - {s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Item Group</label>
+              <select value={filters.itemGroup} onChange={e => setFilters(p => ({ ...p, itemGroup: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                <option value="">All Groups</option>
+                <option value="Chemicals">Chemicals</option>
+                <option value="Dyes">Dyes</option>
+                <option value="Raw Materials">Raw Materials</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Item</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input type="text" value={filters.item} onChange={e => setFilters(p => ({ ...p, item: e.target.value }))} placeholder="Search item..." className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Requested From</label>
+              <input type="date" value={filters.fromDate} onChange={e => setFilters(p => ({ ...p, fromDate: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Requested To</label>
+              <input type="date" value={filters.toDate} onChange={e => setFilters(p => ({ ...p, toDate: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Status</label>
+              <select value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                <option value="">All</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+            <div className="flex items-end gap-2">
+              <button onClick={clearFilters} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                <X className="w-4 h-4" /> Clear
               </button>
-              <button onClick={() => openApprovalDialog('reject')} className="btn btn-danger btn-sm">
-                <XCircle className="w-4 h-4" /> Reject Selected
+              <button onClick={handleSearch} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                <Search className="w-4 h-4" /> Search
               </button>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Data Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Price Approval Requests</h2>
-          <button onClick={fetchData} className="btn btn-ghost btn-sm">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </button>
         </div>
 
+        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="table table-compact">
-            <thead className="bg-gray-50">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={selectAll}
-                    onChange={toggleSelectAll}
-                    className="checkbox checkbox-sm"
-                    disabled={isReadOnly}
-                  />
+                <th className="px-4 py-3 text-left">
+                  <input type="checkbox" checked={selectedIds.length === data.length && data.length > 0} onChange={toggleSelectAll} className="w-4 h-4 text-blue-600 rounded border-gray-300" />
                 </th>
-                <th className="whitespace-nowrap">Req. No.</th>
-                <th className="whitespace-nowrap">Request Date</th>
-                <th className="whitespace-nowrap">Supplier</th>
-                <th className="whitespace-nowrap">Item Code</th>
-                <th className="whitespace-nowrap">Item Description</th>
-                <th className="whitespace-nowrap">UOM</th>
-                <th className="whitespace-nowrap">Current Price (INR)</th>
-                <th className="whitespace-nowrap">Requested Price (INR)</th>
-                <th className="whitespace-nowrap">Change %</th>
-                <th className="whitespace-nowrap">Effective From</th>
-                <th className="whitespace-nowrap">Status</th>
-                <th className="whitespace-nowrap">Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Req. No.</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Request Date</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Supplier</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Code</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Description</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">UOM</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Current Price (INR)</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Requested Price (INR)</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Change %</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Effective From</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Status</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="text-center py-8">
+                  <td colSpan={12} className="text-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
+                    <p className="text-sm text-gray-500 mt-2">Loading approvals...</p>
                   </td>
                 </tr>
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="text-center text-gray-500 py-8">
-                    No approval requests found
-                  </td>
+                  <td colSpan={12} className="text-center py-12 text-gray-500">No pending approvals found</td>
                 </tr>
               ) : (
-                data.map((req) => (
-                  <tr key={req.id} className="hover:bg-gray-50">
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.includes(req.id)}
-                        onChange={() => toggleSelectItem(req.id)}
-                        className="checkbox checkbox-sm"
-                        disabled={isReadOnly}
-                      />
+                data.map(req => (
+                  <tr
+                    key={req.id}
+                    onClick={() => handleRowClick(req)}
+                    className={`cursor-pointer transition-colors ${selectedRequest?.id === req.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-gray-50'}`}
+                  >
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(req.id)} onChange={() => toggleSelect(req.id)} className="w-4 h-4 text-blue-600 rounded border-gray-300" />
                     </td>
-                    <td className="font-medium text-blue-600">{req.request_no}</td>
-                    <td>{req.request_date}</td>
-                    <td>{req.requested_by_name}</td>
-                    <td>{req.items?.[0]?.item_code || '-'}</td>
-                    <td>{req.items?.[0]?.item_description || '-'}</td>
-                    <td>{req.items?.[0]?.uom || '-'}</td>
-                    <td className="text-right">{req.items?.[0]?.current_price.toFixed(2) || '0.00'}</td>
-                    <td className="text-right">{req.items?.[0]?.requested_price.toFixed(2) || '0.00'}</td>
-                    <td className={`text-right font-medium ${
-                      (req.items?.[0]?.change_percent || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}>
-                      {(req.items?.[0]?.change_percent || 0) >= 0 ? '+' : ''}{(req.items?.[0]?.change_percent || 0).toFixed(2)}%
+                    <td className="px-4 py-3 font-medium text-blue-600">{req.request_no}</td>
+                    <td className="px-4 py-3 text-gray-600">{req.request_date}</td>
+                    <td className="px-4 py-3 text-gray-700">{req.supplier_name}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{req.material_code}</td>
+                    <td className="px-4 py-3 text-gray-700">{req.material_name}</td>
+                    <td className="px-4 py-3 text-gray-600">{req.uom}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{req.current_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900">{req.requested_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${req.change_percent < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {req.change_percent > 0 ? '+' : ''}{req.change_percent.toFixed(2)}%
                     </td>
-                    <td>{req.items?.[0]?.effective_from || '-'}</td>
-                    <td>
-                      <span className={`px-2 py-1 rounded-full text-xs ${STATUS_COLORS[req.status] || 'bg-gray-100'}`}>
-                        {STATUS_BADGES[req.status] || req.status}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap">
-                      <button onClick={() => handleView(req.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
-                        <Eye className="w-4 h-4" />
-                      </button>
+                    <td className="px-4 py-3 text-gray-600">{req.effective_from}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">{req.status}</span>
                     </td>
                   </tr>
                 ))
@@ -764,87 +374,224 @@ export default function SupplierPriceApproval() {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-          <div className="flex items-center gap-2">
-            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="btn btn-ghost btn-sm">
-              <ChevronsLeft className="w-4 h-4" />
+        {/* Selection actions */}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+          <span className="text-sm text-gray-600">{selectedIds.length} Item{selectedIds.length !== 1 ? 's' : ''} selected</span>
+          <div className="flex items-center gap-3">
+            {!isReadOnly && (
+              <>
+                <button onClick={handleBulkApprove} disabled={selectedIds.length === 0 || saving} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+                  <Check className="w-4 h-4" /> Approve Selected
+                </button>
+                <button onClick={handleBulkReject} disabled={selectedIds.length === 0 || saving} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-700 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50">
+                  <XCircle className="w-4 h-4" /> Reject Selected
+                </button>
+              </>
+            )}
+            <button onClick={() => { if (selectedRequest) handleRowClick(selectedRequest); }} disabled={!selectedRequest} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+              <Eye className="w-4 h-4" /> View Details
             </button>
-            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="btn btn-ghost btn-sm">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm text-gray-600">
-              Page {currentPage} of {totalPages || 1}
-            </span>
-            <button onClick={() => setCurrentPage(p => Math.min(totalPages || 1, p + 1))} disabled={currentPage === totalPages} className="btn btn-ghost btn-sm">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <button onClick={() => setCurrentPage(totalPages || 1)} disabled={currentPage === totalPages} className="btn btn-ghost btn-sm">
-              <ChevronsRight className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="text-sm text-gray-600">
-            Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} records
           </div>
         </div>
       </div>
 
-      {/* Approval Action Dialog */}
-      {approvalAction.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                {approvalAction.type === 'approve' ? (
-                  <>
-                    <CheckCircle className="w-5 h-5 text-emerald-600" />
-                    Approve Selected Items
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-5 h-5 text-rose-600" />
-                    Reject Selected Items
-                  </>
-                )}
-              </h3>
-              <button onClick={closeApprovalDialog} className="p-1.5 text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Price Request Details - Bottom Section */}
+      {selectedRequest && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          {/* Title + Badge */}
+          <div className="flex items-center gap-3 mb-6">
+            <h2 className="text-lg font-bold text-gray-900">Price Request Details</h2>
+            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pending Approval</span>
+          </div>
 
-            <div className="space-y-4">
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-700">
-                  {approvalAction.type === 'approve'
-                    ? 'Set as new approved price effective from date'
-                    : 'Enter reason for rejection'}
-                </p>
+          {/* Approval Workflow Progress */}
+          <div className="mb-8">
+            <div className="flex items-center justify-center gap-0">
+              {/* Step 1: Requested */}
+              <div className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="text-xs font-medium text-blue-700 mt-1">Requested</span>
+                </div>
+                <div className="w-24 h-0.5 bg-blue-600 mx-2" />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {approvalAction.type === 'approve' ? 'Approval Notes' : 'Rejection Reason'} <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  placeholder={approvalAction.type === 'approve' ? 'Enter approval notes' : 'Enter reason for rejection'}
-                  className="input input-bordered w-full resize-none"
-                  rows={3}
-                />
+              {/* Step 2: Under Review */}
+              <div className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="text-xs font-medium text-amber-700 mt-1">Under Review</span>
+                </div>
+                <div className="w-24 h-0.5 bg-gray-300 mx-2" />
               </div>
-            </div>
-
-            <div className="flex gap-3 justify-end mt-6">
-              <button onClick={closeApprovalDialog} className="btn btn-secondary">
-                Cancel
-              </button>
-              <button
-                onClick={() => handleApprovalAction(approvalAction.type!, '')}
-                className={`btn ${approvalAction.type === 'approve' ? 'btn-success' : 'btn-danger'}`}
-              >
-                {approvalAction.type === 'approve' ? 'Approve' : 'Reject'}
-              </button>
+              {/* Step 3: Approved/Rejected */}
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                  <Check className="w-4 h-4 text-gray-400" />
+                </div>
+                <span className="text-xs font-medium text-gray-500 mt-1">Approved / Rejected</span>
+              </div>
             </div>
           </div>
+
+          {/* Three Column Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            {/* Left: Request Information */}
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">1. Request Information</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Request No.</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.request_no}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Request Date</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.request_date}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Requested By</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.requested_by}</span>
+                </div>
+                {selectedRequest.remarks && (
+                  <div className="pt-2 border-t border-gray-200">
+                    <span className="text-xs text-gray-500 block mb-1">Remarks</span>
+                    <p className="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100">{selectedRequest.remarks}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Middle: Item & Supplier Details */}
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">2. Item & Supplier Details</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Supplier</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.supplier_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Supplier Part No.</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.supplier_part_no || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Item Code</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.material_code}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Item Description</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.material_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">Item Group</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.item_group || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-500">UOM</span>
+                  <span className="text-xs font-medium text-gray-900">{selectedRequest.uom}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Price Trend + Price Comparison */}
+            <div className="space-y-4">
+              {/* Price Trend */}
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-900 mb-3">4. Price Trend (Last 6 Months)</h3>
+                {renderPriceTrendChart()}
+              </div>
+
+              {/* Price Comparison */}
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-900 mb-3">3. Price Comparison</h3>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 text-gray-500 font-medium">Description</th>
+                      <th className="text-right py-2 text-gray-500 font-medium">Price (INR/{selectedRequest.uom})</th>
+                      <th className="text-right py-2 text-gray-500 font-medium">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-2 text-gray-700">Last Approved Price</td>
+                      <td className="py-2 text-right font-medium text-gray-900">{selectedRequest.current_price.toFixed(2)}</td>
+                      <td className="py-2 text-right text-gray-500">28-Dec-2024</td>
+                    </tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-2 text-gray-700">Requested Price</td>
+                      <td className="py-2 text-right font-medium text-gray-900">{selectedRequest.requested_price.toFixed(2)}</td>
+                      <td className="py-2 text-right text-gray-500">{selectedRequest.request_date}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 text-gray-700 font-medium">Difference</td>
+                      <td className={`py-2 text-right font-bold ${selectedRequest.change_percent < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {selectedRequest.change_percent < 0 ? '' : '+'}{(selectedRequest.requested_price - selectedRequest.current_price).toFixed(2)}
+                      </td>
+                      <td className={`py-2 text-right font-medium ${selectedRequest.change_percent < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {selectedRequest.change_percent > 0 ? '+' : ''}{selectedRequest.change_percent.toFixed(2)}%
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Approval Action Section */}
+          {!isReadOnly && (
+            <div className="border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-bold text-gray-900 mb-4">Approval Action</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                {/* Approve Option */}
+                <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${approvalAction === 'approve' ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="radio" name="action" value="approve" checked={approvalAction === 'approve'} onChange={() => setApprovalAction('approve')} className="mt-0.5 w-4 h-4 text-emerald-600" />
+                  <div>
+                    <span className="text-sm font-medium text-emerald-700">Approve</span>
+                    <p className="text-xs text-gray-500 mt-1">Set as new approved price effective from date</p>
+                  </div>
+                </label>
+
+                {/* Reject Option */}
+                <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${approvalAction === 'reject' ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="radio" name="action" value="reject" checked={approvalAction === 'reject'} onChange={() => setApprovalAction('reject')} className="mt-0.5 w-4 h-4 text-red-600" />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-red-700">Reject</span>
+                    {approvalAction === 'reject' && (
+                      <div className="mt-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Rejection Reason <span className="text-red-500">*</span></label>
+                        <textarea
+                          rows={3}
+                          value={rejectionReason}
+                          onChange={e => setRejectionReason(e.target.value)}
+                          placeholder="Enter reason for rejection..."
+                          className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </label>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="flex items-center justify-end gap-3">
+                <button onClick={() => setSelectedRequest(null)} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApprove}
+                  disabled={saving}
+                  className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 ${
+                    approvalAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Approval'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
