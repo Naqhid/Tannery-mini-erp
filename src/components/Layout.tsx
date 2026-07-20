@@ -19,17 +19,29 @@ const breadcrumbMap: Record<string, string> = {
   '/production': 'Production',
   '/reports': 'Reports',
   '/settings': 'Settings',
+  '/batch-lot-tracking': 'Batch / Lot Tracking',
+  '/supplier-pricing-history': 'Supplier Pricing History',
+  '/supplier-pricing-history/new': 'Add New Price',
+  '/supplier-price-approval': 'Supplier Price Approval',
+  '/physical-stock-entry': 'Physical Stock Entry',
+  '/physical-stock-entry/new': 'Physical Stock Entry',
 };
 
 const parentMap: Record<string, string> = {
   '/customer-master': 'Masters',
   '/product-master': 'Masters',
   '/chemical-master': 'Masters',
-  '/supplier-master': 'Masters',
+  '/supplier-master': 'Purchase',
   '/recipe-creation': 'BOM / Recipe',
   '/bom': 'BOM / Recipe',
   '/bom-revision': 'BOM / Recipe',
   '/material-requirement': 'BOM / Recipe',
+  '/batch-lot-tracking': 'Production',
+  '/supplier-pricing-history': 'Purchase',
+  '/supplier-pricing-history/new': 'Purchase',
+  '/supplier-price-approval': 'Purchase',
+  '/physical-stock-entry': 'Inventory',
+  '/physical-stock-entry/new': 'Inventory',
 };
 
 export default function Layout() {

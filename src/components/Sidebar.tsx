@@ -26,6 +26,9 @@ import {
   Warehouse,
   PackageOpen,
   ArrowLeftRight,
+  Receipt,
+  Plus,
+  CheckCircle,
 } from 'lucide-react';
 
 interface ChildItem {
@@ -76,6 +79,20 @@ const menuItems: MenuItem[] = [
       { label: 'Material Requirement', icon: <ListChecks size={16} />, path: '/material-requirement' },
     ],
   },
+  {
+    label: 'Purchase',
+    icon: <Truck size={20} />,
+    children: [
+      { label: 'Purchase Order', icon: <FileText size={16} />, path: '/purchase-orders' },
+      { label: 'GRN', icon: <PackageOpen size={16} />, path: '/grn' },
+      { label: 'Supplier Invoice', icon: <FileText size={16} />, path: '/supplier-invoice' },
+      { label: 'Supplier Return', icon: <ArrowLeftRight size={16} />, path: '/supplier-return' },
+      { label: 'Supplier Master', icon: <Users size={16} />, path: '/supplier-master' },
+      { label: 'Supplier Pricing History', icon: <Receipt size={16} />, path: '/supplier-pricing-history' },
+      { label: 'Add New Price', icon: <Plus size={16} />, path: '/supplier-pricing-history/new' },
+      { label: 'Supplier Price Approval', icon: <CheckCircle size={16} />, path: '/supplier-price-approval' },
+    ],
+  },
   { label: 'Inventory', icon: <Package size={20} />, children: [
       { label: 'Stock Opening Entry', icon: <PackageOpen size={16} />, path: '/stock-opening-entry' },
       { label: 'Material Receipt Entry', icon: <Truck size={16} />, path: '/material-receipt' },
@@ -90,6 +107,7 @@ const menuItems: MenuItem[] = [
       { label: 'Material Issue', icon: <Factory size={16} />, path: '/material-issue' },
       { label: 'Batch Process', icon: <Layers size={16} />, path: '/batch-process' },
       { label: 'Batch Completion', icon: <ListChecks size={16} />, path: '/batch-completion' },
+      { label: 'Batch / Lot Tracking', icon: <Package size={16} />, path: '/batch-lot-tracking' },
     ],
   },
   { label: 'Reports', icon: <FileBarChart size={20} />, children: [
@@ -114,6 +132,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     Masters: true,
     'BOM / Recipe': true,
+    Purchase: false,
   });
 
   const toggleExpand = (label: string) => {

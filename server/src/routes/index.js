@@ -32,6 +32,11 @@ import {
   businessUnitRoutes,
 } from './masterRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
+// New module routes
+import batchRoutes from './batchRoutes.js';
+import supplierPricingRoutes from './supplierPricingRoutes.js';
+import priceApprovalRoutes from './priceApprovalRoutes.js';
+import physicalStockEntryRoutes from './physicalStockEntryRoutes.js';
 
 const router = Router();
 
@@ -80,6 +85,19 @@ router.use('/machines', machineRoutes);
 router.use('/roles', roleRoutes);
 router.use('/companies', companyRoutes);
 router.use('/business-units', businessUnitRoutes);
+
+// New Module Routes
+// Batch / Lot Tracking routes
+router.use('/batches', batchRoutes);
+
+// Supplier Pricing routes
+router.use('/supplier-pricing', supplierPricingRoutes);
+
+// Price Approval routes
+router.use('/price-approvals', priceApprovalRoutes);
+
+// Physical Stock Entry routes
+router.use('/physical-stock-entries', physicalStockEntryRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);

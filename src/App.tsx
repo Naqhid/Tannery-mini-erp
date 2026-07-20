@@ -48,6 +48,13 @@ import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
 // Production Plan Pages
 import ProductionPlan from './pages/ProductionPlan';
 import ProductionPlanDetail from './pages/ProductionPlanDetail';
+// New Module Pages
+import BatchLotTracking from './pages/BatchLotTracking';
+import SupplierPricingHistory from './pages/SupplierPricingHistory';
+import AddNewPrice from './pages/AddNewPrice';
+import SupplierPriceApproval from './pages/SupplierPriceApproval';
+import PhysicalStockEntry from './pages/PhysicalStockEntry';
+import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -102,7 +109,10 @@ function App() {
             <Route path="recipe-creation" element={<RecipeCreation />} />
             <Route path="bom-revision" element={<PlaceholderPage />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
-            <Route path="physical-stock-entry" element={<PlaceholderPage />} />
+            <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
+            <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />
+            <Route path="physical-stock-entry/:id" element={<PhysicalStockEntryDetail />} />
+            <Route path="physical-stock-entry/:id/edit" element={<PhysicalStockEntryDetail />} />
             {/* Inventory */}
             <Route path="warehouse-master" element={<WarehouseMaster />} />
             <Route path="warehouse-master/new" element={<WarehouseMasterForm />} />
@@ -119,12 +129,22 @@ function App() {
             <Route path="material-issue" element={<MaterialIssueToBatch />} />
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
+            {/* Purchase */}
+            <Route path="supplier-pricing-history" element={<SupplierPricingHistory />} />
+            <Route path="supplier-pricing-history/new" element={<AddNewPrice />} />
+            <Route path="supplier-pricing-history/:id" element={<AddNewPrice />} />
+            <Route path="supplier-pricing-history/:id/edit" element={<AddNewPrice />} />
+            <Route path="supplier-price-approval" element={<SupplierPriceApproval />} />
+            <Route path="supplier-price-approval/:id" element={<SupplierPriceApproval />} />
             {/* Production */}
             <Route path="production-plan" element={<ProductionPlan />} />
             <Route path="production-plan/new" element={<ProductionPlanDetail />} />
             <Route path="production-plan/:id" element={<ProductionPlanDetail />} />
             <Route path="batch-process" element={<PlaceholderPage />} />
             <Route path="batch-completion" element={<PlaceholderPage />} />
+            <Route path="batch-lot-tracking" element={<BatchLotTracking />} />
+            <Route path="batch-lot-tracking/new" element={<BatchLotTracking />} />
+            <Route path="batch-lot-tracking/:id" element={<BatchLotTracking />} />
             {/* Reports */}
             <Route path="reports" element={<PlaceholderPage />} />
             <Route path="inventory-reports" element={<PlaceholderPage />} />
