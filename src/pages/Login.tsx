@@ -50,15 +50,15 @@ export default function Login() {
           <div className="flex items-center justify-center -mt-16">
             <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" className="h-[180px] object-contain brightness-[2] drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
           </div>
-          <h1 className="text-3xl font-black text-white mb-1.5 tracking-tight -mt-12">Corix</h1>
-          <p className="text-blue-300/60 text-xs font-semibold tracking-[0.25em] uppercase">Tannery Management System</p>
+          <h1 className="text-4xl font-black text-white mb-1.5 tracking-wider -mt-12">CORIX</h1>
+          <p className="text-white text-xs font-semibold tracking-[0.25em] uppercase">Powering Modern Tanneries</p>
         </div>
 
         {/* Login Card */}
         <div className="bg-white/[0.07] backdrop-blur-xl rounded-2xl p-8 shadow-2xl shadow-black/20 border border-white/[0.08]">
           <div className="text-center mb-7">
             <h2 className="text-lg font-bold text-white">Welcome Back</h2>
-            <p className="text-blue-300/50 text-xs mt-1">Sign in to continue to your dashboard</p>
+            <p className="text-white text-xs mt-1">Sign in to continue to your dashboard</p>
           </div>
 
           {error && (
@@ -70,16 +70,16 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-blue-200/70 mb-2 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-white mb-2 uppercase tracking-wider">
                 Username
               </label>
               <div className="relative group">
-                <User size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400/50 group-focus-within:text-blue-300 transition-colors z-10" />
+                <User size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-white group-focus-within:text-white transition-colors z-10" />
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-blue-300/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
+                  className="w-full pl-11 pr-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
                   placeholder="Enter your username"
                   required
                   autoFocus
@@ -88,23 +88,23 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-blue-200/70 mb-2 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-white mb-2 uppercase tracking-wider">
                 Password
               </label>
               <div className="relative group">
-                <Lock size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400/50 group-focus-within:text-blue-300 transition-colors z-10" />
+                <Lock size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-white group-focus-within:text-white transition-colors z-10" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-blue-300/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
+                  className="w-full pl-11 pr-12 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
                   placeholder="Enter your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400/50 hover:text-blue-300 transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-white transition-colors"
                 >
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
