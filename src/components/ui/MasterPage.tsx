@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   Plus, Search, Filter, Edit2, Trash2, ChevronLeft, ChevronRight,
@@ -59,6 +60,8 @@ interface MasterPageProps {
   filterOptions?: FilterOption[];
   uniqueFields?: string[];
   enableArchive?: boolean;
+  modalSize?: string;
+  formRoute?: string;
   renderForm?: (props: { formData: any; setFormData: (d: any) => void; formErrors: Record<string, string>; selectedItem: any; statusToggle: boolean; setStatusToggle: (v: boolean) => void; setFormDirty: (v: boolean) => void }) => React.ReactNode;
 }
 
@@ -79,9 +82,12 @@ export default function MasterPage({
   pdfAccentColor = [79, 70, 229],
   filterOptions = [],
   enableArchive = true,
+  modalSize,
+  formRoute,
   renderForm,
 }: MasterPageProps) {
   const { canWrite, isReadOnly } = usePermission();
+  const navigate = useNavigate();
   const [data, setData] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 });
   const [loading, setLoading] = useState(true);
@@ -234,6 +240,14 @@ export default function MasterPage({
   };
 
   const openPanel = (item?: any) => {
+    if (formRoute) {
+      if (item) {
+        navigate(`${formRoute}/${item.id}`);
+      } else {
+        navigate(`${formRoute}/new`);
+      }
+      return;
+    }
     if (item) {
       setSelectedItem(item);
       setFormData({ ...emptyData, ...item });
@@ -981,7 +995,7 @@ export default function MasterPage({
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60]" onClick={() => closePanel()} />
           <div
             ref={panelRef}
-            className="fixed right-0 top-0 h-full w-full max-w-[600px] bg-white shadow-2xl z-[61] flex flex-col animate-in slide-in-from-right"
+            className={`fixed right-0 top-0 h-full w-full ${modalSize || 'max-w-[600px]'} bg-white shadow-2xl z-[61] flex flex-col animate-in slide-in-from-right`}
             role="dialog"
             aria-modal="true"
             aria-label={`${selectedItem ? 'Edit' : 'New'} ${title}`}

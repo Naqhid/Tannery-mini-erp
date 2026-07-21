@@ -236,7 +236,6 @@ export default function TransactionListPage({
         <div className={`grid grid-cols-2 lg:grid-cols-${Math.min(statCards.length, 4)} gap-3`}>
           {statCards.map(c => (
             <div key={c.label} className={`relative overflow-hidden p-4 rounded-2xl border ${c.bg} shadow-sm`}>
-              {c.iconColor && <div className={`absolute top-0 right-0 w-16 h-16 rounded-full bg-gradient-to-br ${c.iconColor} opacity-15 -mr-4 -mt-4`} />}
               <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">{c.label}</p>
               <p className={`text-2xl font-black mt-1 ${c.color}`}>{c.value}</p>
             </div>

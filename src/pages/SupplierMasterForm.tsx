@@ -117,7 +117,7 @@ export default function SupplierMasterForm() {
           <button onClick={() => navigate('/supplier-master')} className="p-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-all">
             <ArrowLeft size={18} className="text-gray-600" />
           </button>
-          <div className="p-3 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 shadow-xl shadow-orange-500/30 ring-2 ring-white/50">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-xl shadow-blue-500/30 ring-2 ring-white/50">
             <Truck size={22} className="text-white" />
           </div>
           <div>
@@ -137,7 +137,7 @@ export default function SupplierMasterForm() {
           <Input label="Alt. Phone" value={form.alt_phone} onChange={(e) => update('alt_phone', e.target.value)} placeholder="Alternate phone" />
           <Input label="Email" value={form.email} onChange={(e) => update('email', e.target.value)} error={errors.email} placeholder="email@example.com" />
           <Select label="Category" options={[{ value: 'domestic', label: 'Domestic' }, { value: 'international', label: 'International' }]} value={form.category} onChange={(e) => update('category', e.target.value)} />
-          <Select label="Supply Type" options={[{ value: '', label: 'Select' }, { value: 'chemicals', label: 'Chemicals' }, { value: 'raw_material', label: 'Raw Material' }, { value: 'packing', label: 'Packing' }, { value: 'services', label: 'Services' }]} value={form.supply_type} onChange={(e) => update('supply_type', e.target.value)} />
+          <Select label="Supply Type" options={[{ value: '', label: 'Select' }, { value: 'chemicals', label: 'Chemicals' }, { value: 'raw_material', label: 'Raw Material' }, { value: 'leather', label: 'Leather' }, { value: 'packing', label: 'Packing' }, { value: 'services', label: 'Services' }]} value={form.supply_type} onChange={(e) => update('supply_type', e.target.value)} />
           <Input label="Website" value={form.website} onChange={(e) => update('website', e.target.value)} placeholder="www.example.com" />
           <div className="sm:col-span-2 lg:col-span-3">
             <label className="block text-xs font-medium text-gray-900 mb-1">Notes</label>
@@ -210,7 +210,7 @@ export default function SupplierMasterForm() {
         <button onClick={() => navigate('/supplier-master')} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
           <X size={14} /> Cancel
         </button>
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-red-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>

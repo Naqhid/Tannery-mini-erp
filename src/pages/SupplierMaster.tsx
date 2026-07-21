@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { Truck } from 'lucide-react';
+import { Package } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
@@ -25,9 +25,9 @@ export default function SupplierMaster() {
   ];
 
   const statCards = [
-    { label: 'Total', value: stats.total, color: 'text-orange-900', bg: 'bg-orange-50 border-orange-200', iconColor: 'from-orange-500 to-red-600' },
-    { label: 'Active', value: stats.active, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200', iconColor: 'from-emerald-500 to-green-600' },
-    { label: 'Inactive', value: stats.inactive, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-200', iconColor: 'from-gray-400 to-gray-600' },
+    { label: 'Total', value: stats.total, color: 'text-blue-900', bg: 'bg-blue-50 border-blue-200' },
+    { label: 'Active', value: stats.active, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200' },
+    { label: 'Inactive', value: stats.inactive, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-200' },
   ];
 
   const filterOptions = [
@@ -44,8 +44,8 @@ export default function SupplierMaster() {
     <TransactionListPage
       title="Suppliers"
       subtitle="Manage your supplier database"
-      icon={<Truck size={20} className="text-white" />}
-      iconColor="from-orange-500 to-red-600"
+      icon={<Package size={20} className="text-white" />}
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/suppliers"
       columns={columns}
       statCards={statCards}

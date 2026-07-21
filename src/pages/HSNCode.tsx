@@ -28,13 +28,15 @@ export default function HSNCode() {
       title="HSN Code"
       subtitle="Manage HSN codes for GST"
       icon={<Hash size={20} className="text-white" />}
-      iconColor="from-green-500 via-emerald-500 to-teal-600"
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/hsn-codes"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', gst_rate: 18, description: '', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[34, 197, 94]}
+      pdfAccentColor={[59, 130, 246]}
+      modalSize="max-w-2xl"
+      formRoute="/hsn-code"
     />
   );
 }

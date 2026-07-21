@@ -10,22 +10,34 @@ import SupplierMasterForm from './pages/SupplierMasterForm';
 import RecipeCreation from './pages/RecipeCreation';
 import BOM from './pages/BOM';
 import ProductMaster from './pages/ProductMaster';
+import ProductMasterForm from './pages/ProductMasterForm';
 import CustomerMaster from './pages/CustomerMaster';
 import CustomerMasterForm from './pages/CustomerMasterForm';
 import PlaceholderPage from './pages/PlaceholderPage';
 // New Master Pages
 import ProductCategory from './pages/ProductCategory';
+import ProductCategoryForm from './pages/ProductCategoryForm';
 import LeatherType from './pages/LeatherType';
+import LeatherTypeForm from './pages/LeatherTypeForm';
 import UOM from './pages/UOM';
+import UOMForm from './pages/UOMForm';
 import Thickness from './pages/Thickness';
+import ThicknessForm from './pages/ThicknessForm';
 import StandardSize from './pages/StandardSize';
+import StandardSizeForm from './pages/StandardSizeForm';
 import Color from './pages/Color';
+import ColorForm from './pages/ColorForm';
 import FinishType from './pages/FinishType';
+import FinishTypeForm from './pages/FinishTypeForm';
 import Grade from './pages/Grade';
+import GradeForm from './pages/GradeForm';
 import HSNCode from './pages/HSNCode';
+import HSNCodeForm from './pages/HSNCodeForm';
 import ProcessStage from './pages/ProcessStage';
+import ProcessStageForm from './pages/ProcessStageForm';
 import Machine from './pages/Machine';
 import MaterialMaster from './pages/MaterialMaster';
+import MaterialMasterForm from './pages/MaterialMasterForm';
 // Sales Order Pages
 import SalesOrder from './pages/SalesOrder';
 import SalesOrderDetail from './pages/SalesOrderDetail';
@@ -91,18 +103,42 @@ function App() {
             <Route path="supplier-master/new" element={<SupplierMasterForm />} />
             <Route path="supplier-master/:id" element={<SupplierMasterForm />} />
             <Route path="product-master" element={<ProductMaster />} />
+            <Route path="product-master/new" element={<ProductMasterForm />} />
+            <Route path="product-master/:id" element={<ProductMasterForm />} />
             <Route path="chemical-master" element={<MaterialMaster />} />
+            <Route path="chemical-master/new" element={<MaterialMasterForm />} />
+            <Route path="chemical-master/:id" element={<MaterialMasterForm />} />
             {/* New Master Pages */}
             <Route path="product-category" element={<ProductCategory />} />
+            <Route path="product-category/new" element={<ProductCategoryForm />} />
+            <Route path="product-category/:id" element={<ProductCategoryForm />} />
             <Route path="leather-type" element={<LeatherType />} />
+            <Route path="leather-type/new" element={<LeatherTypeForm />} />
+            <Route path="leather-type/:id" element={<LeatherTypeForm />} />
             <Route path="uom" element={<UOM />} />
+            <Route path="uom/new" element={<UOMForm />} />
+            <Route path="uom/:id" element={<UOMForm />} />
             <Route path="thickness" element={<Thickness />} />
+            <Route path="thickness/new" element={<ThicknessForm />} />
+            <Route path="thickness/:id" element={<ThicknessForm />} />
             <Route path="standard-size" element={<StandardSize />} />
+            <Route path="standard-size/new" element={<StandardSizeForm />} />
+            <Route path="standard-size/:id" element={<StandardSizeForm />} />
             <Route path="color" element={<Color />} />
+            <Route path="color/new" element={<ColorForm />} />
+            <Route path="color/:id" element={<ColorForm />} />
             <Route path="finish-type" element={<FinishType />} />
+            <Route path="finish-type/new" element={<FinishTypeForm />} />
+            <Route path="finish-type/:id" element={<FinishTypeForm />} />
             <Route path="grade" element={<Grade />} />
+            <Route path="grade/new" element={<GradeForm />} />
+            <Route path="grade/:id" element={<GradeForm />} />
             <Route path="hsn-code" element={<HSNCode />} />
+            <Route path="hsn-code/new" element={<HSNCodeForm />} />
+            <Route path="hsn-code/:id" element={<HSNCodeForm />} />
             <Route path="process-stage" element={<ProcessStage />} />
+            <Route path="process-stage/new" element={<ProcessStageForm />} />
+            <Route path="process-stage/:id" element={<ProcessStageForm />} />
             <Route path="machine" element={<Machine />} />
             {/* BOM / Recipe - BOM first, then Recipe */}
             <Route path="bom" element={<BOM />} />

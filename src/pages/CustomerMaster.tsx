@@ -25,9 +25,9 @@ export default function CustomerMaster() {
   ];
 
   const statCards = [
-    { label: 'Total', value: stats.total, color: 'text-indigo-900', bg: 'bg-indigo-50 border-indigo-200', iconColor: 'from-indigo-500 to-purple-600' },
-    { label: 'Active', value: stats.active, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200', iconColor: 'from-emerald-500 to-green-600' },
-    { label: 'Inactive', value: stats.inactive, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-200', iconColor: 'from-gray-400 to-gray-600' },
+    { label: 'Total', value: stats.total, color: 'text-indigo-900', bg: 'bg-indigo-50 border-indigo-200' },
+    { label: 'Active', value: stats.active, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200' },
+    { label: 'Inactive', value: stats.inactive, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-200' },
   ];
 
   const filterOptions = [

@@ -1,4 +1,4 @@
-import { Ruler } from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
 
 export default function Thickness() {
@@ -10,6 +10,7 @@ export default function Thickness() {
   ];
 
   const formFields = [
+    { key: 'code', label: 'Code', required: false, placeholder: 'Auto-generated' },
     { key: 'name', label: 'Thickness Name', required: true },
     { key: 'value_mm', label: 'Value (mm)', type: 'text' as const, placeholder: 'e.g. 1.2' },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
@@ -26,14 +27,16 @@ export default function Thickness() {
     <MasterPage
       title="Thickness"
       subtitle="Manage thickness options"
-      icon={<Ruler size={20} className="text-white" />}
-      iconColor="from-sky-500 via-blue-500 to-indigo-600"
+      icon={<SlidersHorizontal size={20} className="text-white" />}
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/thickness"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', value_mm: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[14, 165, 233]}
+      pdfAccentColor={[59, 130, 246]}
+      modalSize="max-w-2xl"
+      formRoute="/thickness"
     />
   );
 }

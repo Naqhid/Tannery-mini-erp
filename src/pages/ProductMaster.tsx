@@ -1,67 +1,62 @@
+import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
 import { Package } from 'lucide-react';
-import MasterPage from '../components/ui/MasterPage';
-import { useDropdowns } from '../lib/useDropdowns';
+import TransactionListPage from '../components/ui/TransactionListPage';
+import api from '../lib/api';
+import { toast } from 'react-toastify';
 
 export default function ProductMaster() {
-  const dropdowns = useDropdowns([
-    'product-categories', 'leather-types', 'uom', 'thickness',
-    'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes',
-  ]);
+  const navigate = useNavigate();
+  const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0 });
+
+  const fetchStats = useCallback(async () => {
+    try { const res = await api<{ data: typeof stats }>('/products/stats'); setStats(res.data); } catch {}
+  }, []);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const columns = [
-    { key: 'code', header: 'Code', sortable: true },
-    { key: 'name', header: 'Name', sortable: true },
+    { key: 'code', header: 'Code', sortable: true, render: (row: any) => <span className="font-mono text-xs text-blue-700">{row.code}</span> },
+    { key: 'name', header: 'Name', sortable: true, render: (row: any) => <span className="font-medium text-gray-900">{row.name}</span> },
     { key: 'category_name', header: 'Category', sortable: true },
     { key: 'leather_type_name', header: 'Leather Type', sortable: true },
     { key: 'thickness_name', header: 'Thickness', sortable: true },
-    { key: 'status', header: 'Status', sortable: true },
+    { key: 'status', header: 'Status', sortable: true, render: (row: any) => <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${row.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}><span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />{row.status}</span> },
   ];
 
-  const formFields = [
-    { key: 'name', label: 'Product Name', required: true },
-    { key: 'category_id', label: 'Category', required: true, type: 'select' as const, options: [{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])] },
-    { key: 'leather_type_id', label: 'Leather Type', required: true, type: 'select' as const, options: [{ value: '', label: 'Select type' }, ...(dropdowns['leather-types']?.options || [])] },
-    { key: 'uom_id', label: 'UOM', required: true, type: 'select' as const, options: [{ value: '', label: 'Select UOM' }, ...(dropdowns['uom']?.options || [])] },
-    { key: 'thickness_id', label: 'Thickness', required: true, type: 'select' as const, options: [{ value: '', label: 'Select thickness' }, ...(dropdowns['thickness']?.options || [])] },
-    { key: 'standard_size_id', label: 'Standard Size', type: 'select' as const, options: [{ value: '', label: 'Select size' }, ...(dropdowns['standard-sizes']?.options || [])] },
-    { key: 'color_id', label: 'Color', type: 'select' as const, options: [{ value: '', label: 'Select color' }, ...(dropdowns['colors']?.options || [])] },
-    { key: 'finish_type_id', label: 'Finish Type', type: 'select' as const, options: [{ value: '', label: 'Select finish' }, ...(dropdowns['finish-types']?.options || [])] },
-    { key: 'grade_id', label: 'Grade', type: 'select' as const, options: [{ value: '', label: 'Select grade' }, ...(dropdowns['grades']?.options || [])] },
-    { key: 'hsn_code_id', label: 'HSN Code', type: 'select' as const, options: [{ value: '', label: 'Select HSN' }, ...(dropdowns['hsn-codes']?.options || [])] },
-    { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
-  ];
-
-  const exportColumns = [
-    { key: 'code', header: 'Code' },
-    { key: 'name', header: 'Name' },
-    { key: 'category_name', header: 'Category' },
-    { key: 'leather_type_name', header: 'Leather Type' },
-    { key: 'thickness_name', header: 'Thickness' },
-    { key: 'status', header: 'Status' },
+  const statCards = [
+    { label: 'Total', value: stats.total, color: 'text-blue-900', bg: 'bg-blue-50 border-blue-200' },
+    { label: 'Active', value: stats.active, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200' },
+    { label: 'Inactive', value: stats.inactive, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-200' },
   ];
 
   const filterOptions = [
     { key: 'status', label: 'Status', options: [{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }] },
   ];
 
+  const handleDelete = async (id: number) => {
+    const res = await api(`/products/${id}`, { method: 'DELETE' });
+    toast.success(res.message || 'Product deleted!');
+  };
+
   return (
-    <MasterPage
-      title="Product"
-      subtitle="Manage product master data"
+    <TransactionListPage
+      title="Products"
+      subtitle="Manage your product database"
       icon={<Package size={20} className="text-white" />}
-      iconColor="from-teal-500 to-emerald-600"
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/products"
       columns={columns}
-      formFields={formFields}
-      emptyData={{
-        code: '', name: '', category_id: '', leather_type_id: '', uom_id: '', thickness_id: '',
-        standard_size_id: '', color_id: '', finish_type_id: '', grade_id: '', hsn_code_id: '',
-        description: '', status: 'Active',
-      }}
-      exportColumns={exportColumns}
-      pdfAccentColor={[20, 184, 166]}
+      statCards={statCards}
       filterOptions={filterOptions}
-      enableArchive={true}
+      addButtonLabel="Add Product"
+      onAdd={() => navigate('/product-master/new')}
+      onRowClick={(row) => navigate(`/product-master/${row.id}`)}
+      onEdit={(row) => navigate(`/product-master/${row.id}`)}
+      onDelete={handleDelete}
+      deleteTitle="Delete Product"
+      deleteMessage="Are you sure? This will remove the product record."
+      searchPlaceholder="Search products..."
+      enableBulkDelete={true}
     />
   );
 }

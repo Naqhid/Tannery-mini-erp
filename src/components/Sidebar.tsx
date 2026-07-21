@@ -141,7 +141,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
 
   const isActive = (path?: string) => {
     if (!path) return false;
-    return location.pathname === path;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const isParentActive = (item: MenuItem) => {

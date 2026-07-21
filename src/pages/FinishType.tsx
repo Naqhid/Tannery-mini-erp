@@ -10,7 +10,7 @@ export default function FinishType() {
   ];
 
   const formFields = [
-    { key: 'code', label: 'Code', required: false },
+    { key: 'code', label: 'Code', required: false, placeholder: 'Auto-generated' },
     { key: 'name', label: 'Name', required: true },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
   ];
@@ -26,13 +26,15 @@ export default function FinishType() {
       title="Finish Type"
       subtitle="Manage finish types"
       icon={<Sparkles size={20} className="text-white" />}
-      iconColor="from-cyan-400 via-teal-500 to-emerald-600"
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/finish-types"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[6, 182, 212]}
+      pdfAccentColor={[59, 130, 246]}
+      modalSize="max-w-2xl"
+      formRoute="/finish-type"
     />
   );
 }

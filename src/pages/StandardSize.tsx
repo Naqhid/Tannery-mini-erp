@@ -1,4 +1,4 @@
-import { Maximize2 } from 'lucide-react';
+import { Ruler } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
 
 export default function StandardSize() {
@@ -10,7 +10,7 @@ export default function StandardSize() {
   ];
 
   const formFields = [
-    { key: 'code', label: 'Code', required: false },
+    { key: 'code', label: 'Code', required: false, placeholder: 'Auto-generated' },
     { key: 'name', label: 'Name', required: true },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
   ];
@@ -25,14 +25,16 @@ export default function StandardSize() {
     <MasterPage
       title="Standard Size"
       subtitle="Manage standard sizes"
-      icon={<Maximize2 size={20} className="text-white" />}
-      iconColor="from-violet-500 via-purple-500 to-fuchsia-600"
+      icon={<Ruler size={20} className="text-white" />}
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/standard-sizes"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[139, 92, 246]}
+      pdfAccentColor={[59, 130, 246]}
+      modalSize="max-w-2xl"
+      formRoute="/standard-size"
     />
   );
 }

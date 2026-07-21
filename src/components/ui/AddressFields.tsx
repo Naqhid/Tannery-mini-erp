@@ -242,18 +242,38 @@ export default function AddressFields({
             <textarea
               rows={3}
               value={value.billing_address || ''}
-              onChange={(e) => onChange({ ...value, billing_address: e.target.value })}
+              onChange={(e) => {
+                const newBilling = e.target.value;
+                // If shipping is empty or same as old billing, auto-sync
+                const shouldSync = !value.shipping_address || value.shipping_address === value.billing_address;
+                onChange({
+                  ...value,
+                  billing_address: newBilling,
+                  ...(shouldSync ? { shipping_address: newBilling } : {}),
+                });
+              }}
               placeholder="Enter billing address..."
               className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all resize-none placeholder-gray-400 bg-white"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-900 mb-1">Shipping Address</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-gray-900">Shipping Address</label>
+              {value.shipping_address !== value.billing_address && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...value, shipping_address: value.billing_address || '' })}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                >
+                  Same as Billing
+                </button>
+              )}
+            </div>
             <textarea
               rows={3}
               value={value.shipping_address || ''}
               onChange={(e) => onChange({ ...value, shipping_address: e.target.value })}
-              placeholder="Enter shipping address (or same as billing)..."
+              placeholder="Enter shipping address (defaults to billing address)..."
               className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all resize-none placeholder-gray-400 bg-white"
             />
           </div>

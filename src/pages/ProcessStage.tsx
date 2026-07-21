@@ -1,4 +1,4 @@
-import { ListChecks } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
 
 export default function ProcessStage() {
@@ -10,7 +10,7 @@ export default function ProcessStage() {
   ];
 
   const formFields = [
-    { key: 'code', label: 'Code', required: false },
+    { key: 'code', label: 'Code', required: false, placeholder: 'Auto-generated' },
     { key: 'name', label: 'Name', required: true },
     { key: 'seq', label: 'Sequence', type: 'text' as const, placeholder: 'Display order' },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
@@ -27,14 +27,16 @@ export default function ProcessStage() {
     <MasterPage
       title="Process Stage"
       subtitle="Manage process stages"
-      icon={<ListChecks size={20} className="text-white" />}
-      iconColor="from-blue-500 via-indigo-500 to-violet-600"
+      icon={<GitBranch size={20} className="text-white" />}
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/process-stages"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', seq: 0, description: '', status: 'Active' }}
       exportColumns={exportColumns}
       pdfAccentColor={[59, 130, 246]}
+      modalSize="max-w-2xl"
+      formRoute="/process-stage"
     />
   );
 }

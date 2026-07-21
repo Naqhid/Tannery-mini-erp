@@ -1,4 +1,4 @@
-import { Layers } from 'lucide-react';
+import { Box } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
 
 export default function ProductCategory() {
@@ -26,14 +26,16 @@ export default function ProductCategory() {
     <MasterPage
       title="Product Category"
       subtitle="Manage product categories"
-      icon={<Layers size={20} className="text-white" />}
-      iconColor="from-violet-500 via-purple-500 to-fuchsia-600"
+      icon={<Box size={20} className="text-white" />}
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/product-categories"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[139, 92, 246]}
+      pdfAccentColor={[59, 130, 246]}
+      modalSize="max-w-2xl"
+      formRoute="/product-category"
     />
   );
 }

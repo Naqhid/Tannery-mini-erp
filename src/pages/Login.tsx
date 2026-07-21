@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/authContext';
-import { Lock, User, Eye, EyeOff, LogIn, AlertCircle, Sparkles } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -45,16 +45,12 @@ export default function Login() {
       </div>
 
       <div className="w-full max-w-[420px] relative z-10">
-        {/* Logo and Title */}
-        <div className="text-center mb-6">
-          <div className="flex items-center justify-center gap-3 mb-3">
-            <svg width="40" height="32" viewBox="0 0 40 32" fill="none" className="text-white">
-              <path d="M0 16L10 0L20 16L10 32L0 16Z" fill="currentColor"/>
-              <path d="M12 16L22 0L32 16L22 32L12 16Z" fill="currentColor" opacity="0.7"/>
-            </svg>
-            <span className="text-2xl font-bold text-white tracking-wide">AKM LEATHER</span>
+        {/* Logo and Title - Same as main dashboard */}
+        <div className="text-center mb-4">
+          <div className="flex items-center justify-center -mt-16">
+            <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" className="h-[180px] object-contain brightness-[2] drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
           </div>
-          <h1 className="text-3xl font-black text-white mb-1.5 tracking-tight">Corix</h1>
+          <h1 className="text-3xl font-black text-white mb-1.5 tracking-tight -mt-12">Corix</h1>
           <p className="text-blue-300/60 text-xs font-semibold tracking-[0.25em] uppercase">Tannery Management System</p>
         </div>
 
@@ -139,7 +135,8 @@ export default function Login() {
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-blue-400/30 text-[11px] font-medium">
+          <p className="text-white
+           text-xs font-medium">
             © 2026 Corix Tannery Solutions. All rights reserved.
           </p>
         </div>

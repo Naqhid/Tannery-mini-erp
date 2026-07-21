@@ -1,4 +1,4 @@
-import { Ruler } from 'lucide-react';
+import { Scale } from 'lucide-react';
 import MasterPage from '../components/ui/MasterPage';
 
 export default function UOM() {
@@ -10,7 +10,7 @@ export default function UOM() {
   ];
 
   const formFields = [
-    { key: 'code', label: 'Code', required: false },
+    { key: 'code', label: 'Code', required: false, placeholder: 'Auto-generated' },
     { key: 'name', label: 'Name', required: true },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
   ];
@@ -26,14 +26,16 @@ export default function UOM() {
     <MasterPage
       title="UOM"
       subtitle="Manage Units of Measure"
-      icon={<Ruler size={20} className="text-white" />}
-      iconColor="from-teal-500 via-cyan-500 to-sky-600"
+      icon={<Scale size={20} className="text-white" />}
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/uom"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[20, 184, 166]}
+      pdfAccentColor={[59, 130, 246]}
+      modalSize="max-w-2xl"
+      formRoute="/uom"
     />
   );
 }
