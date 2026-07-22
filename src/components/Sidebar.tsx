@@ -89,7 +89,6 @@ export const menuItems: MenuItem[] = [
       { label: 'Supplier Return', icon: <ArrowLeftRight size={16} />, path: '/supplier-return' },
       { label: 'Supplier Master', icon: <Users size={16} />, path: '/supplier-master' },
       { label: 'Supplier Pricing History', icon: <Receipt size={16} />, path: '/supplier-pricing-history' },
-      { label: 'Add New Price', icon: <Plus size={16} />, path: '/supplier-pricing-history/new' },
       { label: 'Supplier Price Approval', icon: <CheckCircle size={16} />, path: '/supplier-price-approval' },
     ],
   },

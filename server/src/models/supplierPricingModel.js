@@ -32,7 +32,7 @@ export async function getAll({ search, supplier_id, material_id, item_group, sta
        m.code AS material_code, m.name AS material_name, m.type AS material_type,
        u.name AS uom_name,
        cu.name AS currency_name,
-       au.name AS approved_by_name
+       au.full_name AS approved_by_name
      FROM supplier_pricing sp
      LEFT JOIN suppliers s ON sp.supplier_id = s.id
      LEFT JOIN materials m ON sp.material_id = m.id
@@ -79,7 +79,7 @@ export async function getById(id) {
   // Get price change history
   const [history] = await pool.query(
     `SELECT pch.*,
-        uh.name AS changed_by_name
+        uh.full_name AS changed_by_name
       FROM price_change_history pch
       LEFT JOIN users uh ON pch.changed_by = uh.id
       WHERE pch.pricing_id = ? OR pch.material_id = ? OR pch.supplier_id = ?

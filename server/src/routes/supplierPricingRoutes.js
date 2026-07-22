@@ -13,9 +13,6 @@ router.get('/', pricingController.getAll);
 // GET /api/supplier-pricing/stats - Get pricing statistics
 router.get('/stats', pricingController.getStats);
 
-// GET /api/supplier-pricing/:id - Get pricing by ID
-router.get('/:id', pricingController.getById);
-
 // GET /api/supplier-pricing/supplier/:supplier_id - Get pricing history for supplier
 router.get('/supplier/:supplier_id', pricingController.getSupplierPricingHistory);
 
@@ -27,6 +24,9 @@ router.get('/trend/:material_id', pricingController.getPriceTrend);
 
 // GET /api/supplier-pricing/dropdown - Get pricing dropdown
 router.get('/dropdown', pricingController.dropdown);
+
+// GET /api/supplier-pricing/:id - Get pricing by ID (must be AFTER specific routes)
+router.get('/:id', pricingController.getById);
 
 // POST /api/supplier-pricing - Create new pricing
 router.post('/', pricingController.create);

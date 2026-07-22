@@ -17,6 +17,8 @@ import {
   ArrowDown,
   ChevronsUpDown,
   History,
+  Copy,
+  Download,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -45,6 +47,14 @@ interface BOMItemRow {
   unit_cost: number;
   amount: number;
   remarks: string;
+  supplier_id?: number | null;
+  supplier_name?: string;
+}
+
+interface Supplier {
+  id: number;
+  code: string;
+  name: string;
 }
 
 interface Material {
@@ -104,8 +114,14 @@ export default function BOM() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
   const [showItemModal, setShowItemModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<BOMItemRow | null>(null);
-  const [itemForm, setItemForm] = useState({ material_id: '', qty: '', unit_cost: '', remarks: '' });
+  const [itemForm, setItemForm] = useState({ material_id: '', qty: '', unit_cost: '', remarks: '', supplier_id: '' });
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importSearch, setImportSearch] = useState('');
+  const [importType, setImportType] = useState<'product' | 'bom'>('product');
+  const [importList, setImportList] = useState<BOM[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
 
 
   // Pagination state
@@ -121,7 +137,7 @@ export default function BOM() {
   // Fetch all dropdowns
   const dropdowns = useDropdowns(['products', 'leather-types', 'uom', 'thickness']);
 
-  // Fetch materials
+  // Fetch materials and suppliers
   const fetchMaterials = useCallback(async () => {
     try {
       const res = await api<{ data: Material[] }>('/materials?limit=500');
@@ -131,9 +147,19 @@ export default function BOM() {
     }
   }, []);
 
+  const fetchSuppliers = useCallback(async () => {
+    try {
+      const res = await api<{ data: Supplier[] }>('/suppliers?limit=500');
+      setSuppliers(res.data || []);
+    } catch {
+      setSuppliers([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchMaterials();
-  }, [fetchMaterials]);
+    fetchSuppliers();
+  }, [fetchMaterials, fetchSuppliers]);
 
   const fetchBOMs = useCallback(async () => {
     try {
@@ -181,8 +207,8 @@ export default function BOM() {
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-700 group-hover:text-gray-900" />;
     return sortOrder === 'asc'
-      ? <ArrowUp size={12} className="text-teal-600" />
-      : <ArrowDown size={12} className="text-teal-600" />;
+      ? <ArrowUp size={12} className="text-blue-600" />
+      : <ArrowDown size={12} className="text-blue-600" />;
   };
 
   const formatDate = (dateStr: string | undefined | null): string => {
@@ -289,7 +315,7 @@ export default function BOM() {
   // Item CRUD
   const openAddItem = () => {
     setSelectedItem(null);
-    setItemForm({ material_id: '', qty: '', unit_cost: '', remarks: '' });
+    setItemForm({ material_id: '', qty: '', unit_cost: '', remarks: '', supplier_id: '' });
     setShowItemModal(true);
   };
 
@@ -300,6 +326,7 @@ export default function BOM() {
       qty: String(item.qty),
       unit_cost: String(item.unit_cost),
       remarks: item.remarks || '',
+      supplier_id: String(item.supplier_id || ''),
     });
     setShowItemModal(true);
   };
@@ -315,6 +342,7 @@ export default function BOM() {
     const qty = parseFloat(itemForm.qty) || 0;
     const unitCost = parseFloat(itemForm.unit_cost) || 0;
     const amount = qty * unitCost;
+    const supplier = suppliers.find(s => s.id === Number(itemForm.supplier_id));
 
     try {
       if (selectedBOM?.id) {
@@ -326,6 +354,7 @@ export default function BOM() {
           unit_cost: unitCost,
           amount,
           remarks: itemForm.remarks,
+          supplier_id: itemForm.supplier_id ? Number(itemForm.supplier_id) : null,
         };
         if (selectedItem?.id) {
           await api(`/boms/${selectedBOM.id}/items/${selectedItem.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -337,7 +366,6 @@ export default function BOM() {
         const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${selectedBOM.id}`);
         setItems(detail.data.items || []);
       } else {
-        // Adding to local state for new BOM
         const newItem: BOMItemRow = {
           id: Date.now(),
           material_id: material.id,
@@ -349,6 +377,8 @@ export default function BOM() {
           unit_cost: unitCost,
           amount,
           remarks: itemForm.remarks,
+          supplier_id: itemForm.supplier_id ? Number(itemForm.supplier_id) : null,
+          supplier_name: supplier?.name || '',
         };
         if (selectedItem?.id) {
           setItems(prev => prev.map(i => i.id === selectedItem.id ? newItem : i));
@@ -359,6 +389,70 @@ export default function BOM() {
       setShowItemModal(false);
     } catch (err) {
       toast.error('Failed to save item: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
+    }
+  };
+
+  // Import BOM
+  const openImportModal = async () => {
+    setImportSearch('');
+    setImportType('product');
+    setImportList([]);
+    setShowImportModal(true);
+  };
+
+  const handleImportSearch = async () => {
+    if (!importSearch.trim()) return;
+    setImportLoading(true);
+    try {
+      const params = new URLSearchParams({ search: importSearch, limit: '20' });
+      const res = await api<{ data: BOM[] }>(`/boms?${params.toString()}`);
+      setImportList(res.data || []);
+    } catch {
+      setImportList([]);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportByProduct = async (productId: string) => {
+    if (!productId) { setImportList([]); return; }
+    setImportLoading(true);
+    try {
+      const params = new URLSearchParams({ search: '', limit: '20' });
+      const res = await api<{ data: BOM[] }>(`/boms?${params.toString()}`);
+      // Filter BOMs that belong to the selected product
+      const filtered = (res.data || []).filter((b: any) => String(b.product_id) === productId);
+      setImportList(filtered);
+    } catch {
+      setImportList([]);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportBOM = async (sourceBOM: BOM) => {
+    try {
+      const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${sourceBOM.id}`);
+      const sourceItems = detail.data.items || [];
+      setFormData({
+        ...emptyBOM,
+        name: `Copy of ${sourceBOM.name}`,
+        product_id: sourceBOM.product_id || null,
+        leather_type: sourceBOM.leather_type || '',
+        leather_type_id: sourceBOM.leather_type_id || null,
+        thickness: sourceBOM.thickness || '',
+        thickness_id: sourceBOM.thickness_id || null,
+        uom: sourceBOM.uom || '',
+        uom_id: sourceBOM.uom_id || null,
+        process_type: sourceBOM.process_type || 'finishing',
+        description: sourceBOM.description || '',
+      });
+      setItems(sourceItems.map(item => ({ ...item, id: Date.now() + Math.random() })));
+      setShowImportModal(false);
+      setShowPanel(true);
+      toast.success(`Imported from "${sourceBOM.name}" — update and save as new BOM`, { position: 'top-right', autoClose: 4000 });
+    } catch (err) {
+      toast.error('Failed to import BOM: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
     }
   };
 
@@ -383,13 +477,14 @@ export default function BOM() {
   const itemColumns = [
     { key: 'id', header: '#', width: '35px', render: (_row: BOMItemRow, i: number) => <span>{i + 1}</span> },
     { key: 'material_code', header: 'Material Code', width: '110px' },
-    { key: 'material_name', header: 'Material Name', width: '180px' },
-    { key: 'type', header: 'Type', width: '80px' },
+    { key: 'material_name', header: 'Material Name', width: '160px' },
+    { key: 'type', header: 'Type', width: '70px' },
     { key: 'uom', header: 'UOM', width: '55px' },
-    { key: 'qty', header: 'Qty', width: '95px', render: (row: BOMItemRow) => <span>{row.qty.toFixed(3)}</span> },
-    { key: 'unit_cost', header: 'Unit Cost', width: '100px', render: (row: BOMItemRow) => <span>{row.unit_cost.toFixed(2)}</span> },
-    { key: 'amount', header: 'Amount', width: '95px', render: (row: BOMItemRow) => <span>{row.amount.toFixed(2)}</span> },
-    { key: 'remarks', header: 'Remarks', width: '140px' },
+    { key: 'qty', header: 'Qty', width: '80px', render: (row: BOMItemRow) => <span>{row.qty.toFixed(3)}</span> },
+    { key: 'unit_cost', header: 'Unit Cost', width: '90px', render: (row: BOMItemRow) => <span>{row.unit_cost.toFixed(2)}</span> },
+    { key: 'amount', header: 'Amount', width: '85px', render: (row: BOMItemRow) => <span>{row.amount.toFixed(2)}</span> },
+    { key: 'supplier_name', header: 'Vendor', width: '120px', render: (row: BOMItemRow) => <span className="text-xs text-blue-600">{row.supplier_name || '-'}</span> },
+    { key: 'remarks', header: 'Remarks', width: '110px' },
     { key: 'actions', header: 'Action', width: '60px', render: (row: BOMItemRow) => (
       <div className="flex items-center gap-1">
         <button onClick={() => openEditItem(row)} className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
@@ -403,7 +498,7 @@ export default function BOM() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 shadow-lg shadow-teal-200/50">
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-200/50">
             <ClipboardList size={20} className="text-white" />
           </div>
           <div>
@@ -412,31 +507,31 @@ export default function BOM() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-lg border border-teal-100 shadow-sm">
-            <span className="text-xs text-teal-600 font-medium">Total:</span>
-            <span className="text-sm font-bold text-teal-800">{stats.total}</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-50 rounded-lg border border-blue-100 shadow-sm">
+            <span className="text-xs text-blue-600 font-medium">Total:</span>
+            <span className="text-sm font-bold text-blue-800">{stats.total}</span>
           </div>
-          <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg border border-emerald-100 shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-emerald-600 font-medium">Active:</span>
-            <span className="text-sm font-bold text-emerald-800">{stats.active}</span>
+          <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-100 shadow-sm">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-xs text-blue-600 font-medium">Active:</span>
+            <span className="text-sm font-bold text-blue-800">{stats.active}</span>
           </div>
         </div>
       </div>
 
       {/* BOM List */}
-      <div className="bg-white rounded-xl border border-teal-100 shadow-sm shadow-teal-100/50 overflow-hidden ring-1 ring-teal-50">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-sm shadow-blue-100/50 overflow-hidden ring-1 ring-blue-50">
         {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-teal-50/30">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
           <div className="flex items-center gap-2 flex-1">
             <div className="relative flex-1 max-w-xs">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" />
               <input
                 type="text"
                 placeholder="Search BOMs..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all bg-white"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all bg-white"
               />
             </div>
             <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
@@ -470,7 +565,7 @@ export default function BOM() {
             />
           </div>
           <button
-            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'shadow-teal-200 hover:shadow-lg hover:shadow-teal-300 active:scale-95'}`}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg hover:shadow-blue-300 active:scale-95'}`}
             onClick={canWrite ? () => openPanel() : undefined}
             disabled={isReadOnly}
             title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
@@ -478,20 +573,27 @@ export default function BOM() {
             <Plus size={14} />
             Add BOM
           </button>
+          <button
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all active:scale-95"
+            onClick={openImportModal}
+          >
+            <Copy size={14} />
+            Import BOM
+          </button>
         </div>
 
         {/* Desktop Table */}
         <div className="hidden md:block overflow-x-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gradient-to-r from-slate-50 to-teal-50/40 border-b border-teal-100/50">
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">BOM Name <SortIcon field="name" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider">Product</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-amber-500 uppercase tracking-wider hidden lg:table-cell">Thickness</th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-emerald-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('status')}><span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-rose-500 uppercase tracking-wider w-[90px]">Actions</th>
+              <tr className="bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-blue-100/50">
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-700 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">BOM Name <SortIcon field="name" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Product</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-700 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider hidden lg:table-cell">Thickness</th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-700 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('status')}><span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider w-[90px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -500,15 +602,15 @@ export default function BOM() {
               ) : boms.length === 0 ? (
                 <tr><td colSpan={8}><EmptyState title="No BOMs found" message="Create a new BOM or adjust your search" actionLabel="New BOM" onAction={() => openPanel()} /></td></tr>
               ) : boms.map((b, index) => (
-                <tr key={b.id || b.code} className={`hover:bg-teal-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(b)}>
+                <tr key={b.id || b.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(b)}>
                   <td className="py-3 px-4 relative">
-                    <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${b.status === 'Active' || b.status === 'active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                    <span className="font-mono text-xs text-teal-600 font-medium">{b.code}</span>
+                    <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${b.status === 'Active' || b.status === 'active' ? 'bg-blue-400' : 'bg-red-400'}`} />
+                    <span className="font-mono text-xs text-blue-600 font-medium">{b.code}</span>
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2.5">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${
-                        ['bg-teal-500', 'bg-emerald-500', 'bg-violet-500', 'bg-rose-500', 'bg-sky-500', 'bg-amber-500', 'bg-indigo-500', 'bg-purple-500'][index % 8]
+                        ['bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-rose-500', 'bg-sky-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500'][index % 8]
                       }`}>
                         {b.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
                       </div>
@@ -519,15 +621,15 @@ export default function BOM() {
                     <span className="text-blue-700 font-medium text-xs">{b.product_name || '-'}</span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
-                    <span className="text-sky-600 font-medium text-xs">{b.leather_type_name || b.leather_type}</span>
+                    <span className="text-blue-600 font-medium text-xs">{b.leather_type_name || b.leather_type}</span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-100">{b.thickness_name || b.thickness}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">{b.thickness_name || b.thickness}</span>
                   </td>
                   <td className="py-3 px-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-sm ${
                       b.status === 'Active' || b.status === 'active'
-                        ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border border-emerald-200'
+                        ? 'bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200'
                         : 'bg-gradient-to-r from-red-50 to-orange-50 text-red-600 border border-red-200'
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${b.status === 'Active' || b.status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'}`} />
@@ -549,11 +651,11 @@ export default function BOM() {
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
           {boms.map((b) => (
-            <div key={b.id || b.code} className="p-4 hover:bg-teal-50/30 transition-colors" onClick={() => openPanel(b)}>
+            <div key={b.id || b.code} className="p-4 hover:bg-blue-50/30 transition-colors" onClick={() => openPanel(b)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-teal-500 bg-teal-50 px-1.5 py-0.5 rounded">{b.code}</span>
+                    <span className="text-[10px] font-mono text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{b.code}</span>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                       b.status === 'Active' || b.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
                     }`}>
@@ -578,15 +680,15 @@ export default function BOM() {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-teal-100/50 bg-gradient-to-r from-slate-50 to-teal-50/30">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-blue-100/50 bg-gradient-to-r from-slate-50 to-blue-50/30">
           <div className="flex items-center gap-3">
-            <p className="text-xs text-teal-500 font-medium">
+            <p className="text-xs text-blue-500 font-medium">
               Showing {totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} entries
             </p>
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              className="text-xs border border-teal-200 rounded-lg px-2 py-1 text-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-300"
+              className="text-xs border border-blue-200 rounded-lg px-2 py-1 text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300"
             >
               <option value={10}>10 / page</option>
               <option value={25}>25 / page</option>
@@ -594,9 +696,9 @@ export default function BOM() {
             </select>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-teal-300 border border-transparent hover:border-teal-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => { if (totalPages <= 5) return true; if (p === 1 || p === totalPages) return true; if (Math.abs(p - currentPage) <= 1) return true; return false; }).reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => { if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis'); acc.push(p); return acc; }, []).map((item, idx) => item === 'ellipsis' ? <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-teal-400">…</span> : <button key={item} onClick={() => setCurrentPage(item)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === item ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-md shadow-teal-200' : 'hover:bg-white hover:shadow-sm text-teal-600 border border-transparent hover:border-teal-200'}`}>{item}</button>)}
-            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-teal-300 border border-transparent hover:border-teal-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight size={14} /></button>
+            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-blue-300 border border-transparent hover:border-blue-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => { if (totalPages <= 5) return true; if (p === 1 || p === totalPages) return true; if (Math.abs(p - currentPage) <= 1) return true; return false; }).reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => { if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis'); acc.push(p); return acc; }, []).map((item, idx) => item === 'ellipsis' ? <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-blue-400">…</span> : <button key={item} onClick={() => setCurrentPage(item)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === item ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-200' : 'hover:bg-white hover:shadow-sm text-blue-600 border border-transparent hover:border-blue-200'}`}>{item}</button>)}
+            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-blue-300 border border-transparent hover:border-blue-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight size={14} /></button>
           </div>
         </div>
       </div>
@@ -607,15 +709,15 @@ export default function BOM() {
           <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center" onClick={() => setShowPanel(false)}>
             <div className="w-full max-w-[1000px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-3" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
-              <div className="px-5 py-4 border-b border-teal-100/50 bg-gradient-to-r from-teal-50 via-emerald-50 to-green-50 shrink-0 rounded-t-2xl">
+              <div className="px-5 py-4 border-b border-blue-100/50 bg-gradient-to-r from-blue-50 via-blue-50 to-blue-100/50 shrink-0 rounded-t-2xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 shadow-lg shadow-teal-200/50">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-200/50">
                       <ClipboardList size={18} className="text-white" />
                     </div>
                     <div>
                       <h2 className="text-base font-bold text-gray-900">{selectedBOM ? 'Edit BOM' : 'New BOM'}</h2>
-                      <p className="text-[11px] text-teal-600 font-medium mt-0.5">{selectedBOM ? selectedBOM.code : 'Add a new BOM record'}</p>
+                      <p className="text-[11px] text-blue-600 font-medium mt-0.5">{selectedBOM ? selectedBOM.code : 'Add a new BOM record'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -631,7 +733,12 @@ export default function BOM() {
                 <Card title="BOM Header">
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <Input label="BOM Code" value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                      <div>
+                        <label className="block text-xs font-medium text-gray-900 mb-1">BOM Code</label>
+                        <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+                          {formData.code || <span className="italic">Will be auto-generated on save</span>}
+                        </div>
+                      </div>
                       <Input label="BOM Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                       <Select
                         label="Product"
@@ -643,18 +750,13 @@ export default function BOM() {
                         value={String(formData.product_id || '')}
                         onChange={(e) => handleProductChange(e.target.value)}
                       />
-                      <Select
-                        label="Leather Type"
-                        options={[
-                          { value: '', label: dropdowns['leather-types']?.loading ? 'Loading...' : 'Select type' },
-                          ...(dropdowns['leather-types']?.options || []),
-                        ]}
-                        value={String(formData.leather_type_id || '')}
-                        onChange={(e) => {
-                          const item = dropdowns['leather-types']?.data.find((d: any) => d.id === Number(e.target.value));
-                          setFormData(prev => ({ ...prev, leather_type_id: item?.id || null, leather_type: item?.name || '' }));
-                        }}
-                      />
+                      {/* Leather Type — read-only, populated from Product */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-900 mb-1">Leather Type</label>
+                        <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.leather_type ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                          {formData.leather_type || <span className="italic">Auto-filled from product</span>}
+                        </div>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                       <Select
@@ -668,30 +770,20 @@ export default function BOM() {
                         value={formData.process_type || 'finishing'}
                         onChange={(e) => updateField('process_type', e.target.value)}
                       />
-                      <Select
-                        label="Thickness"
-                        options={[
-                          { value: '', label: dropdowns['thickness']?.loading ? 'Loading...' : 'Select' },
-                          ...(dropdowns['thickness']?.options || []),
-                        ]}
-                        value={String(formData.thickness_id || '')}
-                        onChange={(e) => {
-                          const item = dropdowns['thickness']?.data.find((d: any) => d.id === Number(e.target.value));
-                          setFormData(prev => ({ ...prev, thickness_id: item?.id || null, thickness: item?.name || '' }));
-                        }}
-                      />
-                      <Select
-                        label="UOM"
-                        options={[
-                          { value: '', label: dropdowns['uom']?.loading ? 'Loading...' : 'Select' },
-                          ...(dropdowns['uom']?.options || []),
-                        ]}
-                        value={String(formData.uom_id || '')}
-                        onChange={(e) => {
-                          const item = dropdowns['uom']?.data.find((d: any) => d.id === Number(e.target.value));
-                          setFormData(prev => ({ ...prev, uom_id: item?.id || null, uom: item?.name || '' }));
-                        }}
-                      />
+                      {/* Thickness — read-only, populated from Product */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-900 mb-1">Thickness</label>
+                        <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.thickness ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                          {formData.thickness || <span className="italic">Auto-filled from product</span>}
+                        </div>
+                      </div>
+                      {/* UOM — read-only, populated from Product */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-900 mb-1">UOM</label>
+                        <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.uom ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                          {formData.uom || <span className="italic">Auto-filled from product</span>}
+                        </div>
+                      </div>
                       <Input label="Valid From" type="date" value={formData.valid_from || ''} onChange={(e) => updateField('valid_from', e.target.value)} />
                       <Input label="Valid To" type="date" value={formData.valid_to || ''} onChange={(e) => updateField('valid_to', e.target.value)} />
                     </div>
@@ -712,7 +804,7 @@ export default function BOM() {
                 <Card>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <h3 className="text-sm font-semibold text-gray-900">BOM Items</h3>
-                    <Button size="sm" variant="teal" icon={<Plus size={14} />} onClick={openAddItem}>Add Item</Button>
+                    <Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={openAddItem}>Add Item</Button>
                   </div>
 
                   <Table columns={itemColumns} data={items} />
@@ -726,7 +818,7 @@ export default function BOM() {
                 {/* Status Toggle */}
                 <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
                   <span className="text-xs font-medium text-gray-700">Status</span>
-                  <button onClick={() => setStatusToggle(!statusToggle)} className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${statusToggle ? 'bg-gradient-to-r from-emerald-400 to-teal-500' : 'bg-gray-300'}`}>
+                  <button onClick={() => setStatusToggle(!statusToggle)} className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${statusToggle ? 'bg-gradient-to-r from-blue-400 to-blue-500' : 'bg-gray-300'}`}>
                     <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${statusToggle ? 'translate-x-5' : ''}`} />
                   </button>
                   <span className={`text-xs font-semibold ${statusToggle ? 'text-emerald-600' : 'text-gray-500'}`}>{statusToggle ? 'Active' : 'Inactive'}</span>
@@ -734,14 +826,14 @@ export default function BOM() {
               </div>
 
               {/* Modal Footer */}
-              <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-teal-50/30 shrink-0 rounded-b-2xl">
+              <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/30 shrink-0 rounded-b-2xl">
                 <div className="flex items-center justify-between">
                   {selectedBOM ? (
                     <button onClick={() => selectedBOM?.id && handleDelete(selectedBOM.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95"><Trash2 size={13} /> Delete</button>
                   ) : <div />}
                   <div className="flex items-center gap-2">
                     <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all active:scale-95" onClick={() => setShowPanel(false)}><RotateCcw size={13} /> Cancel</button>
-                    <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly} title={isReadOnly ? 'You have read-only access' : undefined} className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-teal-500 via-emerald-500 to-green-500 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'shadow-teal-200 hover:shadow-lg active:scale-95'}`}><Save size={13} /> {saving ? 'Saving...' : selectedBOM ? 'Update' : 'Save BOM'}</button>
+                    <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly} title={isReadOnly ? 'You have read-only access' : undefined} className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg active:scale-95'}`}><Save size={13} /> {saving ? 'Saving...' : selectedBOM ? 'Update' : 'Save BOM'}</button>
                   </div>
                 </div>
               </div>
@@ -767,6 +859,15 @@ export default function BOM() {
                 value={itemForm.material_id}
                 onChange={(e) => setItemForm(prev => ({ ...prev, material_id: e.target.value }))}
               />
+              <Select
+                label="Vendor (Supplier)"
+                options={[
+                  { value: '', label: 'Select vendor (optional)' },
+                  ...suppliers.map(s => ({ value: String(s.id), label: s.name })),
+                ]}
+                value={itemForm.supplier_id}
+                onChange={(e) => setItemForm(prev => ({ ...prev, supplier_id: e.target.value }))}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Qty" required type="number" value={itemForm.qty} onChange={(e) => setItemForm(prev => ({ ...prev, qty: e.target.value }))} />
                 <Input label="Unit Cost" type="number" value={itemForm.unit_cost} onChange={(e) => setItemForm(prev => ({ ...prev, unit_cost: e.target.value }))} />
@@ -775,7 +876,96 @@ export default function BOM() {
             </div>
             <div className="flex items-center justify-end gap-2 mt-5">
               <button onClick={() => setShowItemModal(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
-              <button onClick={handleSaveItem} className="px-4 py-1.5 text-xs font-medium text-white bg-teal-500 rounded-lg hover:bg-teal-600">{selectedItem ? 'Update' : 'Add'}</button>
+              <button onClick={handleSaveItem} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">{selectedItem ? 'Update' : 'Add'}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Import BOM Modal */}
+      {showImportModal && createPortal(
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[70] flex items-center justify-center" onClick={() => setShowImportModal(false)}>
+          <div className="w-full max-w-lg bg-white rounded-xl shadow-xl mx-3" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download size={16} className="text-blue-600" />
+                <h3 className="text-sm font-bold text-gray-900">Import BOM</h3>
+              </div>
+              <button onClick={() => setShowImportModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-gray-500">Select an existing BOM by Product or BOM name to use as a template for a new BOM.</p>
+              <div className="flex gap-2">
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                  <button onClick={() => { setImportType('product'); setImportList([]); }} className={`px-3 py-1.5 font-medium transition-colors ${importType === 'product' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>By Product</button>
+                  <button onClick={() => { setImportType('bom'); setImportList([]); }} className={`px-3 py-1.5 font-medium transition-colors ${importType === 'bom' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>By BOM Name</button>
+                </div>
+              </div>
+
+              {importType === 'product' ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Select Product</label>
+                  <select
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                    onChange={(e) => handleImportByProduct(e.target.value)}
+                    defaultValue=""
+                  >
+                    <option value="">-- Select a product --</option>
+                    {(dropdowns['products']?.options || []).map((opt: any) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by BOM name or code..."
+                      value={importSearch}
+                      onChange={(e) => setImportSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleImportSearch()}
+                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    />
+                  </div>
+                  <button onClick={handleImportSearch} className="px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">Search</button>
+                </div>
+              )}
+
+              <div className="min-h-[120px] max-h-[240px] overflow-y-auto border border-gray-100 rounded-lg">
+                {importLoading ? (
+                  <div className="flex items-center justify-center py-10 text-xs text-gray-400">Searching...</div>
+                ) : importList.length === 0 ? (
+                  <div className="flex items-center justify-center py-10 text-xs text-gray-400">
+                    {importType === 'product' ? 'Select a product above to find associated BOMs.' : (importSearch ? 'No BOMs found. Try a different search.' : 'Enter a search term above to find BOMs.')}
+                  </div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Code</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-600">BOM Name</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Product</th>
+                        <th className="py-2 px-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {importList.map(b => (
+                        <tr key={b.id} className="hover:bg-blue-50/50">
+                          <td className="py-2 px-3 font-mono text-blue-600">{b.code}</td>
+                          <td className="py-2 px-3 font-medium text-gray-800">{b.name}</td>
+                          <td className="py-2 px-3 text-gray-500">{b.product_name || '-'}</td>
+                          <td className="py-2 px-3">
+                            <button onClick={() => handleImportBOM(b)} className="px-2 py-1 text-[11px] font-medium text-white bg-blue-600 rounded hover:bg-blue-700">Import</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
           </div>
         </div>,

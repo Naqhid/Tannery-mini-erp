@@ -206,7 +206,7 @@ export default function MaterialReceiptEntryDetail() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-orange-500 rounded-full animate-spin" /></div>;
+    return <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin" /></div>;
   }
 
   return (
@@ -217,7 +217,7 @@ export default function MaterialReceiptEntryDetail() {
           <button onClick={() => navigate('/material-receipt')} className="p-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-all">
             <ArrowLeft size={18} className="text-gray-600" />
           </button>
-          <div className="p-3 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-xl shadow-orange-500/30 ring-2 ring-white/50">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-xl shadow-blue-500/30 ring-2 ring-white/50">
             <Truck size={22} className="text-white" />
           </div>
           <div>
@@ -232,7 +232,12 @@ export default function MaterialReceiptEntryDetail() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Receipt Details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Row 1 */}
-          <Input label="Receipt No." value={receipt.receipt_no} onChange={(e) => update('receipt_no', e.target.value)} placeholder="Auto-generated" disabled={!isNew} />
+          <div>
+            <label className="block text-xs font-medium text-gray-900 mb-1">Receipt No.</label>
+            <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+              {receipt.receipt_no || <span className="italic">Will be auto-generated on save</span>}
+            </div>
+          </div>
           <Input label="Receipt Date" type="date" required value={receipt.receipt_date} onChange={(e) => update('receipt_date', e.target.value)} />
           <Select label="Supplier" required options={[{ value: '', label: 'Select supplier' }, ...suppliers.map((s) => ({ value: String(s.id), label: `${s.name}` }))]} value={receipt.supplier_id} onChange={(e) => update('supplier_id', e.target.value)} />
           <Input label="Challan / Invoice No." value={receipt.challan_no} onChange={(e) => update('challan_no', e.target.value)} placeholder="INV-4587" />
@@ -254,7 +259,7 @@ export default function MaterialReceiptEntryDetail() {
               value={receipt.remarks}
               onChange={(e) => update('remarks', e.target.value)}
               placeholder="Material received in good condition."
-              className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all resize-none"
+              className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
             />
           </div>
         </div>
@@ -262,7 +267,7 @@ export default function MaterialReceiptEntryDetail() {
 
       {/* Section 2: Item Details */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-orange-50/30">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/30">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2>
             <div className="relative">
@@ -271,16 +276,16 @@ export default function MaterialReceiptEntryDetail() {
                 value={searchItem}
                 onChange={(e) => setSearchItem(e.target.value)}
                 placeholder="Search item by code / name / barcode"
-                className="w-64 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 pl-8"
+                className="w-64 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pl-8"
               />
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 transition-all">
+            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Plus size={14} /> Add Row
             </button>
-            <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition-all">
+            <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Minus size={14} /> Remove Row
             </button>
           </div>
@@ -290,8 +295,8 @@ export default function MaterialReceiptEntryDetail() {
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code <span className="text-rose-500">*</span></th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name <span className="text-rose-500">*</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">UOM</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Received Qty <span className="text-rose-500">*</span></th>
@@ -304,44 +309,37 @@ export default function MaterialReceiptEntryDetail() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {items.map((item, idx) => (
-                <tr key={item._key} className="hover:bg-orange-50/30 transition-all">
+                <tr key={item._key} className="hover:bg-blue-50/30 transition-all">
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700 font-mono">{item.material_code || '-'}</td>
                   <td className="py-2.5 px-3">
                     <select value={item.material_id} onChange={(e) => updateItem(item._key, 'material_id', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white min-w-[100px]">
-                      <option value="">Select</option>
-                      {materials.map((m) => <option key={m.id} value={String(m.id)}>{m.code}</option>)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[160px]">
+                      <option value="">Select Item</option>
+                      {materials.map((m) => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
                     </select>
                   </td>
-                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_name || '-'}</td>
-                  <td className="py-2.5 px-3">
-                    <select value={item.uom} onChange={(e) => updateItem(item._key, 'uom', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white min-w-[60px]">
-                      <option value="">{item.uom || '-'}</option>
-                      <option value="Kg">Kg</option><option value="Ltr">Ltr</option><option value="Mtr">Mtr</option>
-                      <option value="Nos">Nos</option><option value="Sq.Ft.">Sq.Ft.</option><option value="Cone">Cone</option>
-                    </select>
-                  </td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.order_qty} onChange={(e) => updateItem(item._key, 'order_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.received_qty} onChange={(e) => updateItem(item._key, 'received_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.rate} onChange={(e) => updateItem(item._key, 'rate', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">
                     <input value={item.batch_no} onChange={(e) => updateItem(item._key, 'batch_no', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 min-w-[90px]" placeholder="BATCH-001" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[90px]" placeholder="BATCH-001" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="date" value={item.expiry_date} onChange={(e) => updateItem(item._key, 'expiry_date', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                   </td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
@@ -380,17 +378,17 @@ export default function MaterialReceiptEntryDetail() {
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs text-gray-600">Freight (₹)</span>
               <input type="number" value={receipt.freight} onChange={(e) => update('freight', e.target.value)}
-                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" placeholder="0.00" />
+                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs text-gray-600">Loading / Unloading (₹)</span>
               <input type="number" value={receipt.loading_charges} onChange={(e) => update('loading_charges', e.target.value)}
-                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" placeholder="0.00" />
+                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs text-gray-600">Other Charges (₹)</span>
               <input type="number" value={receipt.other_charges} onChange={(e) => update('other_charges', e.target.value)}
-                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" placeholder="0.00" />
+                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
           </div>
           {/* Right - Grand Total */}
@@ -425,7 +423,7 @@ export default function MaterialReceiptEntryDetail() {
         <button onClick={handleClear} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
           <RotateCcw size={14} /> Clear
         </button>
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-orange-600 to-amber-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>

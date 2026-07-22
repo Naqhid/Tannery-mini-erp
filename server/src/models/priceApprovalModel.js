@@ -2,46 +2,47 @@ import pool from '../config/db.js';
 
 const ALLOWED_SORT = ['id', 'request_no', 'request_date', 'status', 'requested_by', 'total_items', 'created_at'];
 
-export async function getAll({ search, status, supplier_id, material_id, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
+export async function getAll({ search, status, supplier_id, item_group, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
   const params = [];
   let where = 'par.deleted_at IS NULL';
 
   if (search) {
-    where += ' AND (par.request_no LIKE ? OR s.name LIKE ? OR m.name LIKE ? OR pai.supplier_part_no LIKE ?)';
+    where += ' AND (par.request_no LIKE ? OR s.name LIKE ? OR m.name LIKE ? OR m.code LIKE ? OR pai.supplier_part_no LIKE ?)';
     const t = `%${search}%`;
-    params.push(t, t, t, t);
+    params.push(t, t, t, t, t);
   }
-  if (status) { where += ' AND par.status = ?'; params.push(status); }
+  if (status) { where += ' AND pai.status = ?'; params.push(status); }
   if (supplier_id) { where += ' AND pai.supplier_id = ?'; params.push(supplier_id); }
-  if (material_id) { where += ' AND pai.material_id = ?'; params.push(material_id); }
+  if (item_group) { where += ' AND pai.item_group = ?'; params.push(item_group); }
   if (from_date) { where += ' AND par.request_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND par.request_date <= ?'; params.push(to_date); }
 
-  const col = ALLOWED_SORT.includes(sortBy) ? `par.\`${sortBy}\`` : 'par.`id`';
+  const col = ALLOWED_SORT.includes(sortBy) ? `par.\`${sortBy}\`` : 'pai.`id`';
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
-    `SELECT par.id, par.request_no, par.request_date, par.requested_by, par.department,
-       par.total_items, par.status, par.approval_notes, par.remarks,
-       COUNT(pai.id) AS actual_items,
-       SUM(CASE WHEN pai.status = 'Approved' THEN 1 ELSE 0 END) AS approved_items,
-       SUM(CASE WHEN pai.status = 'Rejected' THEN 1 ELSE 0 END) AS rejected_items,
-       ru.name AS requested_by_name
-     FROM price_approval_requests par
-     LEFT JOIN price_approval_items pai ON par.id = pai.request_id
+    `SELECT pai.id, pai.request_id, par.request_no, par.request_date,
+       s.code AS supplier_code, s.name AS supplier_name,
+       m.code AS material_code, m.name AS material_name,
+       pai.item_group, pai.uom,
+       pai.current_price, pai.requested_price, pai.change_percent,
+       pai.effective_from, pai.status,
+       ru.full_name AS requested_by, par.remarks,
+       pai.supplier_part_no
+     FROM price_approval_items pai
+     JOIN price_approval_requests par ON pai.request_id = par.id
      LEFT JOIN users ru ON par.requested_by = ru.id
      LEFT JOIN suppliers s ON pai.supplier_id = s.id
      LEFT JOIN materials m ON pai.material_id = m.id
      WHERE ${where}
-     GROUP BY par.id
      ORDER BY ${col} ${ord}
      LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
   );
 
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM price_approval_requests par WHERE ${where}`, params
+    `SELECT COUNT(*) AS total FROM price_approval_items pai JOIN price_approval_requests par ON pai.request_id = par.id WHERE ${where}`, params
   );
 
   return { rows, total };
@@ -50,8 +51,8 @@ export async function getAll({ search, status, supplier_id, material_id, from_da
 export async function getById(id) {
   const [[request]] = await pool.query(
     `SELECT par.*,
-       ru.name AS requested_by_name, ru.username AS requested_by_username,
-       au.name AS approved_by_name
+       ru.full_name AS requested_by_name, ru.username AS requested_by_username,
+       au.full_name AS approved_by_name
      FROM price_approval_requests par
      LEFT JOIN users ru ON par.requested_by = ru.id
      LEFT JOIN users au ON par.approved_by = au.id
@@ -77,7 +78,7 @@ export async function getById(id) {
   // Get workflow history
   const [workflow] = await pool.query(
     `SELECT paw.*,
-       u.name AS action_by_name
+       u.full_name AS action_by_name
      FROM price_approval_workflow paw
      LEFT JOIN users u ON paw.action_by = u.id
      WHERE paw.request_id = ?

@@ -161,6 +161,10 @@ export default function RecipeCreation() {
   });
   const [stageParameters, setStageParameters] = useState<StageParameter[]>([]);
 
+  // Track original version for auto-increment
+  const [originalVersion, setOriginalVersion] = useState<number>(1);
+  const [hasChanges, setHasChanges] = useState(false);
+
   // Active tab in recipe detail
   const [activeDetailTab, setActiveDetailTab] = useState<'items' | 'stages' | 'attachments' | 'remarks'>('items');
 
@@ -237,8 +241,8 @@ export default function RecipeCreation() {
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-700 group-hover:text-gray-900" />;
     return sortOrder === 'asc'
-      ? <ArrowUp size={12} className="text-violet-600" />
-      : <ArrowDown size={12} className="text-violet-600" />;
+      ? <ArrowUp size={12} className="text-blue-600" />
+      : <ArrowDown size={12} className="text-blue-600" />;
   };
 
   const formatDate = (dateStr: string | undefined | null): string => {
@@ -257,6 +261,8 @@ export default function RecipeCreation() {
         valid_from: formatDate(recipe.valid_from),
         valid_to: formatDate(recipe.valid_to),
       });
+      setOriginalVersion(recipe.version || 1);
+      setHasChanges(false);
       setStatusToggle(recipe.status === 'active' || recipe.status === 'Active');
       try {
         const detail = await api<{ data: Recipe & { items: RecipeItem[]; stages: ProcessStage[]; attachments: RecipeAttachment[] } }>(`/recipes/${recipe.id}`);
@@ -271,6 +277,8 @@ export default function RecipeCreation() {
     } else {
       setSelectedRecipe(null);
       setFormData(emptyRecipe);
+      setOriginalVersion(1);
+      setHasChanges(false);
       setStatusToggle(true);
       setRecipeItems([]);
       setStages([]);
@@ -327,6 +335,11 @@ export default function RecipeCreation() {
 
   const updateField = (field: keyof Recipe, value: string | number | null) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    // Auto-increment version when editing an existing recipe
+    if (selectedRecipe && !hasChanges && field !== 'version') {
+      setHasChanges(true);
+      setFormData((prev) => ({ ...prev, [field]: value, version: originalVersion + 1 }));
+    }
   };
 
   // Handle product selection and auto-populate
@@ -609,7 +622,7 @@ export default function RecipeCreation() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-violet-200/50">
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-200/50">
             <FlaskConical size={20} className="text-white" />
           </div>
           <div>
@@ -618,34 +631,34 @@ export default function RecipeCreation() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-violet-50 to-purple-50 rounded-lg border border-violet-100 shadow-sm">
-            <span className="text-xs text-violet-600 font-medium">Total:</span>
-            <span className="text-sm font-bold text-violet-800">{stats.total}</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-50 rounded-lg border border-blue-100 shadow-sm">
+            <span className="text-xs text-blue-600 font-medium">Total:</span>
+            <span className="text-sm font-bold text-blue-800">{stats.total}</span>
           </div>
-          <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-100 shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-emerald-600 font-medium">Active:</span>
-            <span className="text-sm font-bold text-emerald-800">{stats.active}</span>
+          <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-100 shadow-sm">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-xs text-blue-600 font-medium">Active:</span>
+            <span className="text-sm font-bold text-blue-800">{stats.active}</span>
           </div>
         </div>
       </div>
 
       {/* Recipe List */}
-      <div className="bg-white rounded-xl border border-violet-100 shadow-sm shadow-violet-100/50 overflow-hidden ring-1 ring-violet-50">
+      <div className="bg-white rounded-xl border border-blue-100 shadow-sm shadow-blue-100/50 overflow-hidden ring-1 ring-blue-50">
         {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-violet-50/30">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
           <div className="flex items-center gap-2 flex-1">
             <div className="relative flex-1 max-w-xs">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-violet-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" />
               <input
                 type="text"
                 placeholder="Search recipes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-all bg-white"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all bg-white"
               />
             </div>
-            <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
+            <button className="p-2 rounded-lg border border-blue-200 text-blue-500 hover:bg-blue-50 hover:border-blue-300 transition-all">
               <Filter size={15} />
             </button>
             <ExportMenu
@@ -676,7 +689,7 @@ export default function RecipeCreation() {
             />
           </div>
           <button
-            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'shadow-violet-200 hover:shadow-lg hover:shadow-violet-300 active:scale-95'}`}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg hover:shadow-blue-300 active:scale-95'}`}
             onClick={canWrite ? () => openPanel() : undefined}
             disabled={isReadOnly}
             title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
@@ -694,18 +707,18 @@ export default function RecipeCreation() {
             <div className="py-10 text-center text-gray-400 text-sm">No recipes found</div>
           ) : recipes.map((r, index) => {
             const cardColors = [
-              'border-l-violet-500', 'border-l-purple-500', 'border-l-teal-500',
+              'border-l-blue-500', 'border-l-indigo-500', 'border-l-sky-500',
               'border-l-rose-500', 'border-l-sky-500', 'border-l-amber-500',
               'border-l-indigo-500', 'border-l-emerald-500',
             ];
             const avatarColors = [
-              'bg-violet-500', 'bg-purple-500', 'bg-teal-500', 'bg-rose-500',
+              'bg-blue-500', 'bg-indigo-500', 'bg-sky-500', 'bg-rose-500',
               'bg-sky-500', 'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500',
             ];
             return (
               <div
                 key={r.id || r.code}
-                className={`p-4 border-l-4 ${cardColors[index % 8]} hover:bg-violet-50/30 transition-all cursor-pointer active:scale-[0.99]`}
+                className={`p-4 border-l-4 ${cardColors[index % 8]} hover:bg-blue-50/30 transition-all cursor-pointer active:scale-[0.99]`}
                 onClick={() => openPanel(r)}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -715,7 +728,7 @@ export default function RecipeCreation() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-900 truncate">{r.name}</p>
-                      <p className="text-[11px] text-violet-600 font-mono mt-0.5">{r.code}</p>
+                      <p className="text-[11px] text-blue-600 font-mono mt-0.5">{r.code}</p>
                     </div>
                   </div>
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
@@ -730,7 +743,7 @@ export default function RecipeCreation() {
                 <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-gray-400 font-medium">Leather:</span>
-                    <span className="text-[11px] text-teal-700 font-medium truncate">{r.leather_type_name || r.leather_type || '—'}</span>
+                    <span className="text-[11px] text-blue-700 font-medium truncate">{r.leather_type_name || r.leather_type || '—'}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-gray-400 font-medium">Process:</span>
@@ -758,10 +771,10 @@ export default function RecipeCreation() {
         <div className="hidden md:block overflow-x-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gradient-to-r from-slate-50 to-violet-50/40 border-b border-violet-100/50">
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-violet-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-purple-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">Recipe Name <SortIcon field="name" /></span></th>
-                <th className="text-left py-3 px-4 text-[11px] font-semibold text-teal-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
+              <tr className="bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-blue-100/50">
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-700 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">Recipe Name <SortIcon field="name" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-500 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('process_type')}><span className="inline-flex items-center gap-1">Process Type <SortIcon field="process_type" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-sky-500 uppercase tracking-wider hidden lg:table-cell">Finish Type</th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-amber-500 uppercase tracking-wider hidden xl:table-cell">Version</th>
@@ -775,15 +788,15 @@ export default function RecipeCreation() {
               ) : recipes.length === 0 ? (
                 <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No recipes found</td></tr>
               ) : recipes.map((r, index) => (
-                <tr key={r.id || r.code} className={`hover:bg-violet-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(r)}>
+                <tr key={r.id || r.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(r)}>
                   <td className="py-3 px-4 relative">
-                    <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${r.status === 'active' || r.status === 'Active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                    <span className="font-mono text-xs text-violet-600 font-medium">{r.code}</span>
+                    <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${r.status === 'active' || r.status === 'Active' ? 'bg-blue-400' : 'bg-red-400'}`} />
+                    <span className="font-mono text-xs text-blue-600 font-medium">{r.code}</span>
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2.5">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${
-                        ['bg-violet-500', 'bg-purple-500', 'bg-teal-500', 'bg-rose-500', 'bg-sky-500', 'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500'][index % 8]
+                        ['bg-blue-500', 'bg-indigo-500', 'bg-sky-500', 'bg-rose-500', 'bg-sky-500', 'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500'][index % 8]
                       }`}>
                         {r.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
                       </div>
@@ -791,7 +804,7 @@ export default function RecipeCreation() {
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <span className="text-teal-700 font-medium text-xs">{r.leather_type_name || r.leather_type}</span>
+                    <span className="text-blue-700 font-medium text-xs">{r.leather_type_name || r.leather_type}</span>
                   </td>
                   <td className="py-3 px-4 hidden lg:table-cell">
                     <span className="text-blue-600 font-medium text-xs capitalize">{r.process_type}</span>
@@ -805,10 +818,10 @@ export default function RecipeCreation() {
                   <td className="py-3 px-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shadow-sm ${
                       r.status === 'active' || r.status === 'Active'
-                        ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border border-emerald-200'
+                        ? 'bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200'
                         : 'bg-gradient-to-r from-red-50 to-orange-50 text-red-600 border border-red-200'
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${r.status === 'active' || r.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${r.status === 'active' || r.status === 'Active' ? 'bg-blue-500 animate-pulse' : 'bg-red-400'}`} />
                       {r.status}
                     </span>
                   </td>
@@ -825,19 +838,19 @@ export default function RecipeCreation() {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-violet-100/50 bg-gradient-to-r from-slate-50 to-violet-50/30">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-blue-100/50 bg-gradient-to-r from-slate-50 to-blue-50/30">
           <div className="flex items-center gap-3">
-            <p className="text-xs text-violet-500 font-medium">Showing {totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} entries</p>
-            <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="text-xs border border-violet-200 rounded-lg px-2 py-1 text-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-300">
+            <p className="text-xs text-blue-500 font-medium">Showing {totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} entries</p>
+            <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="text-xs border border-blue-200 rounded-lg px-2 py-1 text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300">
               <option value={10}>10 / page</option>
               <option value={25}>25 / page</option>
               <option value={50}>50 / page</option>
             </select>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-violet-300 border border-transparent hover:border-violet-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => { if (totalPages <= 5) return true; if (p === 1 || p === totalPages) return true; if (Math.abs(p - currentPage) <= 1) return true; return false; }).reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => { if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis'); acc.push(p); return acc; }, []).map((item, idx) => item === 'ellipsis' ? <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-violet-400">…</span> : <button key={item} onClick={() => setCurrentPage(item)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === item ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-200' : 'hover:bg-white hover:shadow-sm text-violet-600 border border-transparent hover:border-violet-200'}`}>{item}</button>)}
-            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-violet-300 border border-transparent hover:border-violet-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight size={14} /></button>
+            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-blue-300 border border-transparent hover:border-blue-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).filter((p) => { if (totalPages <= 5) return true; if (p === 1 || p === totalPages) return true; if (Math.abs(p - currentPage) <= 1) return true; return false; }).reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => { if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis'); acc.push(p); return acc; }, []).map((item, idx) => item === 'ellipsis' ? <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-xs text-blue-400">…</span> : <button key={item} onClick={() => setCurrentPage(item)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === item ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-200' : 'hover:bg-white hover:shadow-sm text-blue-600 border border-transparent hover:border-blue-200'}`}>{item}</button>)}
+            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-blue-300 border border-transparent hover:border-blue-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight size={14} /></button>
           </div>
         </div>
       </div>
@@ -848,10 +861,10 @@ export default function RecipeCreation() {
           <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center" onClick={() => setShowPanel(false)}>
             <div className="w-full max-w-[1100px] max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col mx-2 sm:mx-3" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
-              <div className="px-5 py-4 border-b border-violet-100/50 bg-gradient-to-r from-violet-50 via-purple-50 to-fuchsia-50 shrink-0 rounded-t-2xl">
+              <div className="px-5 py-4 border-b border-blue-100/50 bg-gradient-to-r from-blue-50 via-blue-50 to-blue-100/50 shrink-0 rounded-t-2xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-violet-200/50">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-200/50">
                       <FlaskConical size={18} className="text-white" />
                     </div>
                     <div>
@@ -861,9 +874,9 @@ export default function RecipeCreation() {
                   </div>
                   <div className="flex items-center gap-2">
                     {selectedRecipe && (
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-violet-50 to-purple-50 rounded-lg border border-violet-100">
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-50 to-blue-50 rounded-lg border border-blue-100">
                         <span className="text-xs text-violet-600 font-medium">Version:</span>
-                        <span className="text-sm font-bold text-violet-800">{formData.version ?? 1}</span>
+                        <span className="text-sm font-bold text-blue-800">{formData.version ?? 1}</span>
                       </div>
                     )}
                     <button onClick={() => setShowPanel(false)} className="p-2 rounded-lg hover:bg-white/70 text-gray-400 hover:text-gray-600 transition-all"><X size={18} /></button>
@@ -877,7 +890,12 @@ export default function RecipeCreation() {
                 <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50/80 to-gray-50/80 border border-slate-100/50 space-y-3">
                   <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5"><FlaskConical size={10} /> Recipe Identity</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <Input label="Recipe Code" value={formData.code || ''} placeholder="Auto-generated" onChange={(e) => updateField('code', e.target.value)} />
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">Recipe Code</label>
+                      <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+                        {formData.code || <span className="italic">Will be auto-generated on save</span>}
+                      </div>
+                    </div>
                     <Input label="Recipe Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
                     <Select
                       label="Product"
@@ -888,23 +906,18 @@ export default function RecipeCreation() {
                       value={String(formData.product_id || '')}
                       onChange={(e) => handleProductChange(e.target.value)}
                     />
-                    <Select
-                      label="Version"
-                      options={[
-                        { value: '1', label: 'Version 1' },
-                        { value: '2', label: 'Version 2' },
-                        { value: '3', label: 'Version 3' },
-                        { value: '4', label: 'Version 4' },
-                      ]}
-                      value={String(formData.version || 1)}
-                      onChange={(e) => updateField('version', Number(e.target.value))}
-                    />
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">Version</label>
+                      <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-semibold min-h-[34px] flex items-center">
+                        {selectedRecipe ? formData.version : 1}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Process & Finish */}
-                <div className="p-3 rounded-xl bg-gradient-to-r from-violet-50/80 to-purple-50/80 border border-violet-100/50 space-y-3">
-                  <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider flex items-center gap-1.5"> Process & Finish</p>
+                <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-blue-50/80 border border-blue-100/50 space-y-3">
+                  <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider flex items-center gap-1.5"> Process & Finish</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     <Select
                       label="Process Type"
@@ -917,66 +930,41 @@ export default function RecipeCreation() {
                       value={formData.process_type || 'finishing'}
                       onChange={(e) => updateField('process_type', e.target.value)}
                     />
-                    <Select
-                      label="Leather Type"
-                      options={[
-                        { value: '', label: dropdowns['leather-types']?.loading ? 'Loading...' : 'Select' },
-                        ...(dropdowns['leather-types']?.options || []),
-                      ]}
-                      value={String(formData.leather_type_id || '')}
-                      onChange={(e) => {
-                        const item = dropdowns['leather-types']?.data.find((d: any) => d.id === Number(e.target.value));
-                        setFormData(prev => ({ ...prev, leather_type_id: item?.id || null, leather_type: item?.name || '' }));
-                      }}
-                    />
-                    <Select
-                      label="Thickness"
-                      options={[
-                        { value: '', label: dropdowns['thickness']?.loading ? 'Loading...' : 'Select' },
-                        ...(dropdowns['thickness']?.options || []),
-                      ]}
-                      value={String(formData.thickness_id || '')}
-                      onChange={(e) => {
-                        const item = dropdowns['thickness']?.data.find((d: any) => d.id === Number(e.target.value));
-                        setFormData(prev => ({ ...prev, thickness_id: item?.id || null, thickness: item?.name || '' }));
-                      }}
-                    />
-                    <Select
-                      label="Finish Type"
-                      options={[
-                        { value: '', label: dropdowns['finish-types']?.loading ? 'Loading...' : 'Select' },
-                        ...(dropdowns['finish-types']?.options || []),
-                      ]}
-                      value={String(formData.finish_type_id || '')}
-                      onChange={(e) => {
-                        const item = dropdowns['finish-types']?.data.find((d: any) => d.id === Number(e.target.value));
-                        setFormData(prev => ({ ...prev, finish_type_id: item?.id || null, finish_type: item?.name || '' }));
-                      }}
-                    />
-                    <Select
-                      label="Color"
-                      options={[
-                        { value: '', label: dropdowns['colors']?.loading ? 'Loading...' : 'Select' },
-                        ...(dropdowns['colors']?.options || []),
-                      ]}
-                      value={String(formData.color_id || '')}
-                      onChange={(e) => {
-                        const item = dropdowns['colors']?.data.find((d: any) => d.id === Number(e.target.value));
-                        setFormData(prev => ({ ...prev, color_id: item?.id || null, color: item?.name || '' }));
-                      }}
-                    />
-                    <Select
-                      label="UOM"
-                      options={[
-                        { value: '', label: dropdowns['uom']?.loading ? 'Loading...' : 'Select' },
-                        ...(dropdowns['uom']?.options || []),
-                      ]}
-                      value={String(formData.uom_id || '')}
-                      onChange={(e) => {
-                        const item = dropdowns['uom']?.data.find((d: any) => d.id === Number(e.target.value));
-                        setFormData(prev => ({ ...prev, uom_id: item?.id || null, uom: item?.name || '' }));
-                      }}
-                    />
+                    {/* Leather Type — read-only, populated from Product */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">Leather Type</label>
+                      <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.leather_type ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                        {formData.leather_type || <span className="italic">Auto-filled from product</span>}
+                      </div>
+                    </div>
+                    {/* Thickness — read-only, populated from Product */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">Thickness</label>
+                      <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.thickness ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                        {formData.thickness || <span className="italic">Auto-filled from product</span>}
+                      </div>
+                    </div>
+                    {/* Finish Type — read-only, populated from Product */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">Finish Type</label>
+                      <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.finish_type ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                        {formData.finish_type || <span className="italic">Auto-filled from product</span>}
+                      </div>
+                    </div>
+                    {/* Color — read-only, populated from Product */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">Color</label>
+                      <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.color ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                        {formData.color || <span className="italic">Auto-filled from product</span>}
+                      </div>
+                    </div>
+                    {/* UOM — read-only, populated from Product */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-900 mb-1">UOM</label>
+                      <div className={`w-full px-2.5 py-2 text-xs border rounded-lg min-h-[34px] flex items-center ${formData.uom ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                        {formData.uom || <span className="italic">Auto-filled from product</span>}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -987,7 +975,7 @@ export default function RecipeCreation() {
                     <Input label="Valid To" type="date" value={formData.valid_to || ''} onChange={(e) => updateField('valid_to', e.target.value)} />
                     <div>
                       <label className="block text-xs font-medium text-gray-900 mb-1">Status</label>
-                      <select value={formData.status || 'active'} onChange={(e) => updateField('status', e.target.value)} className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white">
+                      <select value={formData.status || 'active'} onChange={(e) => updateField('status', e.target.value)} className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
                         <option value="active">Active</option>
                         <option value="draft">Draft</option>
                         <option value="inactive">Inactive</option>
@@ -997,7 +985,7 @@ export default function RecipeCreation() {
                 </div>
 
                 {/* Tab Navigation */}
-                <div className="bg-white rounded-xl border border-violet-100 shadow-sm overflow-hidden">
+                <div className="bg-white rounded-xl border border-blue-100 shadow-sm overflow-hidden">
                   <div className="flex items-center border-b border-gray-100 overflow-x-auto">
                     {detailTabs.map((tab) => (
                       <button
@@ -1020,7 +1008,9 @@ export default function RecipeCreation() {
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold text-gray-900">Recipe Items ({recipeItems.length})</span>
-                          <Button size="sm" variant="violet" icon={<Plus size={14} />} onClick={openAddItem}>Add Item</Button>
+                          {recipeItems.length === 0 && (
+                            <span className="text-xs text-gray-400 italic">Select a product to load BOM items</span>
+                          )}
                         </div>
                         <Table columns={recipeItemColumns} data={recipeItems} />
                         <div className="flex items-center justify-end border-t border-gray-200 pt-2 text-xs font-semibold">
@@ -1074,7 +1064,7 @@ export default function RecipeCreation() {
                                     </div>
                                     <div className="px-2.5 py-2 rounded-lg bg-white border border-gray-100">
                                       <span className="text-gray-500 block">QC Check</span>
-                                      <span className={`font-semibold ${stage.qc_check ? 'text-emerald-600' : 'text-gray-400'}`}>{stage.qc_check ? 'Required' : 'Not Required'}</span>
+                                      <span className={`font-semibold ${stage.qc_check ? 'text-blue-600' : 'text-gray-400'}`}>{stage.qc_check ? 'Required' : 'Not Required'}</span>
                                     </div>
                                   </div>
                                   {stage.remarks && (
@@ -1191,7 +1181,7 @@ export default function RecipeCreation() {
                   ) : <div />}
                   <div className="flex items-center gap-2">
                     <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all active:scale-95" onClick={() => setShowPanel(false)}><RotateCcw size={13} /> Cancel</button>
-                    <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly} title={isReadOnly ? 'You have read-only access' : undefined} className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'shadow-violet-200 hover:shadow-lg active:scale-95'}`}><Save size={13} /> {saving ? 'Saving...' : selectedRecipe ? 'Update' : 'Save Recipe'}</button>
+                    <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly} title={isReadOnly ? 'You have read-only access' : undefined} className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'shadow-violet-200 hover:shadow-lg active:scale-95'}`}><Save size={13} /> {saving ? 'Saving...' : selectedRecipe ? 'Update' : 'Save Recipe'}</button>
                   </div>
                 </div>
               </div>
@@ -1221,7 +1211,7 @@ export default function RecipeCreation() {
             </div>
             <div className="flex items-center justify-end gap-2 mt-5">
               <button onClick={() => setShowItemModal(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
-              <button onClick={handleSaveItem} className="px-4 py-1.5 text-xs font-medium text-white bg-violet-500 rounded-lg hover:bg-violet-600">{selectedItem ? 'Update' : 'Add'}</button>
+              <button onClick={handleSaveItem} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-lg hover:bg-violet-600">{selectedItem ? 'Update' : 'Add'}</button>
             </div>
           </div>
         </div>,
@@ -1275,7 +1265,7 @@ export default function RecipeCreation() {
             </div>
             <div className="flex items-center justify-end gap-2 mt-5">
               <button onClick={() => setShowStageModal(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
-              <button onClick={handleSaveStage} className="px-4 py-1.5 text-xs font-medium text-white bg-violet-500 rounded-lg hover:bg-violet-600">{selectedStage ? 'Update' : 'Add'}</button>
+              <button onClick={handleSaveStage} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-lg hover:bg-violet-600">{selectedStage ? 'Update' : 'Add'}</button>
             </div>
           </div>
         </div>,

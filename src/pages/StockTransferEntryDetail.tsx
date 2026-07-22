@@ -212,7 +212,12 @@ export default function StockTransferEntryDetail() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Transfer Details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Row 1 */}
-          <Input label="Transfer No." value={transfer.transfer_no} onChange={(e) => update('transfer_no', e.target.value)} placeholder="Auto-generated" disabled={!isNew} />
+          <div>
+            <label className="block text-xs font-medium text-gray-900 mb-1">Transfer No.</label>
+            <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+              {transfer.transfer_no || <span className="italic">Will be auto-generated on save</span>}
+            </div>
+          </div>
           <Select label="From Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.from_warehouse_id} onChange={(e) => update('from_warehouse_id', e.target.value)} />
           <Input label="Reference No." value={transfer.reference_no} onChange={(e) => update('reference_no', e.target.value)} placeholder="REF-2024-101" />
           <Input label="Reference Date" type="date" value={transfer.reference_date} onChange={(e) => update('reference_date', e.target.value)} />

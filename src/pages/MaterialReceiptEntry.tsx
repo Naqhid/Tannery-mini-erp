@@ -53,7 +53,7 @@ export default function MaterialReceiptEntry() {
       title="Material Receipts"
       subtitle="Manage material receipt entries"
       icon={<Truck size={20} className="text-white" />}
-      iconColor="from-green-600 to-emerald-700"
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/material-receipts"
       columns={columns}
       statCards={statCards}

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   Save, X, Plus, Trash2, Upload, Download, FileText, Search,
-  Loader2, DollarSign, Info, Calendar, Package, UploadCloud
+  Loader2, Info, Calendar, Package, UploadCloud
 } from 'lucide-react';
 import api from '../lib/api';
 import { usePermission } from '../lib/usePermission';
@@ -60,25 +60,19 @@ export default function AddNewPrice() {
   const isNew = !id || id === 'new';
 
   const [form, setForm] = useState<PriceFormData>(emptyForm);
-  const [priceBreaks, setPriceBreaks] = useState<PriceBreak[]>([
-    { _key: genKey(), from_qty: '100.00', to_qty: '499.99', unit_price: '205.00', discount_percent: '0.00', net_price: 205.00 },
-    { _key: genKey(), from_qty: '500.00', to_qty: '999.99', unit_price: '198.00', discount_percent: '3.41', net_price: 198.00 },
-    { _key: genKey(), from_qty: '1,000.00', to_qty: '', unit_price: '190.00', discount_percent: '7.32', net_price: 190.00 },
-  ]);
-  const [attachments, setAttachments] = useState<AttachmentFile[]>([
-    { id: 1, file_name: 'ABC Chemicals - Price List May 2024.pdf', uploaded_by: 'Admin User', uploaded_on: '16-05-2024 10:30 AM' },
-  ]);
+  const [priceBreaks, setPriceBreaks] = useState<PriceBreak[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
 
-  // Approval info (read-only)
-  const [approvalInfo] = useState({
-    lastApprovedDate: '16-05-2024',
-    lastApprovedPrice: '210.00',
-    approvedBy: 'Admin User',
-    approvalNotes: 'Monthly revision',
+  // Approval info (read-only, populated from API when editing)
+  const [approvalInfo, setApprovalInfo] = useState({
+    lastApprovedDate: '',
+    lastApprovedPrice: '',
+    approvedBy: '',
+    approvalNotes: '',
   });
 
   const fetchDropdowns = useCallback(async () => {
@@ -122,6 +116,20 @@ export default function AddNewPrice() {
           net_price: pb.net_price || pb.unit_price,
         })));
       }
+      if (d.attachments?.length) {
+        setAttachments(d.attachments.map((att: any) => ({
+          id: att.id,
+          file_name: att.file_name,
+          uploaded_by: att.uploaded_by_name || 'User',
+          uploaded_on: att.uploaded_on || att.created_at || '',
+        })));
+      }
+      setApprovalInfo({
+        lastApprovedDate: d.last_approved_date?.split('T')[0] || '',
+        lastApprovedPrice: d.last_approved_price ? String(d.last_approved_price) : '',
+        approvedBy: d.approved_by_name || '',
+        approvalNotes: d.approval_notes || '',
+      });
     } catch { toast.error('Failed to load pricing'); }
     finally { setLoading(false); }
   }, [id, isNew]);
@@ -228,14 +236,15 @@ export default function AddNewPrice() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
-            <DollarSign className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{isNew ? 'Add New Price' : 'Edit Price'}</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Fill in the pricing details for the supplier item</p>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">{isNew ? 'Add New Price' : 'Edit Price'}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            <span className="text-blue-600 hover:underline cursor-pointer" onClick={() => navigate('/dashboard')}>Purchase</span>
+            {' > '}
+            <span className="text-blue-600 hover:underline cursor-pointer" onClick={() => navigate('/supplier-pricing-history')}>Supplier Pricing History</span>
+            {' > '}
+            <span className="text-gray-500">{isNew ? 'Add New Price' : 'Edit Price'}</span>
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -248,7 +257,7 @@ export default function AddNewPrice() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-200/50 disabled:opacity-50 transition-all"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all"
             >
               <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save & Approve'}
             </button>

@@ -545,194 +545,184 @@ export default function PhysicalStockEntry() {
 
   // Render list view
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-200/50">
+            <Package size={20} className="text-white" />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Package className="w-6 h-6 text-blue-600" />
-              Physical Stock Entry
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Track physical inventory counting with variance tracking
-            </p>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Physical Stock Entry</h1>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">Track physical inventory counting with variance tracking</p>
           </div>
-          <div className="flex items-center gap-3">
-            {!isReadOnly && (
-              <button onClick={handleCreate} className="btn btn-primary">
-                <Plus className="w-4 h-4" /> Add New Entry
-              </button>
-            )}
-          </div>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {!isReadOnly && (
+            <button onClick={handleCreate} className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-lg shadow-md shadow-blue-200 hover:shadow-lg hover:shadow-blue-300 active:scale-95 transition-all">
+              <Plus size={14} /> Add New Entry
+            </button>
+          )}
         </div>
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-gray-900">{stats.total || dashboardStats.total_entries || 0}</div>
-          <div className="text-sm text-gray-500 mt-1">Total Entries</div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4 text-center">
+          <div className="text-xl font-bold text-blue-700">{stats.total || dashboardStats.total_entries || 0}</div>
+          <div className="text-[11px] font-medium text-gray-500 mt-1">Total Entries</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-emerald-600">{dashboardStats.matched_items || 0}</div>
-          <div className="text-sm text-gray-500 mt-1">Matched Items</div>
+        <div className="bg-white rounded-xl border border-emerald-100 shadow-sm p-4 text-center">
+          <div className="text-xl font-bold text-emerald-600">{dashboardStats.matched_items || 0}</div>
+          <div className="text-[11px] font-medium text-gray-500 mt-1">Matched Items</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-rose-600">{dashboardStats.variance_items || 0}</div>
-          <div className="text-sm text-gray-500 mt-1">Variance Items</div>
+        <div className="bg-white rounded-xl border border-rose-100 shadow-sm p-4 text-center">
+          <div className="text-xl font-bold text-rose-600">{dashboardStats.variance_items || 0}</div>
+          <div className="text-[11px] font-medium text-gray-500 mt-1">Variance Items</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-amber-600">{Number(dashboardStats.total_variance_value || 0).toFixed(2)}</div>
-          <div className="text-sm text-gray-500 mt-1">Total Variance Value</div>
+        <div className="bg-white rounded-xl border border-amber-100 shadow-sm p-4 text-center">
+          <div className={`text-lg font-bold ${Number(dashboardStats.total_variance_value || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+            {Number(dashboardStats.total_variance_value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[11px] font-medium text-gray-500 mt-1">Total Variance Value</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-          <div className="text-3xl font-bold text-blue-600">{data.length}</div>
-          <div className="text-sm text-gray-500 mt-1">This Month</div>
+        <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4 text-center">
+          <div className="text-xl font-bold text-blue-600">{data.length}</div>
+          <div className="text-[11px] font-medium text-gray-500 mt-1">This Month</div>
         </div>
       </div>
 
       {/* Search & Filter */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Search</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by entry no, reference, item..."
-                className="w-full input input-bordered pl-10"
-              />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by entry no, reference..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
             </div>
           </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Godown</label>
-            <select value={godownId} onChange={(e) => setGodownId(e.target.value)} className="input input-bordered">
+          <div className="min-w-[140px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Godown</label>
+            <select value={godownId} onChange={(e) => setGodownId(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
               <option value="">All Godowns</option>
-              {filterOptions.godowns.map(g => (
-                <option key={g.id} value={g.id}>{g.code} - {g.name}</option>
-              ))}
+              {filterOptions.godowns.map(g => <option key={g.id} value={String(g.id)}>{g.code} - {g.name}</option>)}
             </select>
           </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="input input-bordered">
+          <div className="min-w-[120px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
               <option value="">All Statuses</option>
-              {filterOptions.statuses.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {filterOptions.statuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input input-bordered" />
+          <div className="min-w-[130px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
           </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input input-bordered" />
+          <div className="min-w-[130px]">
+            <label className="block text-xs font-medium text-gray-700 mb-1">To Date</label>
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
           </div>
-
-          <div className="flex gap-2 self-end">
-            <button onClick={clearFilters} className="btn btn-ghost">
+          <div className="flex gap-2">
+            <button onClick={clearFilters} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all">
               Clear
             </button>
-            <button onClick={applyFilters} className="btn btn-primary">
-              <Search className="w-4 h-4" /> Search
+            <button onClick={applyFilters} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
+              <Search size={13} /> Search
             </button>
           </div>
         </div>
-
-        {/* Quick Actions */}
-        <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-center gap-4">
-          <button onClick={() => setPageSize(10)} className={`px-3 py-1 text-sm rounded-md ${pageSize === 10 ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>10 / Page</button>
-          <button onClick={() => setPageSize(25)} className={`px-3 py-1 text-sm rounded-md ${pageSize === 25 ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>25 / Page</button>
-          <button onClick={() => setPageSize(50)} className={`px-3 py-1 text-sm rounded-md ${pageSize === 50 ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>50 / Page</button>
-          <button onClick={() => setPageSize(100)} className={`px-3 py-1 text-sm rounded-md ${pageSize === 100 ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>100 / Page</button>
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
+          {[10, 25, 50, 100].map(size => (
+            <button key={size} onClick={() => setPageSize(size)} className={`px-2.5 py-1 text-xs rounded-md transition-all ${pageSize === size ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-500 hover:bg-gray-100'}`}>{size} / Page</button>
+          ))}
         </div>
       </div>
 
       {/* Data Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Physical Stock Entry List</h2>
-          <button onClick={fetchData} className="btn btn-ghost btn-sm">
-            <RefreshCw className="w-4 h-4" /> Refresh
+      <div className="bg-white rounded-xl border border-blue-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
+          <h2 className="text-sm font-bold text-gray-900">Physical Stock Entry List</h2>
+          <button onClick={fetchData} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+            <RefreshCw size={13} /> Refresh
           </button>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="table table-compact">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="whitespace-nowrap">#</th>
-                <th className="whitespace-nowrap">Entry No.</th>
-                <th className="whitespace-nowrap">Entry Date</th>
-                <th className="whitespace-nowrap">Stock Date</th>
-                <th className="whitespace-nowrap">Godown</th>
-                <th className="whitespace-nowrap">Location / Rack</th>
-                <th className="whitespace-nowrap">Total Items</th>
-                <th className="whitespace-nowrap">Matched Items</th>
-                <th className="whitespace-nowrap">Variance Items</th>
-                <th className="whitespace-nowrap">Total Variance Value</th>
-                <th className="whitespace-nowrap">Status</th>
-                <th className="whitespace-nowrap">Actions</th>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-blue-100/50">
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">#</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Entry No.</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Entry Date</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Stock Date</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Godown</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Location</th>
+                <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Items</th>
+                <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Matched</th>
+                <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Variance</th>
+                <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Variance Value</th>
+                <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-8">
+                  <td colSpan={12} className="text-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
+                    <p className="text-xs text-gray-500 mt-2">Loading entries...</p>
                   </td>
                 </tr>
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center text-gray-500 py-8">
-                    No physical stock entries found
+                  <td colSpan={12} className="text-center py-12">
+                    <Package className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+                    <p className="text-sm text-gray-500 font-medium">No physical stock entries found</p>
+                    <p className="text-xs text-gray-400 mt-1">Try adjusting your search or filters</p>
                   </td>
                 </tr>
               ) : (
                 data.map((entry, index) => (
-                  <tr key={entry.id} className="hover:bg-gray-50">
-                    <td>{(currentPage - 1) * pageSize + index + 1}</td>
-                    <td className="font-medium text-blue-600">{entry.entry_no}</td>
-                    <td>{entry.entry_date}</td>
-                    <td>{entry.stock_date}</td>
-                    <td>{entry.godown_name || '-'}</td>
-                    <td>{entry.location_rack || '-'}</td>
-                    <td className="text-right">{entry.total_items}</td>
-                    <td className="text-right text-emerald-600 font-medium">{entry.matched_items}</td>
-                    <td className="text-right text-rose-600 font-medium">{entry.variance_items}</td>
-                    <td className={`text-right font-medium ${
-                      Number(entry.total_variance_value || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}>
-                      {Number(entry.total_variance_value || 0) >= 0 ? '+' : ''}{Number(entry.total_variance_value || 0).toFixed(2)}
+                  <tr key={entry.id} className={`hover:bg-blue-50/50 transition-all cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => handleView(entry.id)}>
+                    <td className="px-4 py-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + index + 1}</td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs text-blue-600 font-medium">{entry.entry_no}</span>
                     </td>
-                    <td>
-                      <span className={`px-2 py-1 rounded-full text-xs ${STATUS_COLORS[entry.status] || 'bg-gray-100'}`}>
-                        {STATUS_BADGES[entry.status] || entry.status}
+                    <td className="px-4 py-3 text-xs text-gray-700">
+                      {entry.entry_date ? new Date(entry.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-700">
+                      {entry.stock_date ? new Date(entry.stock_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-700 font-medium">{entry.godown_name || '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{entry.location_rack || '-'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 bg-gray-100 text-gray-700 rounded-md font-semibold text-[11px]">{entry.total_items}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 bg-emerald-50 text-emerald-700 rounded-md font-semibold text-[11px]">{entry.matched_items}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-md font-semibold text-[11px] ${entry.variance_items > 0 ? 'bg-rose-50 text-rose-700' : 'bg-gray-50 text-gray-500'}`}>{entry.variance_items}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`text-xs font-semibold ${Number(entry.total_variance_value || 0) < 0 ? 'text-rose-600' : Number(entry.total_variance_value || 0) > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        {Number(entry.total_variance_value || 0) > 0 ? '+' : ''}{Number(entry.total_variance_value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => handleView(entry.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
-                          <Eye className="w-4 h-4" />
-                        </button>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[entry.status] || 'bg-gray-100 text-gray-600'}`}>{STATUS_BADGES[entry.status] || entry.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); handleView(entry.id); }} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-all" title="View"><Eye size={14} /></button>
                         {!isReadOnly && (
                           <>
-                            <button onClick={() => handleEdit(entry.id)} className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg">
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => setDeleteConfirm({ open: true, id: entry.id })} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleEdit(entry.id); }} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-all" title="Edit"><Edit2 size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, id: entry.id }); }} className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition-all" title="Delete"><Trash2 size={14} /></button>
                           </>
                         )}
                       </div>
@@ -745,45 +735,29 @@ export default function PhysicalStockEntry() {
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-          <div className="flex items-center gap-2">
-            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="btn btn-ghost btn-sm">
-              <ChevronsLeft className="w-4 h-4" />
-            </button>
-            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="btn btn-ghost btn-sm">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm text-gray-600">
-              Page {currentPage} of {totalPages || 1}
-            </span>
-            <button onClick={() => setCurrentPage(p => Math.min(totalPages || 1, p + 1))} disabled={currentPage === totalPages} className="btn btn-ghost btn-sm">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <button onClick={() => setCurrentPage(totalPages || 1)} disabled={currentPage === totalPages} className="btn btn-ghost btn-sm">
-              <ChevronsRight className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="text-sm text-gray-600">
-            Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} records
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-3 border-t border-blue-100/50 bg-gradient-to-r from-slate-50 to-blue-50/30">
+          <p className="text-xs text-gray-500 font-medium">
+            Showing {totalRecords > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} entries
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-gray-400 border border-transparent hover:border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronsLeft size={14} /></button>
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-gray-400 border border-transparent hover:border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
+            <span className="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg mx-1">Page {currentPage} of {totalPages || 1}</span>
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages || 1, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-gray-400 border border-transparent hover:border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight size={14} /></button>
+            <button onClick={() => setCurrentPage(totalPages || 1)} disabled={currentPage === totalPages} className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-gray-400 border border-transparent hover:border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><ChevronsRight size={14} /></button>
           </div>
         </div>
       </div>
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirm.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Delete</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete this physical stock entry? This action cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeleteConfirm({ open: false, id: null })} className="btn btn-secondary">
-                Cancel
-              </button>
-              <button onClick={() => deleteConfirm.id && handleDelete(deleteConfirm.id)} className="btn btn-danger">
-                Delete
-              </button>
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+            <h3 className="text-sm font-bold text-gray-900 mb-2">Delete Physical Stock Entry</h3>
+            <p className="text-xs text-gray-600 mb-5">Are you sure you want to delete this entry? This action cannot be undone.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteConfirm({ open: false, id: null })} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all">Cancel</button>
+              <button onClick={() => deleteConfirm.id && handleDelete(deleteConfirm.id)} className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-all">Delete</button>
             </div>
           </div>
         </div>

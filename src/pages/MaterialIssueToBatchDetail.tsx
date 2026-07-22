@@ -222,7 +222,12 @@ export default function MaterialIssueToBatchDetail() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Issue Details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Row 1: Issue No | To Department/Process* | Job Order No. | Issued By* */}
-          <Input label="Issue No." value={issue.issue_no} onChange={(e) => update('issue_no', e.target.value)} placeholder="Auto-generated" disabled={!isNew} />
+          <div>
+            <label className="block text-xs font-medium text-gray-900 mb-1">Issue No.</label>
+            <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+              {issue.issue_no || <span className="italic">Will be auto-generated on save</span>}
+            </div>
+          </div>
           <Select label="To Department / Process" required options={DEPARTMENTS} value={issue.department} onChange={(e) => update('department', e.target.value)} />
           <Select label="Job Order No." options={[{ value: '', label: 'Select' }, { value: 'JO-2024-0185', label: 'JO-2024-0185' }]} value={issue.job_order_no} onChange={(e) => update('job_order_no', e.target.value)} />
           <Select label="Issued By" required options={ISSUED_BY} value={issue.issued_by} onChange={(e) => update('issued_by', e.target.value)} />

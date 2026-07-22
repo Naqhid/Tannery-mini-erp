@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import {
-  Search, Loader2, X, Check, XCircle, Eye, ChevronLeft, ChevronRight,
-  Calendar, CheckCircle2, Clock, TrendingUp, FileText, Save
+  Search, Loader2, X, Check, XCircle, Eye,
+  CheckCircle2, Clock, FileText, Save
 } from 'lucide-react';
 import api from '../lib/api';
 import { usePermission } from '../lib/usePermission';
 
 interface ApprovalRequest {
   id: number;
+  request_id: number;
   request_no: string;
   request_date: string;
   supplier_code: string;
@@ -34,7 +35,7 @@ interface PriceTrendPoint {
 
 interface FilterState {
   supplier: string;
-  itemGroup: string;
+  item_group: string;
   item: string;
   fromDate: string;
   toDate: string;
@@ -53,7 +54,7 @@ export default function SupplierPriceApproval() {
   const [saving, setSaving] = useState(false);
 
   const [filters, setFilters] = useState<FilterState>({
-    supplier: '', itemGroup: '', item: '', fromDate: '', toDate: '', status: '',
+    supplier: '', item_group: '', item: '', fromDate: '', toDate: '', status: '',
   });
 
   // Mock suppliers/groups for dropdowns
@@ -71,11 +72,11 @@ export default function SupplierPriceApproval() {
 
   // Mock data for pending approvals
   const mockData: ApprovalRequest[] = [
-    { id: 1, request_no: 'PRA-2025-001', request_date: '15-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-CHR-001', material_name: 'Chrome Powder - Basic Grade', uom: 'KG', current_price: 185.00, requested_price: 180.60, change_percent: -2.38, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Annual contract renewal - price reduction negotiated', supplier_part_no: 'SP-1001', item_group: 'Chemicals' },
-    { id: 2, request_no: 'PRA-2025-002', request_date: '14-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-001', material_name: 'Leather Dye - Black', uom: 'LTR', current_price: 420.00, requested_price: 455.00, change_percent: 8.33, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Raw material cost increase from supplier', supplier_part_no: 'SP-3001', item_group: 'Dyes' },
-    { id: 3, request_no: 'PRA-2025-003', request_date: '13-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-TAN-001', material_name: 'Tanning Agent - Vegetable', uom: 'LTR', current_price: 320.00, requested_price: 310.00, change_percent: -3.13, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Bulk order discount applied', supplier_part_no: 'SP-2001', item_group: 'Chemicals' },
-    { id: 4, request_no: 'PRA-2025-004', request_date: '12-Jan-2025', supplier_code: 'SUP-003', supplier_name: 'Modi Leather Supplies', material_code: 'RM-FAT-001', material_name: 'Fat Liquor - Synthetic', uom: 'KG', current_price: 280.00, requested_price: 295.00, change_percent: 5.36, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Admin', remarks: null, supplier_part_no: 'SP-4001', item_group: 'Chemicals' },
-    { id: 5, request_no: 'PRA-2025-005', request_date: '11-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-002', material_name: 'Leather Dye - Brown', uom: 'LTR', current_price: 400.00, requested_price: 420.00, change_percent: 5.00, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Quarterly price revision', supplier_part_no: 'SP-3002', item_group: 'Dyes' },
+    { id: 1, request_id: 1, request_no: 'PRQ-2025-001', request_date: '15-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-CHR-001', material_name: 'Chrome Powder - Basic Grade', uom: 'KG', current_price: 185.00, requested_price: 180.60, change_percent: -2.38, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Annual contract renewal - price reduction negotiated', supplier_part_no: 'SP-1001', item_group: 'Chemicals' },
+    { id: 2, request_id: 1, request_no: 'PRQ-2025-001', request_date: '15-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-001', material_name: 'Leather Dye - Black', uom: 'LTR', current_price: 420.00, requested_price: 455.00, change_percent: 8.33, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Raw material cost increase from supplier', supplier_part_no: 'SP-3001', item_group: 'Dyes' },
+    { id: 3, request_id: 2, request_no: 'PRQ-2025-002', request_date: '14-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-TAN-001', material_name: 'Tanning Agent - Vegetable', uom: 'LTR', current_price: 320.00, requested_price: 310.00, change_percent: -3.13, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Bulk order discount applied', supplier_part_no: 'SP-2001', item_group: 'Chemicals' },
+    { id: 4, request_id: 2, request_no: 'PRQ-2025-002', request_date: '14-Jan-2025', supplier_code: 'SUP-003', supplier_name: 'Modi Leather Supplies', material_code: 'RM-FAT-001', material_name: 'Fat Liquor - Synthetic', uom: 'KG', current_price: 280.00, requested_price: 295.00, change_percent: 5.36, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Admin', remarks: null, supplier_part_no: 'SP-4001', item_group: 'Chemicals' },
+    { id: 5, request_id: 3, request_no: 'PRQ-2025-003', request_date: '13-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-002', material_name: 'Leather Dye - Brown', uom: 'LTR', current_price: 400.00, requested_price: 420.00, change_percent: 5.00, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Quarterly price revision', supplier_part_no: 'SP-3002', item_group: 'Dyes' },
   ];
 
   useEffect(() => {
@@ -92,12 +93,12 @@ export default function SupplierPriceApproval() {
       setLoading(true);
       const params = new URLSearchParams();
       if (filters.supplier) params.set('supplier_id', filters.supplier);
-      if (filters.itemGroup) params.set('item_group', filters.itemGroup);
+      if (filters.item_group) params.set('item_group', filters.item_group);
       if (filters.item) params.set('search', filters.item);
       if (filters.fromDate) params.set('from_date', filters.fromDate);
       if (filters.toDate) params.set('to_date', filters.toDate);
       if (filters.status) params.set('status', filters.status);
-      params.set('status', filters.status || 'Pending');
+      else params.set('status', 'Pending');
 
       const res = await api<{ data: ApprovalRequest[] }>(`/price-approvals?${params}`);
       setData(res.data || mockData);
@@ -127,7 +128,7 @@ export default function SupplierPriceApproval() {
   };
 
   const clearFilters = () => {
-    setFilters({ supplier: '', itemGroup: '', item: '', fromDate: '', toDate: '', status: '' });
+    setFilters({ supplier: '', item_group: '', item: '', fromDate: '', toDate: '', status: '' });
   };
 
   const handleSearch = () => { fetchData(); };
@@ -140,13 +141,23 @@ export default function SupplierPriceApproval() {
     }
     setSaving(true);
     try {
-      await api(`/price-approvals/${selectedRequest.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          status: approvalAction === 'approve' ? 'Approved' : 'Rejected',
-          rejection_reason: rejectionReason || null,
-        }),
-      });
+      if (approvalAction === 'approve') {
+        await api(`/price-approvals/${selectedRequest.request_id}/approve-selected`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            item_ids: [selectedRequest.id],
+            approval_notes: 'Approved via UI',
+          }),
+        });
+      } else {
+        await api(`/price-approvals/${selectedRequest.request_id}/reject-selected`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            item_ids: [selectedRequest.id],
+            rejection_reason: rejectionReason,
+          }),
+        });
+      }
       toast.success(approvalAction === 'approve' ? 'Price approved successfully!' : 'Price rejected');
       setSelectedRequest(null);
       fetchData();
@@ -161,10 +172,25 @@ export default function SupplierPriceApproval() {
     if (!selectedIds.length) return;
     setSaving(true);
     try {
-      await api('/price-approvals/bulk-approve', {
-        method: 'POST',
-        body: JSON.stringify({ ids: selectedIds }),
-      });
+      // Group selected items by request_id
+      const groupedByRequest = data.reduce((acc, item) => {
+        if (selectedIds.includes(item.id)) {
+          if (!acc[item.request_id]) {
+            acc[item.request_id] = [];
+          }
+          acc[item.request_id].push(item.id);
+        }
+        return acc;
+      }, {} as Record<number, number[]>);
+
+      // Approve each group
+      for (const [requestId, itemIds] of Object.entries(groupedByRequest)) {
+        await api(`/price-approvals/${requestId}/approve-selected`, {
+          method: 'PATCH',
+          body: JSON.stringify({ item_ids: itemIds, approval_notes: 'Bulk approved' }),
+        });
+      }
+
       toast.success(`${selectedIds.length} prices approved!`);
       setSelectedIds([]);
       fetchData();
@@ -177,10 +203,25 @@ export default function SupplierPriceApproval() {
     if (!selectedIds.length) return;
     setSaving(true);
     try {
-      await api('/price-approvals/bulk-reject', {
-        method: 'POST',
-        body: JSON.stringify({ ids: selectedIds }),
-      });
+      // Group selected items by request_id
+      const groupedByRequest = data.reduce((acc, item) => {
+        if (selectedIds.includes(item.id)) {
+          if (!acc[item.request_id]) {
+            acc[item.request_id] = [];
+          }
+          acc[item.request_id].push(item.id);
+        }
+        return acc;
+      }, {} as Record<number, number[]>);
+
+      // Reject each group
+      for (const [requestId, itemIds] of Object.entries(groupedByRequest)) {
+        await api(`/price-approvals/${requestId}/reject-selected`, {
+          method: 'PATCH',
+          body: JSON.stringify({ item_ids: itemIds, rejection_reason: 'Bulk rejected' }),
+        });
+      }
+
       toast.success(`${selectedIds.length} prices rejected`);
       setSelectedIds([]);
       fetchData();
@@ -246,6 +287,18 @@ export default function SupplierPriceApproval() {
 
   return (
     <div className="space-y-5">
+      {/* Page Header */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <h1 className="text-xl font-bold text-gray-900">Supplier Price Approval</h1>
+        <p className="text-xs text-gray-500 mt-0.5">
+          <span className="text-blue-600">Purchase</span>
+          {' > '}
+          <span className="text-blue-600">Supplier Pricing History</span>
+          {' > '}
+          <span className="text-blue-600">Supplier Price Approval</span>
+        </p>
+      </div>
+
       {/* Pending Price Approvals - Top Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-100">
@@ -267,7 +320,7 @@ export default function SupplierPriceApproval() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Item Group</label>
-              <select value={filters.itemGroup} onChange={e => setFilters(p => ({ ...p, itemGroup: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+              <select value={filters.item_group} onChange={e => setFilters(p => ({ ...p, item_group: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
                 <option value="">All Groups</option>
                 <option value="Chemicals">Chemicals</option>
                 <option value="Dyes">Dyes</option>
@@ -358,10 +411,10 @@ export default function SupplierPriceApproval() {
                     <td className="px-4 py-3 font-medium text-gray-900">{req.material_code}</td>
                     <td className="px-4 py-3 text-gray-700">{req.material_name}</td>
                     <td className="px-4 py-3 text-gray-600">{req.uom}</td>
-                    <td className="px-4 py-3 text-right text-gray-700">{req.current_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">{req.requested_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className={`px-4 py-3 text-right font-medium ${req.change_percent < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {req.change_percent > 0 ? '+' : ''}{req.change_percent.toFixed(2)}%
+                    <td className="px-4 py-3 text-right text-gray-700">{Number(req.current_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900">{Number(req.requested_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${(req.change_percent || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {(req.change_percent || 0) > 0 ? '+' : ''}{Number(req.change_percent || 0).toFixed(2)}%
                     </td>
                     <td className="px-4 py-3 text-gray-600">{req.effective_from}</td>
                     <td className="px-4 py-3">
@@ -517,21 +570,21 @@ export default function SupplierPriceApproval() {
                   <tbody>
                     <tr className="border-b border-gray-100">
                       <td className="py-2 text-gray-700">Last Approved Price</td>
-                      <td className="py-2 text-right font-medium text-gray-900">{selectedRequest.current_price.toFixed(2)}</td>
+                      <td className="py-2 text-right font-medium text-gray-900">{Number(selectedRequest.current_price || 0).toFixed(2)}</td>
                       <td className="py-2 text-right text-gray-500">28-Dec-2024</td>
                     </tr>
                     <tr className="border-b border-gray-100">
                       <td className="py-2 text-gray-700">Requested Price</td>
-                      <td className="py-2 text-right font-medium text-gray-900">{selectedRequest.requested_price.toFixed(2)}</td>
+                      <td className="py-2 text-right font-medium text-gray-900">{Number(selectedRequest.requested_price || 0).toFixed(2)}</td>
                       <td className="py-2 text-right text-gray-500">{selectedRequest.request_date}</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-gray-700 font-medium">Difference</td>
-                      <td className={`py-2 text-right font-bold ${selectedRequest.change_percent < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {selectedRequest.change_percent < 0 ? '' : '+'}{(selectedRequest.requested_price - selectedRequest.current_price).toFixed(2)}
+                      <td className={`py-2 text-right font-bold ${(selectedRequest.change_percent || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {(selectedRequest.change_percent || 0) < 0 ? '' : '+'}{(Number(selectedRequest.requested_price || 0) - Number(selectedRequest.current_price || 0)).toFixed(2)}
                       </td>
-                      <td className={`py-2 text-right font-medium ${selectedRequest.change_percent < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {selectedRequest.change_percent > 0 ? '+' : ''}{selectedRequest.change_percent.toFixed(2)}%
+                      <td className={`py-2 text-right font-medium ${(selectedRequest.change_percent || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {(selectedRequest.change_percent || 0) > 0 ? '+' : ''}{Number(selectedRequest.change_percent || 0).toFixed(2)}%
                       </td>
                     </tr>
                   </tbody>

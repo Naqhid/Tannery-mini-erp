@@ -143,28 +143,39 @@ export default function SupplierPricingHistory() {
       const res = await api<{ data: any }>(`/supplier-pricing/supplier/${id}`);
       const items = res.data || [];
       setSupplierStats({
-        totalItems: items.length || 48,
-        activeItems: items.filter((p: any) => p.status === 'Approved').length || 36,
-        lastApprovedDate: items[0]?.approved_date?.split('T')[0] || '15-Jan-2025',
-        lastPriceChange: items[0]?.remarks || '+5.2% on Chrome Powder',
+        totalItems: items.length,
+        activeItems: items.filter((p: any) => p.status === 'Approved').length,
+        lastApprovedDate: items[0]?.approved_date?.split('T')[0] || '-',
+        lastPriceChange: items[0]?.valid_from?.split('T')[0] || '-',
       });
     } catch {
-      setSupplierStats({ totalItems: 48, activeItems: 36, lastApprovedDate: '15-Jan-2025', lastPriceChange: '+5.2% on Chrome Powder' });
+      setSupplierStats({ totalItems: 0, activeItems: 0, lastApprovedDate: '-', lastPriceChange: '-' });
     }
   }, []);
 
   // Fetch price change history
   const fetchPriceHistory = useCallback(async (id: string) => {
     try {
-      const res = await api<{ data: PriceChangeEvent[] }>(`/supplier-pricing/history/${id}`);
-      setPriceHistory(res.data || []);
+      // Use the supplier pricing history endpoint and extract price changes
+      const res = await api<{ data: any[] }>(`/supplier-pricing/supplier/${id}`);
+      const items = res.data || [];
+      // Build price change events from pricing records (sorted by date)
+      const sorted = items
+        .filter((p: any) => p.approved_date || p.valid_from)
+        .sort((a: any, b: any) => new Date(a.valid_from || a.approved_date).getTime() - new Date(b.valid_from || b.approved_date).getTime());
+      
+      const events: PriceChangeEvent[] = sorted.map((p: any, idx: number) => ({
+        id: p.id || idx + 1,
+        date: p.valid_from ? new Date(p.valid_from).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-',
+        old_price: idx > 0 ? sorted[idx - 1].unit_price || sorted[idx - 1].price || 0 : 0,
+        new_price: p.unit_price || p.price || 0,
+        change_percent: 0,
+        changed_by: p.approved_by_name || 'Admin User',
+        notes: p.remarks || null,
+      }));
+      setPriceHistory(events);
     } catch {
-      setPriceHistory([
-        { id: 1, date: '15-Jan-2025', old_price: 180, new_price: 185, change_percent: 2.78, changed_by: 'Admin', notes: 'Annual price revision' },
-        { id: 2, date: '01-Oct-2024', old_price: 175, new_price: 180, change_percent: 2.86, changed_by: 'Admin', notes: 'Quarterly adjustment' },
-        { id: 3, date: '15-Jul-2024', old_price: 170, new_price: 175, change_percent: 2.94, changed_by: 'Admin', notes: 'Market rate increase' },
-        { id: 4, date: '01-Apr-2024', old_price: 165, new_price: 170, change_percent: 3.03, changed_by: 'Admin', notes: 'Supplier revision' },
-      ]);
+      setPriceHistory([]);
     }
   }, []);
 
@@ -200,20 +211,21 @@ export default function SupplierPricingHistory() {
 
   const totalPages = Math.ceil(totalRecords / pageSize);
 
-  // Mock data for demo when no API data
-  const displayData: PricingRecord[] = data.length > 0 ? data : [
-    { id: 1, material_code: 'RM-CHR-001', material_name: 'Chrome Powder - Basic Grade', uom: 'KG', supplier_part_no: 'SP-1001', unit_price: 185.00, currency: 'INR', valid_from: '01-Jan-2025', valid_to: '31-Mar-2025', approved_date: '28-Dec-2024', approved_by_name: 'Rajesh Kumar', status: 'Approved', remarks: null, is_current: false },
-    { id: 2, material_code: 'RM-CHR-002', material_name: 'Chrome Powder - Premium Grade', uom: 'KG', supplier_part_no: 'SP-1002', unit_price: 245.00, currency: 'INR', valid_from: '01-Jan-2025', valid_to: '31-Mar-2025', approved_date: '28-Dec-2024', approved_by_name: 'Rajesh Kumar', status: 'Approved', remarks: null, is_current: false },
-    { id: 3, material_code: 'RM-TAN-001', material_name: 'Tanning Agent - Vegetable', uom: 'LTR', supplier_part_no: 'SP-2001', unit_price: 320.00, currency: 'INR', valid_from: '01-Jan-2025', valid_to: '30-Jun-2025', approved_date: '15-Jan-2025', approved_by_name: 'Suresh Patel', status: 'Approved', remarks: 'Current active price', is_current: true },
-    { id: 4, material_code: 'RM-DYE-001', material_name: 'Leather Dye - Black', uom: 'LTR', supplier_part_no: 'SP-3001', unit_price: 450.00, currency: 'INR', valid_from: '01-Oct-2024', valid_to: '31-Dec-2024', approved_date: '25-Sep-2024', approved_by_name: 'Rajesh Kumar', status: 'Expired', remarks: null, is_current: false },
-    { id: 5, material_code: 'RM-DYE-002', material_name: 'Leather Dye - Brown', uom: 'LTR', supplier_part_no: 'SP-3002', unit_price: 420.00, currency: 'INR', valid_from: '01-Oct-2024', valid_to: '31-Dec-2024', approved_date: '25-Sep-2024', approved_by_name: 'Rajesh Kumar', status: 'Expired', remarks: null, is_current: false },
-    { id: 6, material_code: 'RM-FAT-001', material_name: 'Fat Liquor - Synthetic', uom: 'KG', supplier_part_no: 'SP-4001', unit_price: 280.00, currency: 'INR', valid_from: '01-Jan-2025', valid_to: '31-Mar-2025', approved_date: '28-Dec-2024', approved_by_name: 'Suresh Patel', status: 'Approved', remarks: null, is_current: false },
-    { id: 7, material_code: 'RM-FAT-002', material_name: 'Fat Liquor - Natural', uom: 'KG', supplier_part_no: 'SP-4002', unit_price: 350.00, currency: 'INR', valid_from: '01-Jan-2025', valid_to: '31-Mar-2025', approved_date: '28-Dec-2024', approved_by_name: 'Rajesh Kumar', status: 'Approved', remarks: null, is_current: false },
-    { id: 8, material_code: 'RM-RES-001', material_name: 'Resin Binder - Acrylic', uom: 'KG', supplier_part_no: 'SP-5001', unit_price: 195.00, currency: 'INR', valid_from: '01-Jan-2025', valid_to: '31-Mar-2025', approved_date: '28-Dec-2024', approved_by_name: 'Suresh Patel', status: 'Approved', remarks: null, is_current: false },
-  ];
+  // Use real data only
+  const displayData: PricingRecord[] = data;
 
   return (
     <div className="space-y-5">
+      {/* Page Header */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <h1 className="text-xl font-bold text-gray-900">Supplier Pricing History</h1>
+        <p className="text-xs text-gray-500 mt-0.5">
+          <span className="text-blue-600">Purchase</span>
+          {' > '}
+          <span className="text-blue-600">Supplier Pricing History</span>
+        </p>
+      </div>
+
       {/* Filter Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
@@ -343,30 +355,37 @@ export default function SupplierPricingHistory() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">{selectedSupplier.name}</h2>
-                <p className="text-sm text-gray-500">{selectedSupplier.code}</p>
+                <p className="text-sm text-gray-500">
+                  {selectedSupplier.code} {selectedSupplier.address ? `| ${selectedSupplier.address}` : ''}
+                </p>
                 <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
-                  {selectedSupplier.address && <span>{selectedSupplier.address}</span>}
-                  {selectedSupplier.email && <span>{selectedSupplier.email}</span>}
-                  {selectedSupplier.phone && <span>{selectedSupplier.phone}</span>}
+                  {selectedSupplier.email && <span>Email: {selectedSupplier.email}</span>}
+                  {selectedSupplier.phone && <span>Ph: {selectedSupplier.phone}</span>}
                 </div>
               </div>
             </div>
             <div className="grid grid-cols-4 gap-4">
               <div className="text-center px-4 py-3 bg-blue-50 rounded-lg">
+                <div className="text-xs text-gray-500 font-medium mb-1">Total Items</div>
                 <div className="text-2xl font-bold text-blue-700">{supplierStats.totalItems}</div>
-                <div className="text-xs text-blue-600 font-medium mt-1">Total Items</div>
               </div>
               <div className="text-center px-4 py-3 bg-emerald-50 rounded-lg">
+                <div className="text-xs text-gray-500 font-medium mb-1">Active Items</div>
                 <div className="text-2xl font-bold text-emerald-700">{supplierStats.activeItems}</div>
-                <div className="text-xs text-emerald-600 font-medium mt-1">Active Items</div>
               </div>
               <div className="text-center px-4 py-3 bg-purple-50 rounded-lg">
-                <div className="text-sm font-bold text-purple-700">{supplierStats.lastApprovedDate}</div>
-                <div className="text-xs text-purple-600 font-medium mt-1">Last Approved Date</div>
+                <div className="text-xs text-gray-500 font-medium mb-1">Last Approved Date (Overall)</div>
+                <div className="flex items-center justify-center gap-1.5 mt-1">
+                  <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                  <span className="text-sm font-bold text-purple-700">{supplierStats.lastApprovedDate || '-'}</span>
+                </div>
               </div>
               <div className="text-center px-4 py-3 bg-amber-50 rounded-lg">
-                <div className="text-sm font-bold text-amber-700">{supplierStats.lastPriceChange}</div>
-                <div className="text-xs text-amber-600 font-medium mt-1">Last Price Change</div>
+                <div className="text-xs text-gray-500 font-medium mb-1">Last Price Change (Overall)</div>
+                <div className="flex items-center justify-center gap-1.5 mt-1">
+                  <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                  <span className="text-sm font-bold text-amber-700">{supplierStats.lastPriceChange || '-'}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -380,7 +399,7 @@ export default function SupplierPricingHistory() {
             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
               <TrendingUp className="w-4 h-4 text-blue-600" />
             </div>
-            <h2 className="text-lg font-bold text-gray-900">Pricing History</h2>
+            <h2 className="text-lg font-bold text-blue-700">Pricing History</h2>
           </div>
           <div className="flex items-center gap-3">
             <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
@@ -520,55 +539,73 @@ export default function SupplierPricingHistory() {
       </div>
 
       {/* Price Change History Timeline */}
-      {selectedSupplier && (
+      {selectedSupplier && priceHistory.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
               <Clock className="w-4 h-4 text-blue-600" />
             </div>
-            <h2 className="text-lg font-bold text-gray-900">Price Change History</h2>
+            <h2 className="text-lg font-bold text-blue-700">Price Change History - {displayData[0]?.material_code || 'CHEM-001'} | {displayData[0]?.material_name || 'Chrome Powder'} ({displayData[0]?.uom || 'KG'})</h2>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Timeline */}
-            <div className="lg:col-span-2">
-              <div className="relative">
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Horizontal Timeline */}
+          <div className="lg:col-span-2">
+            <div className="relative">
+              {/* Timeline line */}
+              <div className="absolute top-3 left-0 right-0 h-0.5 bg-gray-200" />
+
+              {/* Timeline dots + cards */}
+              <div className="flex gap-4 overflow-x-auto pb-4">
                 {priceHistory.map((event, idx) => (
-                  <div key={event.id} className="flex items-start gap-4 mb-6 last:mb-0">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-4 h-4 rounded-full ${idx === 0 ? 'bg-emerald-500 ring-4 ring-emerald-100' : 'bg-emerald-400'}`} />
-                      {idx < priceHistory.length - 1 && <div className="w-0.5 h-12 bg-gray-200 mt-1" />}
-                    </div>
-                    <div className={`flex-1 p-4 rounded-lg border ${idx === 0 ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            ₹{event.old_price.toFixed(2)} → ₹{event.new_price.toFixed(2)}
-                            <span className={`ml-2 text-xs font-medium ${event.change_percent > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                              ({event.change_percent > 0 ? '+' : ''}{event.change_percent.toFixed(2)}%)
-                            </span>
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">{event.changed_by || 'System'}</p>
-                        </div>
-                        <span className="text-xs text-gray-500">{event.date}</span>
-                      </div>
+                  <div key={event.id} className="flex flex-col items-center min-w-[180px]">
+                    {/* Dot */}
+                    <div className={`w-3 h-3 rounded-full z-10 ${idx === priceHistory.length - 1 ? 'bg-emerald-500 ring-4 ring-emerald-100' : 'bg-emerald-400'}`} />
+                    {/* Card */}
+                    <div className={`mt-4 p-3 rounded-lg border w-full ${idx === priceHistory.length - 1 ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'}`}>
+                      <p className="text-xs font-semibold text-gray-900">{event.date}</p>
+                      <p className="text-sm font-bold text-gray-900 mt-1">Price: ₹ {Number(event.new_price).toFixed(2)} / KG</p>
+                      <p className="text-xs text-gray-500 mt-1">Approved By: {event.changed_by || 'Admin User'}</p>
+                      <p className="text-xs text-gray-500">Remark: {event.notes || '-'}</p>
+                      {idx === priceHistory.length - 1 && (
+                        <span className="inline-block mt-2 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded">Current</span>
+                      )}
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
-            {/* Notes */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Notes</h3>
-              <div className="space-y-3">
-                {priceHistory.map(event => (
-                  <div key={event.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                    <p className="text-xs font-medium text-gray-700">{event.date}</p>
-                    <p className="text-xs text-gray-500 mt-1">{event.notes || 'No notes'}</p>
+
+                {/* Upcoming Change */}
+                <div className="flex flex-col items-center min-w-[160px]">
+                  <div className="w-3 h-3 rounded-full z-10 bg-gray-300 ring-4 ring-gray-100" />
+                  <div className="mt-4 p-3 rounded-lg border border-dashed border-gray-300 bg-gray-50/50 w-full">
+                    <p className="text-xs font-semibold text-gray-500">Upcoming Change</p>
+                    <p className="text-xs text-gray-400 mt-1">Price Change Expected</p>
+                    <p className="text-xs text-gray-400">Next Review: --</p>
                   </div>
-                ))}
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Notes */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Notes</h3>
+            <ul className="space-y-2 text-sm text-gray-600">
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                Prices are as per approved supplier agreements.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                Current Price is effective from {priceHistory[priceHistory.length - 1]?.date || '-'}.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                Review date is monthly unless specified.
+              </li>
+            </ul>
+          </div>
+        </div>
         </div>
       )}
     </div>

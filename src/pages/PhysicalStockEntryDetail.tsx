@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Save, Plus, Trash2, Loader2, Download, Upload, RotateCcw,
+  Save, Plus, Trash2, Loader2, Download, Upload, RotateCcw, X,
   ClipboardList, Search, MessageSquare, Package, BarChart3, FileSpreadsheet
 } from 'lucide-react';
 import api from '../lib/api';
@@ -61,12 +61,7 @@ export default function PhysicalStockEntryDetail() {
 
   const [entry, setEntry] = useState<EntryData>(emptyEntry);
   const [items, setItems] = useState<StockItem[]>([
-    { _key: genKey(), material_id: '1', material_code: 'RM-CHR-001', material_name: 'Chrome Powder - Basic Grade', uom: 'KG', batch_no: 'B-2024-001', location: 'Rack A-01', system_qty: 500, physical_qty: '485', variance_qty: -15, variance_value: -2775.00, remarks: '' },
-    { _key: genKey(), material_id: '2', material_code: 'RM-CHR-002', material_name: 'Chrome Powder - Premium Grade', uom: 'KG', batch_no: 'B-2024-002', location: 'Rack A-02', system_qty: 200, physical_qty: '200', variance_qty: 0, variance_value: 0, remarks: '' },
-    { _key: genKey(), material_id: '3', material_code: 'RM-TAN-001', material_name: 'Tanning Agent - Vegetable', uom: 'LTR', batch_no: 'B-2024-003', location: 'Rack B-01', system_qty: 150, physical_qty: '145', variance_qty: -5, variance_value: -1600.00, remarks: '' },
-    { _key: genKey(), material_id: '4', material_code: 'RM-DYE-001', material_name: 'Leather Dye - Black', uom: 'LTR', batch_no: 'B-2024-004', location: 'Rack B-02', system_qty: 80, physical_qty: '85', variance_qty: 5, variance_value: 2250.00, remarks: '' },
-    { _key: genKey(), material_id: '5', material_code: 'RM-FAT-001', material_name: 'Fat Liquor - Synthetic', uom: 'KG', batch_no: 'B-2024-005', location: 'Rack C-01', system_qty: 300, physical_qty: '300', variance_qty: 0, variance_value: 0, remarks: '' },
-    { _key: genKey(), material_id: '6', material_code: 'RM-RES-001', material_name: 'Resin Binder - Acrylic', uom: 'KG', batch_no: 'B-2024-006', location: 'Rack C-02', system_qty: 120, physical_qty: '117', variance_qty: -3, variance_value: -585.00, remarks: '' },
+    { _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', batch_no: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, variance_value: 0, remarks: '' },
   ]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -131,7 +126,17 @@ export default function PhysicalStockEntryDetail() {
 
   useEffect(() => { fetchDropdowns(); fetchEntry(); }, [fetchDropdowns, fetchEntry]);
 
-  const update = (key: keyof EntryData, value: string) => setEntry(p => ({ ...p, [key]: value }));
+  const update = (key: keyof EntryData, value: string) => {
+    setEntry(p => {
+      const updated = { ...p, [key]: value };
+      // Auto-populate UOM when material is selected in header
+      if (key === 'material_id' && value) {
+        const mat = materials.find(m => String(m.id) === value);
+        if (mat && mat.uom) { updated.uom = mat.uom; }
+      }
+      return updated;
+    });
+  };
 
   const updateItem = (key: string, field: string, value: string) => {
     setItems(prev => prev.map(it => {
@@ -223,8 +228,8 @@ export default function PhysicalStockEntryDetail() {
             <ClipboardList className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{isNew ? 'New Physical Stock Entry' : 'Edit Physical Stock Entry'}</h1>
-            <p className="text-xs text-gray-500">{entry.entry_no || 'Auto-generated'}</p>
+            <h1 className="text-xl font-bold text-gray-900">{isNew ? 'Physical Stock Entry' : 'Physical Stock Entry'}</h1>
+            <p className="text-xs text-gray-500">Inventory &gt; Physical Stock Entry</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -236,6 +241,9 @@ export default function PhysicalStockEntryDetail() {
           </button>
           <button onClick={handleClear} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
             <RotateCcw className="w-4 h-4" /> Clear
+          </button>
+          <button onClick={() => navigate('/physical-stock-entry')} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50">
+            <X className="w-4 h-4" /> Cancel
           </button>
           {!isReadOnly && (
             <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
@@ -251,13 +259,15 @@ export default function PhysicalStockEntryDetail() {
           <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
             <FileSpreadsheet className="w-4 h-4 text-blue-600" />
           </div>
-          <h2 className="text-lg font-bold text-gray-900">1. Entry Information</h2>
+          <h2 className="text-base font-bold text-blue-700">1. Entry Information</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Row 1 */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Entry No.</label>
-            <input type="text" value={entry.entry_no} readOnly className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-600" />
+            <label className="block text-xs font-medium text-gray-900 mb-1.5">Entry No.</label>
+            <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+              {entry.entry_no || <span className="italic">Will be auto-generated on save</span>}
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Entry Date <span className="text-red-500">*</span></label>
@@ -310,13 +320,9 @@ export default function PhysicalStockEntryDetail() {
           {/* Row 3 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">UOM</label>
-            <select value={entry.uom} onChange={e => update('uom', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="">All UOM</option>
-              <option value="KG">KG</option>
-              <option value="LTR">LTR</option>
-              <option value="MTR">MTR</option>
-              <option value="NOS">NOS</option>
-            </select>
+            <div className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[34px] flex items-center">
+              {entry.uom || <span className="text-gray-400 italic">Auto-filled from item</span>}
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Batch No.</label>
@@ -361,7 +367,7 @@ export default function PhysicalStockEntryDetail() {
             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
               <Package className="w-4 h-4 text-blue-600" />
             </div>
-            <h2 className="text-lg font-bold text-gray-900">2. Stock Details</h2>
+            <h2 className="text-base font-bold text-blue-700">2. Stock Details</h2>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -369,8 +375,8 @@ export default function PhysicalStockEntryDetail() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">#</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Code <span className="text-red-500">*</span></th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Description</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Code</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Name <span className="text-red-500">*</span></th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">UOM</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Batch No.</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Location / Rack</th>
@@ -387,12 +393,14 @@ export default function PhysicalStockEntryDetail() {
                 <tr key={item._key} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
                   <td className="px-4 py-3">
-                    <select value={item.material_id} onChange={e => updateItem(item._key, 'material_id', e.target.value)} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[120px]">
-                      <option value="">Select</option>
-                      {materials.map(m => <option key={m.id} value={String(m.id)}>{m.code}</option>)}
+                    <input type="text" value={item.material_code} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-w-[120px]" placeholder="Auto-filled" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <select value={item.material_id} onChange={e => updateItem(item._key, 'material_id', e.target.value)} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[160px]">
+                      <option value="">Select Item</option>
+                      {materials.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-700 min-w-[150px]">{item.material_name || '-'}</td>
                   <td className="px-4 py-3 text-xs text-gray-600">{item.uom || '-'}</td>
                   <td className="px-4 py-3">
                     <input type="text" value={item.batch_no} onChange={e => updateItem(item._key, 'batch_no', e.target.value)} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg min-w-[100px]" placeholder="Batch" />
@@ -424,18 +432,31 @@ export default function PhysicalStockEntryDetail() {
           </table>
         </div>
 
-        {/* Add Row + Footer */}
+        {/* Table Footer Totals Row */}
+        <div className="overflow-x-auto border-t border-gray-200">
+          <table className="w-full text-sm">
+            <tbody>
+              <tr className="bg-gray-50 font-medium">
+                <td className="px-4 py-3" colSpan={6}></td>
+                <td className="px-4 py-3 text-right text-xs text-gray-700">Total Items: <span className="font-bold">{totalItems}</span></td>
+                <td className="px-4 py-3"></td>
+                <td className={`px-4 py-3 text-right text-xs font-bold ${items.reduce((s, i) => s + i.variance_qty, 0) < 0 ? 'text-red-600' : items.reduce((s, i) => s + i.variance_qty, 0) > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
+                  {items.reduce((s, i) => s + i.variance_qty, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+                <td className={`px-4 py-3 text-right text-xs font-bold ${totalVarianceValue < 0 ? 'text-red-600' : totalVarianceValue > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
+                  {totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="px-4 py-3" colSpan={2}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Add Row */}
         <div className="px-6 py-4 border-t border-gray-100">
           <button onClick={addItem} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
             <Plus className="w-4 h-4" /> Add Row
           </button>
-        </div>
-        <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Total Items: {totalItems}</span>
-          <div className="flex items-center gap-6">
-            <span className="text-sm text-gray-600">Total Variance Qty: <span className={`font-medium ${items.reduce((s, i) => s + i.variance_qty, 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{items.reduce((s, i) => s + i.variance_qty, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-            <span className="text-sm text-gray-600">Total Variance Value: <span className={`font-medium ${totalVarianceValue < 0 ? 'text-red-600' : 'text-emerald-600'}`}>₹{totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-          </div>
         </div>
       </div>
 
@@ -445,26 +466,46 @@ export default function PhysicalStockEntryDetail() {
           <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
             <BarChart3 className="w-4 h-4 text-blue-600" />
           </div>
-          <h2 className="text-lg font-bold text-gray-900">3. Summary</h2>
+          <h2 className="text-base font-bold text-blue-700">3. Summary</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
-            <div className="text-3xl font-bold text-blue-700">{totalItems}</div>
-            <div className="text-sm font-medium text-blue-600 mt-1">Total Items</div>
-          </div>
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-            <div className="text-3xl font-bold text-emerald-700">{matchedItems}</div>
-            <div className="text-sm font-medium text-emerald-600 mt-1">Matched Items</div>
-          </div>
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-center">
-            <div className="text-3xl font-bold text-red-700">{varianceItems}</div>
-            <div className="text-sm font-medium text-red-600 mt-1">Variance Items</div>
-          </div>
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
-            <div className={`text-2xl font-bold ${totalVarianceValue < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-              {totalVarianceValue < 0 ? '' : '+'}{totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+              <Package className="w-5 h-5 text-blue-600" />
             </div>
-            <div className="text-sm font-medium text-amber-600 mt-1">Total Variance Value</div>
+            <div>
+              <div className="text-xs text-gray-500">Total Items</div>
+              <div className="text-2xl font-bold text-blue-700">{totalItems}</div>
+            </div>
+          </div>
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <ClipboardList className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Matched Items</div>
+              <div className="text-2xl font-bold text-emerald-700">{matchedItems}</div>
+            </div>
+          </div>
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+              <BarChart3 className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Variance Items</div>
+              <div className="text-2xl font-bold text-red-700">{varianceItems}</div>
+            </div>
+          </div>
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+              <BarChart3 className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Total Variance Value</div>
+              <div className={`text-xl font-bold ${totalVarianceValue < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                {totalVarianceValue < 0 ? '' : '+'}{totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
           </div>
         </div>
       </div>

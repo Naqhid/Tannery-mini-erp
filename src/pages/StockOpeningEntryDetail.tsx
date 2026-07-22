@@ -215,7 +215,12 @@ export default function StockOpeningEntryDetail() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Entry Details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Row 1: Entry No, Entry Date*, Reference No, Opening Date* */}
-          <Input label="Entry No." value={entry.entry_no} onChange={(e) => update('entry_no', e.target.value)} placeholder="Auto-generated" disabled={!isNew} />
+          <div>
+            <label className="block text-xs font-medium text-gray-900 mb-1">Entry No.</label>
+            <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+              {entry.entry_no || <span className="italic">Will be auto-generated on save</span>}
+            </div>
+          </div>
           <Input label="Entry Date" type="date" required value={entry.entry_date} onChange={(e) => update('entry_date', e.target.value)} />
           <Input label="Reference No." value={entry.reference_no} onChange={(e) => update('reference_no', e.target.value)} placeholder="e.g. PHYSICAL-2024" />
           <Input label="Opening Date" type="date" required value={entry.opening_date} onChange={(e) => update('opening_date', e.target.value)} />
