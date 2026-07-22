@@ -31,20 +31,20 @@ import {
   CheckCircle,
 } from 'lucide-react';
 
-interface ChildItem {
+export interface ChildItem {
   label: string;
   path: string;
   icon: React.ReactNode;
 }
 
-interface MenuItem {
+export interface MenuItem {
   label: string;
   icon: React.ReactNode;
   path?: string;
   children?: ChildItem[];
 }
 
-const menuItems: MenuItem[] = [
+export const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: <Home size={20} />, path: '/dashboard' },
   { label: 'Sales Orders', icon: <FileText size={20} />, path: '/sales-orders' },
   {

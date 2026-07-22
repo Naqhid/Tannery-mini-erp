@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { Search, Bell, ChevronDown, ChevronRight, Menu, LogOut } from 'lucide-react';
-import Sidebar from './Sidebar';
+import Sidebar, { menuItems } from './Sidebar';
 import { useAuth } from '../lib/authContext';
 
 const breadcrumbMap: Record<string, string> = {
@@ -52,8 +52,50 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Flatten menu items for search
+  const searchableItems = useMemo(() => {
+    const items: { label: string; path: string; parent?: string }[] = [];
+    for (const item of menuItems) {
+      if (item.path) {
+        items.push({ label: item.label, path: item.path });
+      }
+      if (item.children) {
+        for (const child of item.children) {
+          items.push({ label: child.label, path: child.path, parent: item.label });
+        }
+      }
+    }
+    return items;
+  }, []);
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return searchableItems.filter(item =>
+      item.label.toLowerCase().includes(q) ||
+      (item.parent && item.parent.toLowerCase().includes(q))
+    ).slice(0, 8);
+  }, [searchQuery, searchableItems]);
+
+  const showSearchResults = searchFocused && searchQuery.trim().length > 0;
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -110,19 +152,64 @@ export default function Layout() {
             {/* Right section */}
             <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3">
             {/* Search */}
-            <div className={`hidden md:flex items-center rounded-xl px-3 py-2 transition-all duration-300 ${
+            <div ref={searchRef} className={`hidden md:flex items-center relative rounded-xl px-3 py-2 transition-all duration-300 ${
               searchFocused
                 ? 'bg-white border border-blue-400 shadow-md shadow-blue-100/50 w-64'
                 : 'bg-gray-50 border border-gray-200 w-48 hover:border-gray-300'
             }`}>
               <Search size={15} className={`shrink-0 transition-colors ${searchFocused ? 'text-blue-500' : 'text-gray-400'}`} />
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Search..."
+                placeholder="Search menu..."
+                value={searchQuery}
                 className="bg-transparent border-none outline-none text-sm w-full text-gray-700 placeholder-gray-400 ml-2"
                 onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
+                onChange={(e) => { setSearchQuery(e.target.value); setHighlightedIndex(-1); setSearchFocused(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setHighlightedIndex(prev => Math.min(prev + 1, searchResults.length - 1));
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setHighlightedIndex(prev => Math.max(prev - 1, 0));
+                  } else if (e.key === 'Enter' && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+                    e.preventDefault();
+                    navigate(searchResults[highlightedIndex].path);
+                    setSearchQuery('');
+                    setSearchFocused(false);
+                    searchInputRef.current?.blur();
+                  } else if (e.key === 'Escape') {
+                    setSearchQuery('');
+                    setSearchFocused(false);
+                    searchInputRef.current?.blur();
+                  }
+                }}
               />
+              {showSearchResults && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50 max-h-80 overflow-y-auto">
+                  {searchResults.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-400 text-center">No results found</div>
+                  ) : (
+                    searchResults.map((item, idx) => (
+                      <button
+                        key={item.path}
+                        onMouseDown={(e) => { e.preventDefault(); navigate(item.path); setSearchQuery(''); setSearchFocused(false); }}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          idx === highlightedIndex ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Search size={13} className="text-gray-400 shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{item.label}</div>
+                          {item.parent && <div className="text-[11px] text-gray-400">{item.parent}</div>}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Mobile search button */}
