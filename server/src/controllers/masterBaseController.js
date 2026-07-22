@@ -137,6 +137,27 @@ export function createMasterController(model, entityName, referenceChecks = []) 
     }
   }
 
+  async function permanentDelete(req, res, next) {
+    try {
+      const id = req.params.id;
+      for (const ref of referenceChecks) {
+        const hasReferences = await model.checkReferences(ref.table, ref.field, id);
+        if (hasReferences) {
+          return res.status(400).json({
+            error: `Cannot permanently delete this ${entityName}. It is being referenced in ${ref.entityName || ref.table}.`,
+          });
+        }
+      }
+      const ok = await model.hardDelete(id);
+      if (!ok) {
+        return res.status(404).json({ error: `${entityName} not found` });
+      }
+      res.json({ data: { id, deleted: true }, message: `${entityName} permanently deleted!` });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async function bulkDelete(req, res, next) {
     try {
       const { ids } = req.body;
@@ -231,6 +252,7 @@ export function createMasterController(model, entityName, referenceChecks = []) 
     update,
     remove,
     restore,
+    permanentDelete,
     bulkDelete,
     bulkStatus,
     bulkArchive,

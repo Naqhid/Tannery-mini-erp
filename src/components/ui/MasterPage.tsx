@@ -100,6 +100,7 @@ export default function MasterPage({
   const [saving, setSaving] = useState(false);
   const [statusToggle, setStatusToggle] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
   const [bulkConfirm, setBulkConfirm] = useState<{ open: boolean; action: string; ids: number[] }>({ open: false, action: '', ids: [] });
   const [formDirty, setFormDirty] = useState(false);
   const [showUnsavedWarn, setShowUnsavedWarn] = useState(false);
@@ -382,6 +383,25 @@ export default function MasterPage({
       fetchStats();
     } catch (err) {
       toast.error('Failed to restore: ' + (err as Error).message);
+    }
+  };
+
+  const handlePermanentDelete = async (id: number | null) => {
+    setPermanentDeleteConfirm({ open: false, id: null });
+    if (!id) return;
+    try {
+      const res = await api<{ message?: string }>(`${apiEndpoint}/${id}/permanent`, { method: 'DELETE' });
+      toast.success(res.message || `${title} permanently deleted!`);
+      setShowPanel(false);
+      fetchData();
+      fetchStats();
+    } catch (err) {
+      const errorMsg = (err as Error).message;
+      if (errorMsg.includes('referenced') || errorMsg.includes('Cannot')) {
+        toast.error(errorMsg);
+      } else {
+        toast.error('Failed to delete permanently: ' + errorMsg);
+      }
     }
   };
 
@@ -849,15 +869,26 @@ export default function MasterPage({
                           </button>
                         )}
                         {showArchived ? (
-                          <button
-                            onClick={canWrite ? (e) => { e.stopPropagation(); handleRestore(row.id); } : undefined}
-                            disabled={isReadOnly}
-                            className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-emerald-500 hover:bg-emerald-100'}`}
-                            aria-label={`Restore ${title}`}
-                            title={isReadOnly ? 'Read-only access' : 'Restore'}
-                          >
-                            <ArchiveRestore size={15} />
-                          </button>
+                          <>
+                            <button
+                              onClick={canWrite ? (e) => { e.stopPropagation(); handleRestore(row.id); } : undefined}
+                              disabled={isReadOnly}
+                              className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-emerald-500 hover:bg-emerald-100'}`}
+                              aria-label={`Restore ${title}`}
+                              title={isReadOnly ? 'Read-only access' : 'Restore'}
+                            >
+                              <ArchiveRestore size={15} />
+                            </button>
+                            <button
+                              onClick={canWrite ? (e) => { e.stopPropagation(); setPermanentDeleteConfirm({ open: true, id: row.id }); } : undefined}
+                              disabled={isReadOnly}
+                              className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-100 hover:text-red-600'}`}
+                              aria-label={`Permanently delete ${title}`}
+                              title={isReadOnly ? 'Read-only access' : 'Delete Permanently'}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
                         ) : (
                           <button
                             onClick={canWrite ? (e) => { e.stopPropagation(); handleDelete(row.id); } : undefined}
@@ -935,9 +966,14 @@ export default function MasterPage({
                   <Copy size={15} />
                 </button>
                 {showArchived ? (
-                  <button onClick={(e) => { e.stopPropagation(); handleRestore(row.id); }} className="p-2 rounded-lg text-emerald-500 hover:bg-emerald-100" aria-label="Restore">
-                    <ArchiveRestore size={15} />
-                  </button>
+                  <>
+                    <button onClick={(e) => { e.stopPropagation(); handleRestore(row.id); }} className="p-2 rounded-lg text-emerald-500 hover:bg-emerald-100" aria-label="Restore">
+                      <ArchiveRestore size={15} />
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setPermanentDeleteConfirm({ open: true, id: row.id }); }} className="p-2 rounded-lg text-red-400 hover:bg-red-100" aria-label="Delete Permanently">
+                      <Trash2 size={15} />
+                    </button>
+                  </>
                 ) : (
                   <button onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }} className="p-2 rounded-lg text-red-400 hover:bg-red-100" aria-label="Delete">
                     <Trash2 size={15} />
@@ -1211,6 +1247,16 @@ export default function MasterPage({
         confirmLabel="Archive"
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm({ open: false, id: null })}
+      />
+
+      {/* Permanent delete confirmation */}
+      <ConfirmDialog
+        open={permanentDeleteConfirm.open}
+        title={`Permanently Delete ${title}`}
+        message={`Are you sure you want to permanently delete this ${title.toLowerCase()}? This action cannot be undone.`}
+        confirmLabel="Delete Forever"
+        onConfirm={() => handlePermanentDelete(permanentDeleteConfirm.id)}
+        onCancel={() => setPermanentDeleteConfirm({ open: false, id: null })}
       />
 
       {/* Bulk action confirmation */}

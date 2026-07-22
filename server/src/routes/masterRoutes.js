@@ -21,6 +21,7 @@ function createMasterRoutes(controller) {
   router.put('/:id', validateId, requireWriteAccess, controller.update);
   router.delete('/:id', validateId, requireWriteAccess, controller.remove);
   router.post('/:id/restore', validateId, requireWriteAccess, controller.restore);
+  router.delete('/:id/permanent', validateId, requireWriteAccess, controller.permanentDelete);
 
   return router;
 }
