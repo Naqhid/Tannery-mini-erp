@@ -54,7 +54,7 @@ export default function MaterialIssueToBatch() {
       title="Material Issues"
       subtitle="Manage material issue to production batches"
       icon={<Factory size={20} className="text-white" />}
-      iconColor="from-violet-600 to-purple-700"
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/material-issues"
       columns={columns}
       statCards={statCards}

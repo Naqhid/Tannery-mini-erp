@@ -8,6 +8,8 @@ const router = Router();
 router.get('/', validatePagination, ctrl.list);
 router.get('/stats', ctrl.stats);
 router.get('/next-no', ctrl.nextNo);
+router.get('/batches-dropdown', ctrl.batchesDropdown);
+router.get('/bom-items/:productId', ctrl.getBOMItems);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', requireWriteAccess, ctrl.create);
 router.put('/:id', validateId, requireWriteAccess, ctrl.update);

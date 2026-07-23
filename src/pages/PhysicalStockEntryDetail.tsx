@@ -233,12 +233,6 @@ export default function PhysicalStockEntryDetail() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-200 rounded-lg hover:bg-emerald-50">
-            <Download className="w-4 h-4" /> Download Template
-          </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-200 rounded-lg hover:bg-emerald-50">
-            <Upload className="w-4 h-4" /> Import from Excel
-          </button>
           <button onClick={handleClear} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
             <RotateCcw className="w-4 h-4" /> Clear
           </button>

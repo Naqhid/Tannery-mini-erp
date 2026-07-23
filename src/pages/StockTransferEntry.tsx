@@ -53,7 +53,7 @@ export default function StockTransferEntry() {
       title="Stock Transfers"
       subtitle="Manage inter-warehouse stock transfers"
       icon={<ArrowLeftRight size={20} className="text-white" />}
-      iconColor="from-teal-600 to-emerald-700"
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/stock-transfers"
       columns={columns}
       statCards={statCards}

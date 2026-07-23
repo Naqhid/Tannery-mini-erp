@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Plus, Trash2, Factory, RotateCcw, Info, Minus } from 'lucide-react';
@@ -28,10 +28,10 @@ interface IssueData {
   department: string;
   job_order_no: string;
   production_batch: string;
+  product_id: string;
   batch_qty: string;
   batch_uom: string;
   batch_description: string;
-  costing_method: string;
   warehouse_id: string;
   required_date: string;
   issued_by: string;
@@ -41,19 +41,16 @@ interface IssueData {
   status: string;
 }
 
+interface BatchOption { id: number; batch_no: string; article_name: string; product_id: number | null; product_name: string | null; product_code: string | null; batch_qty: number; batch_uom: string; }
+
 const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', required_qty: '', issue_qty: '', unit_cost: '', amount: 0, remarks: '' };
 
 const emptyIssue: IssueData = {
   issue_no: '', issue_date: new Date().toISOString().split('T')[0], department: '', job_order_no: '',
-  production_batch: '', batch_qty: '', batch_uom: '', batch_description: '', costing_method: 'FIFO',
+  production_batch: '', product_id: '', batch_qty: '', batch_uom: '', batch_description: '',
   warehouse_id: '', required_date: '', issued_by: '', loading_unloading: '', other_charges: '',
   remarks: '', status: 'Posted',
 };
-
-const COSTING_METHODS = [
-  { value: 'FIFO', label: 'FIFO' }, { value: 'LIFO', label: 'LIFO' },
-  { value: 'Weighted Average', label: 'Weighted Average' }, { value: 'Standard Cost', label: 'Standard Cost' },
-];
 
 const DEPARTMENTS = [
   { value: '', label: 'Select department' },
@@ -86,6 +83,7 @@ export default function MaterialIssueToBatchDetail() {
   const [items, setItems] = useState<Item[]>([{ ...emptyItem, _key: genKey() }]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stockList, setStockList] = useState<StockItem[]>([]);
+  const [batchOptions, setBatchOptions] = useState<BatchOption[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [searchItem, setSearchItem] = useState('');
@@ -93,6 +91,11 @@ export default function MaterialIssueToBatchDetail() {
   const fetchWarehouses = useCallback(async () => {
     try { const res = await api<{ data: Warehouse[] }>('/warehouses/dropdown'); setWarehouses(res.data || []); }
     catch { setWarehouses([]); }
+  }, []);
+
+  const fetchBatches = useCallback(async () => {
+    try { const res = await api<{ data: BatchOption[] }>('/material-issues/batches-dropdown'); setBatchOptions(res.data || []); }
+    catch { setBatchOptions([]); }
   }, []);
 
   const fetchStock = useCallback(async (whId: string) => {
@@ -131,10 +134,75 @@ export default function MaterialIssueToBatchDetail() {
     finally { setLoading(false); }
   }, [id, isNew, fetchStock]);
 
-  useEffect(() => { fetchWarehouses(); fetchIssue(); }, [fetchWarehouses, fetchIssue]);
+  useEffect(() => { fetchWarehouses(); fetchBatches(); fetchIssue(); }, [fetchWarehouses, fetchBatches, fetchIssue]);
   useEffect(() => { if (issue.warehouse_id) fetchStock(issue.warehouse_id); }, [issue.warehouse_id, fetchStock]);
 
   const update = (key: string, value: any) => setIssue((p) => ({ ...p, [key]: value }));
+
+  // Handle production batch selection — populate product and batch qty
+  const handleBatchChange = (batchId: string) => {
+    const batch = batchOptions.find(b => String(b.id) === batchId);
+    if (batch) {
+      setIssue(p => ({
+        ...p,
+        production_batch: batch.batch_no,
+        product_id: batch.product_id ? String(batch.product_id) : '',
+        batch_qty: String(batch.batch_qty || ''),
+        batch_uom: batch.batch_uom || '',
+        batch_description: batch.article_name || '',
+      }));
+      // Auto-load BOM items if product exists
+      if (batch.product_id) {
+        loadBOMItems(String(batch.product_id), String(batch.batch_qty || ''));
+      }
+    } else {
+      setIssue(p => ({ ...p, production_batch: '', product_id: '', batch_qty: '', batch_uom: '', batch_description: '' }));
+      setItems([{ ...emptyItem, _key: genKey() }]);
+    }
+  };
+
+  // Handle product change — load BOM items
+  const handleProductChange = (productId: string) => {
+    setIssue(p => ({ ...p, product_id: productId }));
+    if (productId) {
+      loadBOMItems(productId, issue.batch_qty);
+    } else {
+      setItems([{ ...emptyItem, _key: genKey() }]);
+    }
+  };
+
+  // Load BOM items for a product and calculate required qty
+  const loadBOMItems = async (productId: string, batchQty: string) => {
+    try {
+      const res = await api<{ data: any[] }>(`/material-issues/bom-items/${productId}`);
+      if (res.data && res.data.length > 0) {
+        const bqty = parseFloat(batchQty) || 0;
+        const bomItems: Item[] = res.data.map((item: any) => {
+          const bomNormQty = parseFloat(item.qty) || 0;
+          const requiredQty = bomNormQty * bqty;
+          const unitCost = parseFloat(item.unit_cost) || 0;
+          return {
+            _key: genKey(),
+            material_id: String(item.material_id),
+            material_code: item.material_code || '',
+            material_name: item.material_name || '',
+            uom: item.uom || '',
+            required_qty: requiredQty.toFixed(3),
+            issue_qty: '',
+            unit_cost: unitCost ? String(unitCost) : '',
+            amount: 0,
+            remarks: '',
+          };
+        });
+        setItems(bomItems);
+      } else {
+        setItems([{ ...emptyItem, _key: genKey() }]);
+      }
+    } catch {
+      // BOM items not found
+      setItems([{ ...emptyItem, _key: genKey() }]);
+    }
+  };
 
   const updateItem = (key: string, field: string, value: any) => {
     setItems((prev) => prev.map((it) => {
@@ -196,7 +264,7 @@ export default function MaterialIssueToBatchDetail() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-rose-500 rounded-full animate-spin" /></div>;
+    return <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin" /></div>;
   }
 
   return (
@@ -207,7 +275,7 @@ export default function MaterialIssueToBatchDetail() {
           <button onClick={() => navigate('/material-issue')} className="p-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-all">
             <ArrowLeft size={18} className="text-gray-600" />
           </button>
-          <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 shadow-xl shadow-rose-500/30 ring-2 ring-white/50">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-xl shadow-blue-500/30 ring-2 ring-white/50">
             <Factory size={22} className="text-white" />
           </div>
           <div>
@@ -231,25 +299,32 @@ export default function MaterialIssueToBatchDetail() {
           <Select label="To Department / Process" required options={DEPARTMENTS} value={issue.department} onChange={(e) => update('department', e.target.value)} />
           <Select label="Job Order No." options={[{ value: '', label: 'Select' }, { value: 'JO-2024-0185', label: 'JO-2024-0185' }]} value={issue.job_order_no} onChange={(e) => update('job_order_no', e.target.value)} />
           <Select label="Issued By" required options={ISSUED_BY} value={issue.issued_by} onChange={(e) => update('issued_by', e.target.value)} />
-          {/* Row 2: Issue Date* | Production Batch* | Batch Qty + UOM | Costing Method */}
+          {/* Row 2: Issue Date* | Production Batch* | Batch Qty + UOM | Product */}
           <Input label="Issue Date" type="date" required value={issue.issue_date} onChange={(e) => update('issue_date', e.target.value)} />
-          <Select label="Production Batch" required options={[{ value: '', label: 'Select batch' }, { value: 'CUT-2024-0501', label: 'CUT-2024-0501' }]} value={issue.production_batch} onChange={(e) => update('production_batch', e.target.value)} />
+          <Select label="Production Batch" required options={[{ value: '', label: 'Select batch' }, ...batchOptions.map(b => ({ value: String(b.id), label: b.batch_no }))]} value={batchOptions.find(b => b.batch_no === issue.production_batch)?.id ? String(batchOptions.find(b => b.batch_no === issue.production_batch)!.id) : ''} onChange={(e) => handleBatchChange(e.target.value)} />
           <div className="flex gap-2">
             <div className="flex-1">
-              <Input label="Batch Qty" type="number" value={issue.batch_qty} onChange={(e) => update('batch_qty', e.target.value)} placeholder="1,000.00" />
+              <label className="block text-xs font-medium text-gray-700 mb-1">Batch Qty</label>
+              <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[34px] flex items-center">{issue.batch_qty || '-'}</div>
             </div>
             <div className="w-24">
-              <Input label="UOM" value={issue.batch_uom} onChange={(e) => update('batch_uom', e.target.value)} placeholder="Pairs" />
+              <label className="block text-xs font-medium text-gray-700 mb-1">UOM</label>
+              <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[34px] flex items-center">{issue.batch_uom || '-'}</div>
             </div>
           </div>
-          <Select label="Costing Method" options={COSTING_METHODS} value={issue.costing_method} onChange={(e) => update('costing_method', e.target.value)} />
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
+            <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[34px] flex items-center">
+              {batchOptions.find(b => b.batch_no === issue.production_batch)?.product_name || <span className="text-gray-400 italic">Auto-filled from batch</span>}
+            </div>
+          </div>
           {/* Row 3: Warehouse/Store* | Required Date | Batch Description (spans 2) */}
           <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={issue.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} />
           <Input label="Required Date" type="date" value={issue.required_date} onChange={(e) => update('required_date', e.target.value)} />
           <div className="lg:col-span-2">
             <label className="block text-xs font-medium text-gray-900 mb-1">Batch Description</label>
             <textarea rows={2} value={issue.batch_description} onChange={(e) => update('batch_description', e.target.value)} placeholder="Men's Formal Shoes - Black&#10;Size: 40"
-              className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all resize-none" />
+              className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none" />
           </div>
           {/* Row 4: Remarks (spans full or partial) */}
           <div className="lg:col-span-2">
@@ -260,7 +335,7 @@ export default function MaterialIssueToBatchDetail() {
 
       {/* Section 2: Item Details */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-rose-50/30">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/30">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2>
             <div className="flex items-center gap-2">
@@ -268,16 +343,16 @@ export default function MaterialIssueToBatchDetail() {
               <div className="relative">
                 <input type="text" value={searchItem} onChange={(e) => setSearchItem(e.target.value)}
                   placeholder="Search item by code / name / barcode"
-                  className="w-64 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 pl-8" />
+                  className="w-64 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pl-8" />
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 transition-all">
+            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Plus size={14} /> Add Row
             </button>
-            <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition-all">
+            <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Minus size={14} /> Remove Row
             </button>
           </div>
@@ -292,19 +367,19 @@ export default function MaterialIssueToBatchDetail() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">UOM</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Required Qty</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Issue Qty <span className="text-rose-500">*</span></th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Unit Cost (₹)</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (₹)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Unit Cost (â‚¹)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (â‚¹)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Remarks</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {items.map((item, idx) => (
-                <tr key={item._key} className="hover:bg-rose-50/30 transition-all">
+                <tr key={item._key} className="hover:bg-blue-50/30 transition-all">
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-2.5 px-3">
                     <select value={item.material_id} onChange={(e) => updateItem(item._key, 'material_id', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 bg-white min-w-[100px]">
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[100px]">
                       <option value="">Select</option>
                       {stockList.map((s) => <option key={s.material_id} value={String(s.material_id)}>{s.material_code}</option>)}
                     </select>
@@ -312,7 +387,7 @@ export default function MaterialIssueToBatchDetail() {
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_name || '-'}</td>
                   <td className="py-2.5 px-3">
                     <select value={item.uom} onChange={(e) => updateItem(item._key, 'uom', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 bg-white min-w-[60px]">
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[60px]">
                       <option value="">{item.uom || '-'}</option>
                       <option value="Kg">Kg</option><option value="Ltr">Ltr</option><option value="Mtr">Mtr</option>
                       <option value="Nos">Nos</option><option value="Sq.Ft.">Sq.Ft.</option><option value="Cone">Cone</option>
@@ -320,20 +395,20 @@ export default function MaterialIssueToBatchDetail() {
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.required_qty} onChange={(e) => updateItem(item._key, 'required_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.issue_qty} onChange={(e) => updateItem(item._key, 'issue_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">
                     <input value={item.remarks} onChange={(e) => updateItem(item._key, 'remarks', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 min-w-[60px]" placeholder="-" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[60px]" placeholder="-" />
                   </td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all"><Trash2 size={14} /></button>
@@ -371,24 +446,24 @@ export default function MaterialIssueToBatchDetail() {
           <div className="space-y-2">
             <h3 className="text-xs font-bold text-gray-700 uppercase mb-2">Other Charges</h3>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-600">Loading / Unloading (₹)</span>
+              <span className="text-xs text-gray-600">Loading / Unloading (â‚¹)</span>
               <input type="number" value={issue.loading_unloading} onChange={(e) => update('loading_unloading', e.target.value)}
-                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500" placeholder="0.00" />
+                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-600">Other Charges (₹)</span>
+              <span className="text-xs text-gray-600">Other Charges (â‚¹)</span>
               <input type="number" value={issue.other_charges} onChange={(e) => update('other_charges', e.target.value)}
-                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500" placeholder="0.00" />
+                className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
           </div>
           {/* Right - Grand Total */}
           <div className="flex flex-col justify-center items-end space-y-2 bg-gradient-to-br from-rose-50 to-red-50 rounded-xl p-4 border border-rose-100">
             <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-medium text-gray-700">Total Material Cost (₹)</span>
+              <span className="text-xs font-medium text-gray-700">Total Material Cost (â‚¹)</span>
               <span className="text-sm font-bold text-gray-900">{totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-medium text-gray-700">Other Charges (₹)</span>
+              <span className="text-xs font-medium text-gray-700">Other Charges (â‚¹)</span>
               <span className="text-sm font-bold text-gray-900">{totalOtherCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex items-center justify-between w-full pt-2 border-t border-rose-200">
@@ -414,7 +489,7 @@ export default function MaterialIssueToBatchDetail() {
         <button onClick={handleClear} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
           <RotateCcw size={14} /> Clear
         </button>
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-rose-600 to-red-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>

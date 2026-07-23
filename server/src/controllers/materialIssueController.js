@@ -66,3 +66,18 @@ export async function nextNo(_req, res, next) {
     res.json({ data: { issue_no } });
   } catch (err) { next(err); }
 }
+
+export async function batchesDropdown(_req, res, next) {
+  try {
+    const rows = await model.getBatchesDropdown();
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+export async function getBOMItems(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    const rows = await model.getBOMItemsByProduct(productId);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}

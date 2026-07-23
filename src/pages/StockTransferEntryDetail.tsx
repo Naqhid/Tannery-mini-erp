@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Plus, Trash2, ArrowLeftRight, RotateCcw, Info, Minus } from 'lucide-react';
@@ -186,7 +186,7 @@ export default function StockTransferEntryDetail() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-violet-500 rounded-full animate-spin" /></div>;
+    return <div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin" /></div>;
   }
 
   return (
@@ -197,7 +197,7 @@ export default function StockTransferEntryDetail() {
           <button onClick={() => navigate('/stock-transfer')} className="p-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-all">
             <ArrowLeft size={18} className="text-gray-600" />
           </button>
-          <div className="p-3 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-xl shadow-violet-500/30 ring-2 ring-white/50">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-xl shadow-blue-500/30 ring-2 ring-white/50">
             <ArrowLeftRight size={22} className="text-white" />
           </div>
           <div>
@@ -235,14 +235,14 @@ export default function StockTransferEntryDetail() {
             value={transfer.remarks}
             onChange={(e) => update('remarks', e.target.value)}
             placeholder="Transfer of material for production support."
-            className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all resize-none"
+            className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
           />
         </div>
       </div>
 
       {/* Section 2: Item Details */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-violet-50/30">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/30">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2>
             <div className="flex items-center gap-2">
@@ -253,17 +253,17 @@ export default function StockTransferEntryDetail() {
                   value={searchItem}
                   onChange={(e) => setSearchItem(e.target.value)}
                   placeholder="Search item by code / name"
-                  className="w-56 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 pl-8"
+                  className="w-56 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pl-8"
                 />
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 transition-all">
+            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Plus size={14} /> Add Row
             </button>
-            <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition-all">
+            <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Minus size={14} /> Remove Row
             </button>
           </div>
@@ -273,13 +273,13 @@ export default function StockTransferEntryDetail() {
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code <span className="text-rose-500">*</span></th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name <span className="text-rose-500">*</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">UOM</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Available Qty<br/><span className="text-[9px] text-gray-400">(From Store)</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Transfer Qty <span className="text-rose-500">*</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Unit Cost</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (₹)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (â‚¹)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Batch No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Remarks</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
@@ -287,43 +287,36 @@ export default function StockTransferEntryDetail() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {items.map((item, idx) => (
-                <tr key={item._key} className="hover:bg-violet-50/30 transition-all">
+                <tr key={item._key} className="hover:bg-blue-50/30 transition-all">
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700 font-mono">{item.material_code || '-'}</td>
                   <td className="py-2.5 px-3">
                     <select value={item.material_id} onChange={(e) => updateItem(item._key, 'material_id', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white min-w-[100px]">
-                      <option value="">Select</option>
-                      {stockList.map((s) => <option key={s.material_id} value={String(s.material_id)}>{s.material_code}</option>)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[160px]">
+                      <option value="">Select Item</option>
+                      {stockList.map((s) => <option key={s.material_id} value={String(s.material_id)}>{s.material_name}</option>)}
                     </select>
                   </td>
-                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_name || '-'}</td>
-                  <td className="py-2.5 px-3">
-                    <select value={item.uom} onChange={(e) => updateItem(item._key, 'uom', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white min-w-[60px]">
-                      <option value="">{item.uom || '-'}</option>
-                      <option value="Kg">Kg</option><option value="Ltr">Ltr</option><option value="Mtr">Mtr</option>
-                      <option value="Nos">Nos</option><option value="Sq.Ft.">Sq.Ft.</option><option value="Cone">Cone</option>
-                    </select>
-                  </td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{item.available_qty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.transfer_qty} onChange={(e) => updateItem(item._key, 'transfer_qty', e.target.value)}
-                      className={`w-full px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 min-w-[80px] text-right ${
+                      className={`w-full px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right ${
                         parseFloat(item.transfer_qty) > item.available_qty ? 'border-rose-300 bg-rose-50' : 'border-gray-200'
                       }`} placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">
                     <input value={item.batch_no} onChange={(e) => updateItem(item._key, 'batch_no', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 min-w-[85px]" placeholder="BATCH-001" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[85px]" placeholder="BATCH-001" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input value={item.remarks} onChange={(e) => updateItem(item._key, 'remarks', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 min-w-[60px]" placeholder="-" />
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[60px]" placeholder="-" />
                   </td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
@@ -355,16 +348,16 @@ export default function StockTransferEntryDetail() {
               <span className="text-sm font-bold text-gray-900 bg-yellow-50 px-3 py-1 rounded-lg">{totalQty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-600">Total Amount (₹)</span>
+              <span className="text-xs text-gray-600">Total Amount (â‚¹)</span>
               <span className="text-sm font-bold text-gray-900 bg-yellow-50 px-3 py-1 rounded-lg">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
           {/* Right - Grand Total */}
           <div className="flex items-center justify-end">
-            <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-5 border border-violet-100">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-50 rounded-xl p-5 border border-blue-100">
               <div className="flex items-center gap-6">
-                <span className="text-sm font-bold text-gray-900">Grand Total (₹)</span>
-                <span className="text-2xl font-black text-violet-700">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-sm font-bold text-gray-900">Grand Total (â‚¹)</span>
+                <span className="text-2xl font-black text-blue-700">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
           </div>
@@ -386,7 +379,7 @@ export default function StockTransferEntryDetail() {
         <button onClick={handleClear} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
           <RotateCcw size={14} /> Clear
         </button>
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-purple-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>

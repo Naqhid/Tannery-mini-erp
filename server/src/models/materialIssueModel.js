@@ -231,3 +231,33 @@ export async function getStats() {
   );
   return data;
 }
+
+// --- Batches Dropdown for Material Issue ---
+export async function getBatchesDropdown() {
+  const [rows] = await pool.query(
+    `SELECT b.id, b.batch_no, b.article_name, b.total_receipt_qty,
+       pp.product_id, pp.batch_qty, pp.uom AS batch_uom,
+       p.name AS product_name, p.code AS product_code
+     FROM batches b
+     LEFT JOIN production_plans pp ON b.production_plan_id = pp.id
+     LEFT JOIN products p ON pp.product_id = p.id
+     WHERE b.deleted_at IS NULL AND b.status IN ('In Progress', 'Pending', 'Draft')
+     ORDER BY b.id DESC`
+  );
+  return rows;
+}
+
+// --- BOM Items for Material Issue (by product) ---
+export async function getBOMItemsByProduct(productId) {
+  const [rows] = await pool.query(
+    `SELECT bi.material_id, bi.qty, bi.uom, bi.unit_cost,
+       m.code AS material_code, m.name AS material_name
+     FROM boms b
+     JOIN bom_items bi ON b.id = bi.bom_id
+     JOIN materials m ON bi.material_id = m.id
+     WHERE b.product_id = ? AND b.status = 'Active'
+     ORDER BY bi.id`,
+    [productId]
+  );
+  return rows;
+}
