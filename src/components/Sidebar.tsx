@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/authContext';
 import {
@@ -128,11 +128,47 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    Masters: true,
-    'BOM / Recipe': true,
-    Purchase: false,
-  });
+  const navRef = useRef<HTMLElement>(null);
+
+  // Determine which parent groups should be expanded based on current path
+  const getInitialExpanded = (): Record<string, boolean> => {
+    const result: Record<string, boolean> = {};
+    menuItems.forEach((item) => {
+      if (item.children) {
+        const hasActiveChild = item.children.some(
+          (c) => location.pathname === c.path || location.pathname.startsWith(c.path + '/')
+        );
+        result[item.label] = hasActiveChild;
+      }
+    });
+    return result;
+  };
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(getInitialExpanded);
+
+  // On route change, auto-expand the parent and scroll active item into view
+  useEffect(() => {
+    // Auto-expand parent of active child
+    menuItems.forEach((item) => {
+      if (item.children) {
+        const hasActiveChild = item.children.some(
+          (c) => location.pathname === c.path || location.pathname.startsWith(c.path + '/')
+        );
+        if (hasActiveChild) {
+          setExpanded((prev) => ({ ...prev, [item.label]: true }));
+        }
+      }
+    });
+
+    // Scroll active item into view after a short delay (to allow expand animation)
+    const timer = setTimeout(() => {
+      const activeEl = navRef.current?.querySelector('[data-active="true"]');
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
 
   const toggleExpand = (label: string) => {
     setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -220,7 +256,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
         </div>
 
         {/* Menu */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        <nav ref={navRef} className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           {menuItems.map((item) => {
             const hasChildren = !!item.children;
             const active = isActive(item.path);
@@ -267,6 +303,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
                       {item.children!.map((child) => (
                         <button
                           key={child.label}
+                          data-active={isActive(child.path) ? 'true' : undefined}
                           onClick={() => {
                             navigate(child.path);
                             setMobileOpen(false);
@@ -293,6 +330,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
             return (
               <button
                 key={item.label}
+                data-active={active ? 'true' : undefined}
                 onClick={() => {
                   if (item.path) {
                     navigate(item.path);
