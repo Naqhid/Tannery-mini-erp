@@ -1,5 +1,6 @@
 import * as model from '../models/authModel.js';
 import { getCurrentUserId } from '../middleware/auth.js';
+import pool from '../config/db.js';
 
 export async function login(req, res, next) {
   try {
@@ -37,7 +38,14 @@ export async function me(req, res, next) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ data: user });
+    // Fetch menu access for the user's role
+    let menu_access = [];
+    if (user.role_id) {
+      const [rows] = await pool.query('SELECT menu_path FROM role_menu_access WHERE role_id = ?', [user.role_id]);
+      menu_access = rows.map(r => r.menu_path);
+    }
+
+    res.json({ data: { ...user, menu_access } });
   } catch (err) {
     next(err);
   }

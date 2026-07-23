@@ -184,6 +184,25 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
     return item.children.some((c) => location.pathname === c.path);
   };
 
+  // Filter menu items based on user's menu_access
+  // If menu_access is empty/undefined, show all (backward compatible for admin)
+  const userMenuAccess = user?.menu_access;
+  const hasMenuRestrictions = Array.isArray(userMenuAccess) && userMenuAccess.length > 0;
+
+  const filteredMenuItems = hasMenuRestrictions
+    ? menuItems.map((item) => {
+        if (item.path) {
+          return userMenuAccess.includes(item.path) ? item : null;
+        }
+        if (item.children) {
+          const filteredChildren = item.children.filter((c) => userMenuAccess.includes(c.path));
+          if (filteredChildren.length === 0) return null;
+          return { ...item, children: filteredChildren };
+        }
+        return item;
+      }).filter(Boolean) as MenuItem[]
+    : menuItems;
+
   return (
     <>
       {mobileOpen && (
@@ -257,7 +276,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setColla
 
         {/* Menu */}
         <nav ref={navRef} className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-          {menuItems.map((item) => {
+          {filteredMenuItems.map((item) => {
             const hasChildren = !!item.children;
             const active = isActive(item.path);
             const parentActive = isParentActive(item);

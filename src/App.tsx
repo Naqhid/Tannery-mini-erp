@@ -44,6 +44,7 @@ import SalesOrderDetail from './pages/SalesOrderDetail';
 // Settings Pages
 import UsersPage from './pages/UsersPage';
 import Roles from './pages/Roles';
+import RoleForm from './pages/RoleForm';
 import Company from './pages/Company';
 import BusinessUnits from './pages/BusinessUnits';
 // Inventory Pages
@@ -188,6 +189,8 @@ function App() {
             {/* Settings */}
             <Route path="users" element={<UsersPage />} />
             <Route path="roles" element={<Roles />} />
+            <Route path="roles/new" element={<RoleForm />} />
+            <Route path="roles/:id" element={<RoleForm />} />
             <Route path="company" element={<Company />} />
             <Route path="business-units" element={<BusinessUnits />} />
             <Route path="notifications" element={<PlaceholderPage />} />

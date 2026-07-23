@@ -36,13 +36,14 @@ export default function Roles() {
       title="Roles"
       subtitle="Manage user roles"
       icon={<Shield size={20} className="text-white" />}
-      iconColor="from-red-500 to-rose-600"
+      iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/roles"
       columns={columns}
       formFields={formFields}
       emptyData={{ code: '', name: '', description: '', access_level: 'read_write', status: 'Active' }}
       exportColumns={exportColumns}
-      pdfAccentColor={[239, 68, 68]}
+      pdfAccentColor={[59, 130, 246]}
+      formRoute="/roles"
     />
   );
 }

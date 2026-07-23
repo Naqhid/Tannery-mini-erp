@@ -11,6 +11,7 @@ interface User {
   access_level: 'read_write' | 'read_only';
   company_id: number;
   business_unit_id: number;
+  menu_access?: string[];
 }
 
 interface AuthContextType {
@@ -40,7 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (storedToken && storedUser) {
       try {
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        // Refresh user data to get latest menu_access
+        api<{ data: User }>('/auth/me').then((res) => {
+          if (res.data) {
+            setUser(res.data);
+            localStorage.setItem(USER_KEY, JSON.stringify(res.data));
+          }
+        }).catch(() => {});
       } catch {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
