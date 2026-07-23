@@ -16,10 +16,17 @@ export async function login(req, res, next) {
       return res.status(401).json({ error: result.error });
     }
 
+    // Fetch menu access for the user's role
+    let menu_access = [];
+    if (result.user.role_id) {
+      const [rows] = await pool.query('SELECT menu_path FROM role_menu_access WHERE role_id = ?', [result.user.role_id]);
+      menu_access = rows.map(r => r.menu_path);
+    }
+
     res.json({
       message: 'Login successful',
       token: result.token,
-      user: result.user,
+      user: { ...result.user, menu_access },
     });
   } catch (err) {
     next(err);

@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { validateId, validatePagination } from '../middleware/validators.js';
 import { requireAuth } from '../middleware/auth.js';
 import * as authModel from '../models/authModel.js';
-import pool from '../config/db.js';
 
 const router = Router();
 
@@ -75,33 +74,13 @@ router.delete('/users/:id', validateId, requireAuth, async (req, res, next) => {
 
 // Roles CRUD
 import { roleController } from '../controllers/masterControllers.js';
-import pool from '../config/db.js';
 const rolesRouter = Router();
 rolesRouter.get('/', validatePagination, roleController.list);
 rolesRouter.get('/dropdown', roleController.dropdown);
 rolesRouter.get('/stats', roleController.stats);
 rolesRouter.get('/:id', validateId, roleController.getOne);
-rolesRouter.get('/:id/menu-access', validateId, async (req, res, next) => {
-  try {
-    const [rows] = await pool.query('SELECT menu_path FROM role_menu_access WHERE role_id = ?', [req.params.id]);
-    res.json({ data: rows.map(r => r.menu_path) });
-  } catch (err) { next(err); }
-});
 rolesRouter.post('/', roleController.create);
 rolesRouter.put('/:id', validateId, roleController.update);
-rolesRouter.put('/:id/menu-access', validateId, async (req, res, next) => {
-  try {
-    const { paths } = req.body;
-    if (!Array.isArray(paths)) return res.status(400).json({ error: 'paths array is required' });
-    const roleId = req.params.id;
-    await pool.query('DELETE FROM role_menu_access WHERE role_id = ?', [roleId]);
-    if (paths.length > 0) {
-      const values = paths.map(p => [roleId, p]);
-      await pool.query('INSERT INTO role_menu_access (role_id, menu_path) VALUES ?', [values]);
-    }
-    res.json({ message: 'Menu access updated successfully!' });
-  } catch (err) { next(err); }
-});
 rolesRouter.delete('/:id', validateId, roleController.remove);
 
 // Companies CRUD
