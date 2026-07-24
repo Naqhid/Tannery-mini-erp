@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Factory, RotateCcw, Printer, Package, Layers, ClipboardList, TrendingDown, BarChart3 } from 'lucide-react';
@@ -209,6 +209,118 @@ export default function ProductionPlanDetail() {
     }
   };
 
+  const handlePrintBatches = () => {
+    const customerName = customers.find((c) => String(c.id) === plan.customer_id)?.name || '-';
+    const batchNo = plan.plan_no ? plan.plan_no.replace('PLAN-', '') : '000001';
+    const batchDate = plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+    const prodHours = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
+
+    // Generate one card per batch
+    const cards: string[] = [];
+    const totalBatches = noOfBatches || 1;
+    for (let i = 1; i <= totalBatches; i++) {
+      const serialNo = `${batchNo}-${String(i).padStart(3, '0')}`;
+      cards.push(`
+        <div class="batch-card" style="page-break-after: always;">
+          <table class="main-table">
+            <tr>
+              <td colspan="4" class="title">Leather Tannery ERP - Batch Production Card</td>
+            </tr>
+            <tr>
+              <td class="label">Barcode (Plan No + Serial)</td>
+              <td class="barcode-cell">
+                <svg id="barcode-${i}"></svg>
+              </td>
+              <td class="label">Batch No :</td>
+              <td class="value">${serialNo}</td>
+            </tr>
+            <tr>
+              <td colspan="2" rowspan="1"></td>
+              <td class="label">Batch Date :</td>
+              <td class="value">${batchDate}</td>
+            </tr>
+            <tr>
+              <td class="label">Stage</td>
+              <td class="value">${stages[0]?.stage_name || '-'}</td>
+              <td class="label">Customer</td>
+              <td class="value">${customerName}</td>
+            </tr>
+            <tr>
+              <td class="label">Product</td>
+              <td class="value">${plan.article || '-'}</td>
+              <td class="label">Type</td>
+              <td class="value">${plan.finish || '-'}</td>
+            </tr>
+            <tr>
+              <td class="label">Finish</td>
+              <td class="value">${plan.color || '-'}</td>
+              <td class="label">Color</td>
+              <td class="value">${plan.color || '-'}</td>
+            </tr>
+            <tr>
+              <td class="label">Planned Qty</td>
+              <td class="value" colspan="3">${fmt(batchQty)} Sq.Ft.</td>
+            </tr>
+          </table>
+          <table class="hours-table">
+            <thead>
+              <tr>
+                <th>Prod. Hour</th>
+                <th>Received Qty</th>
+                <th>Output Qty</th>
+                <th>Sign</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${prodHours.map(h => `<tr><td>${h}</td><td></td><td></td><td></td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `);
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { toast.error('Please allow popups to print'); return; }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Batch Production Cards - ${plan.plan_no}</title>
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 10mm; }
+          .batch-card { margin-bottom: 10mm; }
+          .main-table { width: 100%; border-collapse: collapse; border: 2px solid #333; margin-bottom: 4mm; }
+          .main-table td { border: 1px solid #999; padding: 6px 10px; font-size: 12px; }
+          .main-table .title { text-align: center; font-size: 16px; font-weight: bold; padding: 10px; background: #f8f8f8; }
+          .main-table .label { font-weight: bold; width: 20%; font-size: 11px; }
+          .main-table .value { font-size: 12px; }
+          .main-table .barcode-cell { text-align: center; }
+          .main-table .barcode-cell svg { height: 40px; }
+          .hours-table { width: 100%; border-collapse: collapse; border: 2px solid #333; }
+          .hours-table th { background: #2c3e50; color: white; padding: 8px 10px; font-size: 11px; text-align: center; }
+          .hours-table td { border: 1px solid #999; padding: 6px 10px; font-size: 11px; height: 28px; }
+          @media print { .batch-card:last-child { page-break-after: avoid; } body { padding: 5mm; } }
+        </style>
+      </head>
+      <body>
+        ${cards.join('')}
+        <script>
+          document.addEventListener('DOMContentLoaded', function() {
+            ${Array.from({length: totalBatches}, (_, i) => {
+              const serialNo = `${batchNo}-${String(i+1).padStart(3, '0')}`;
+              return `try { JsBarcode("#barcode-${i+1}", "${serialNo}", { format: "CODE128", height: 40, displayValue: true, fontSize: 10 }); } catch(e) {}`;
+            }).join('\n')}
+            setTimeout(function() { window.print(); }, 500);
+          });
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const handleSave = async () => {
     if (!plan.plan_date) { toast.error('Plan date is required'); return; }
     setSaving(true);
@@ -280,7 +392,7 @@ export default function ProductionPlanDetail() {
           <h2 className="text-sm font-bold text-blue-800">1. Plan Information</h2>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { /* Print batches */ }}
+              onClick={handlePrintBatches}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
             >
               <Printer size={13} /> Print Batches
@@ -572,7 +684,7 @@ export default function ProductionPlanDetail() {
           </div>
           <div className="ml-auto">
             <button
-              onClick={() => { /* Print batches */ }}
+              onClick={handlePrintBatches}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
             >
               <Printer size={14} /> Print Batches
