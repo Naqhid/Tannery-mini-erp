@@ -253,7 +253,7 @@ export default function ProductionPlanDetail() {
             </tr>
             <tr>
               <td class="label">Finish</td>
-              <td class="value">${plan.color || '-'}</td>
+              <td class="value">${plan.finish || '-'}</td>
               <td class="label">Color</td>
               <td class="value">${plan.color || '-'}</td>
             </tr>
