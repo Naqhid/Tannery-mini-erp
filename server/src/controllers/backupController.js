@@ -99,11 +99,17 @@ export async function downloadBackup(req, res) {
       return res.status(404).json({ error: 'Backup file not found' });
     }
 
-    res.setHeader('Content-Type', 'application/gzip');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // Give it a .sql download name (strip .gz from filename for user-friendly download)
+    const downloadName = filename.endsWith('.sql.gz') ? filename.replace('.gz', '') : filename;
 
+    res.setHeader('Content-Type', 'application/sql');
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+
+    // Decompress on the fly so user gets a ready-to-use .sql file
+    const { createGunzip } = await import('zlib');
+    const gunzip = createGunzip();
     const fileStream = fs.createReadStream(filepath);
-    fileStream.pipe(res);
+    fileStream.pipe(gunzip).pipe(res);
   } catch (error) {
     console.error('Error downloading backup:', error);
     res.status(500).json({ error: 'Failed to download backup' });
