@@ -68,6 +68,7 @@ import AddNewPrice from './pages/AddNewPrice';
 import SupplierPriceApproval from './pages/SupplierPriceApproval';
 import PhysicalStockEntry from './pages/PhysicalStockEntry';
 import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
+import DatabaseBackups from './pages/DatabaseBackups';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -193,6 +194,7 @@ function App() {
             <Route path="roles/:id" element={<RoleForm />} />
             <Route path="company" element={<Company />} />
             <Route path="business-units" element={<BusinessUnits />} />
+            <Route path="database-backups" element={<DatabaseBackups />} />
             <Route path="notifications" element={<PlaceholderPage />} />
           </Route>
         </Routes>

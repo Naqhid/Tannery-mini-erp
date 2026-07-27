@@ -37,6 +37,7 @@ import batchRoutes from './batchRoutes.js';
 import supplierPricingRoutes from './supplierPricingRoutes.js';
 import priceApprovalRoutes from './priceApprovalRoutes.js';
 import physicalStockEntryRoutes from './physicalStockEntryRoutes.js';
+import backupRoutes from './backupRoutes.js';
 
 const router = Router();
 
@@ -98,6 +99,9 @@ router.use('/price-approvals', priceApprovalRoutes);
 
 // Physical Stock Entry routes
 router.use('/physical-stock-entries', physicalStockEntryRoutes);
+
+// Database Backup routes
+router.use('/backups', backupRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);
