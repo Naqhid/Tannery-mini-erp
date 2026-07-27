@@ -60,7 +60,9 @@ export default function DatabaseBackups() {
     const baseUrl = import.meta.env.VITE_API_BASE || '/api';
     const url = `${baseUrl}/backups/download/${encodeURIComponent(filename)}`;
 
-    // Use a hidden anchor with token in header via fetch + blob
+    // Download as .sql (server decompresses .gz on the fly)
+    const downloadName = filename.endsWith('.sql.gz') ? filename.replace('.gz', '') : filename;
+
     fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -71,7 +73,7 @@ export default function DatabaseBackups() {
       .then(blob => {
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = filename;
+        link.download = downloadName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
