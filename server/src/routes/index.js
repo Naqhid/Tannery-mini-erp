@@ -25,6 +25,7 @@ import {
   finishTypeRoutes,
   gradeRoutes,
   hsnCodeRoutes,
+  taxMasterRoutes,
   processStageRoutes,
   machineRoutes,
   roleRoutes,
@@ -79,6 +80,7 @@ router.use('/colors', colorRoutes);
 router.use('/finish-types', finishTypeRoutes);
 router.use('/grades', gradeRoutes);
 router.use('/hsn-codes', hsnCodeRoutes);
+router.use('/tax-master', taxMasterRoutes);
 router.use('/process-stages', processStageRoutes);
 router.use('/machines', machineRoutes);
 

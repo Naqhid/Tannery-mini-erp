@@ -9,6 +9,7 @@ import {
   finishTypeModel,
   gradeModel,
   hsnCodeModel,
+  taxMasterModel,
   processStageModel,
   machineModel,
   roleModel,
@@ -49,6 +50,8 @@ export const gradeController = createMasterController(gradeModel, 'Grade', [
 export const hsnCodeController = createMasterController(hsnCodeModel, 'HSN Code', [
   { table: 'products', field: 'hsn_code_id', entityName: 'Products' },
 ]);
+
+export const taxMasterController = createMasterController(taxMasterModel, 'Tax', []);
 
 export const processStageController = createMasterController(processStageModel, 'Process Stage', [
   { table: 'recipe_process_stages', field: 'process_stage_id', entityName: 'Recipe Process Stages' },

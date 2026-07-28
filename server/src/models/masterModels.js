@@ -72,6 +72,23 @@ export const hsnCodeModel = createMasterModel(
   { uniqueFields: [{ fields: ['code'] }] }
 );
 
+export const taxMasterModel = createMasterModel(
+  'tax_master',
+  'TAX',
+  ['id', 'code', 'name', 'tax_category', 'hsn_code_id', 'description', 'gst_percent', 'cess_percent', 'effective_from', 'status', 'created_at', 'updated_at'],
+  ['name', 'code'],
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    extraColumns: {
+      tax_category: 'string',
+      hsn_code_id: 'number',
+      gst_percent: 'number',
+      cess_percent: 'number',
+      effective_from: 'date',
+    },
+  }
+);
+
 export const processStageModel = createMasterModel(
   'process_stages',
   'PS',

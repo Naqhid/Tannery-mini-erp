@@ -13,6 +13,7 @@ import api from '../lib/api';
 
 // ---- Types ----
 interface Customer { id: number; code: string; name: string; contact_person?: string; address?: string; }
+interface TaxOption { id: number; name: string; gst_percent: number; cess_percent: number; }
 interface SalesOrderItem {
   _key?: string;
   item_code: string;
@@ -112,6 +113,7 @@ export default function SalesOrderDetail() {
 
   const [order, setOrder] = useState<SalesOrderFull>(emptyOrder);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
   const [activeTab, setActiveTab] = useState<'items' | 'delivery' | 'payment' | 'attachments' | 'remarks'>('items');
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -136,6 +138,13 @@ export default function SalesOrderDetail() {
       const res = await api<{ data: Customer[] }>('/customers?limit=500');
       setCustomers(res.data || []);
     } catch { setCustomers([]); }
+  }, []);
+
+  const fetchTaxOptions = useCallback(async () => {
+    try {
+      const res = await api<{ data: TaxOption[] }>('/tax-master/dropdown');
+      setTaxOptions(res.data || []);
+    } catch { setTaxOptions([]); }
   }, []);
 
   const fetchOrder = useCallback(async () => {
@@ -165,7 +174,7 @@ export default function SalesOrderDetail() {
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
-  useEffect(() => { fetchCustomers(); fetchOrder(); }, [fetchCustomers, fetchOrder]);
+  useEffect(() => { fetchCustomers(); fetchTaxOptions(); fetchOrder(); }, [fetchCustomers, fetchTaxOptions, fetchOrder]);
 
   const updateField = (field: keyof SalesOrderFull, value: any) => {
     setOrder(prev => {
@@ -629,8 +638,24 @@ export default function SalesOrderDetail() {
                         <input type="number" value={order.freight} onChange={(e) => updateField('freight', Number(e.target.value))} min={0} className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                       </div>
                       <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-600">Tax (GST {order.tax_percent}%)</span>
-                        <span className="text-sm text-gray-800">{formatCurrency(order.tax_amount)}</span>
+                        <span className="text-sm text-gray-600">Tax</span>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={order.tax_percent}
+                            onChange={(e) => {
+                              const selectedPercent = Number(e.target.value);
+                              updateField('tax_percent', selectedPercent);
+                            }}
+                            className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
+                          >
+                            <option value={0}>No Tax</option>
+                            {taxOptions.map(t => {
+                              const pct = parseFloat(String(t.gst_percent));
+                              return <option key={t.id} value={pct}>{t.name} ({pct}%)</option>;
+                            })}
+                          </select>
+                          <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
+                        </div>
                       </div>
                       <div className="border-t border-gray-200 pt-3 mt-2">
                         <div className="flex items-center justify-between">

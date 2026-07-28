@@ -69,6 +69,7 @@ import SupplierPriceApproval from './pages/SupplierPriceApproval';
 import PhysicalStockEntry from './pages/PhysicalStockEntry';
 import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
 import DatabaseBackups from './pages/DatabaseBackups';
+import TaxMaster from './pages/TaxMaster';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -138,6 +139,7 @@ function App() {
             <Route path="hsn-code" element={<HSNCode />} />
             <Route path="hsn-code/new" element={<HSNCodeForm />} />
             <Route path="hsn-code/:id" element={<HSNCodeForm />} />
+            <Route path="tax-master" element={<TaxMaster />} />
             <Route path="process-stage" element={<ProcessStage />} />
             <Route path="process-stage/new" element={<ProcessStageForm />} />
             <Route path="process-stage/:id" element={<ProcessStageForm />} />

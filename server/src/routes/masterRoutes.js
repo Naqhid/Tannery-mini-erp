@@ -54,6 +54,9 @@ export const gradeRoutes = createMasterRoutes(ctrl.gradeController);
 // HSN Code routes
 export const hsnCodeRoutes = createMasterRoutes(ctrl.hsnCodeController);
 
+// Tax Master routes
+export const taxMasterRoutes = createMasterRoutes(ctrl.taxMasterController);
+
 // Process Stage routes
 export const processStageRoutes = createMasterRoutes(ctrl.processStageController);
 
