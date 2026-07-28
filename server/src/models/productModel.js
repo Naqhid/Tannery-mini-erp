@@ -98,7 +98,7 @@ export async function create(data, createdBy = null) {
   const [result] = await pool.query(
     `INSERT INTO products (code, name, category, leather_type, uom, thickness, color, finish_type, description, standard_size, grade, hsn_code, status, category_id, leather_type_id, uom_id, thickness_id, color_id, finish_type_id, grade_id, hsn_code_id, standard_size_id, created_by)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [code, data.name, data.category || null, leatherType, data.uom || null, data.thickness || null,
+    [code, data.name, data.category || 'General', leatherType, data.uom || null, data.thickness || null,
      data.color || null, data.finish_type || null, data.description, data.standard_size || null,
      grade, data.hsn_code || null, data.status || 'Active',
      data.category_id || null, data.leather_type_id || null, data.uom_id || null,
