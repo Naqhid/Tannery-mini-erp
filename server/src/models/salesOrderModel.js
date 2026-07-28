@@ -193,8 +193,24 @@ export async function update(id, data, items = [], updatedBy = null) {
 }
 
 export async function remove(id) {
-  const [result] = await pool.query('DELETE FROM sales_orders WHERE id = ?', [id]);
-  return result.affectedRows > 0;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // Delete related records first
+    await conn.query('DELETE FROM delivery_notes WHERE sales_order_id = ?', [id]);
+    await conn.query('DELETE FROM sales_order_receipts WHERE sales_order_id = ?', [id]);
+    await conn.query('DELETE FROM sales_order_invoices WHERE sales_order_id = ?', [id]);
+    await conn.query('DELETE FROM sales_order_attachments WHERE sales_order_id = ?', [id]);
+    await conn.query('DELETE FROM sales_order_items WHERE sales_order_id = ?', [id]);
+    await conn.query('DELETE FROM sales_orders WHERE id = ?', [id]);
+    await conn.commit();
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function getStats() {
