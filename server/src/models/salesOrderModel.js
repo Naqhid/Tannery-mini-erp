@@ -198,8 +198,8 @@ export async function remove(id) {
     await conn.beginTransaction();
     // Delete related records first
     await conn.query('DELETE FROM delivery_notes WHERE sales_order_id = ?', [id]);
-    await conn.query('DELETE FROM sales_order_receipts WHERE sales_order_id = ?', [id]);
-    await conn.query('DELETE FROM sales_order_invoices WHERE sales_order_id = ?', [id]);
+    await conn.query('DELETE FROM payment_receipts WHERE sales_order_id = ?', [id]);
+    await conn.query('DELETE FROM invoices WHERE sales_order_id = ?', [id]);
     await conn.query('DELETE FROM sales_order_attachments WHERE sales_order_id = ?', [id]);
     await conn.query('DELETE FROM sales_order_items WHERE sales_order_id = ?', [id]);
     await conn.query('DELETE FROM sales_orders WHERE id = ?', [id]);
