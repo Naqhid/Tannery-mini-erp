@@ -1,5 +1,5 @@
 import * as model from '../models/authModel.js';
-import { getCurrentUserId } from '../middleware/auth.js';
+import { getCurrentUserId, generateToken, generateRefreshToken, verifyRefreshToken } from '../middleware/auth.js';
 import pool from '../config/db.js';
 
 export async function login(req, res, next) {
@@ -16,6 +16,9 @@ export async function login(req, res, next) {
       return res.status(401).json({ error: result.error });
     }
 
+    // Generate refresh token
+    const refreshToken = generateRefreshToken(result.user);
+
     // Fetch menu access for the user's role
     let menu_access = [];
     if (result.user.role_id) {
@@ -26,7 +29,41 @@ export async function login(req, res, next) {
     res.json({
       message: 'Login successful',
       token: result.token,
+      refreshToken,
       user: { ...result.user, menu_access },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function refresh(req, res, next) {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token is required' });
+    }
+
+    const decoded = verifyRefreshToken(refreshToken);
+    if (!decoded) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
+
+    // Get fresh user data
+    const user = await model.getUserById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Generate new access token
+    const newToken = generateToken(user);
+    // Generate new refresh token (rotate)
+    const newRefreshToken = generateRefreshToken(user);
+
+    res.json({
+      token: newToken,
+      refreshToken: newRefreshToken,
     });
   } catch (err) {
     next(err);

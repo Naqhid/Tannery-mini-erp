@@ -6,6 +6,7 @@ const router = Router();
 
 // Public routes
 router.post('/login', ctrl.login);
+router.post('/refresh', ctrl.refresh);
 
 // Protected routes
 router.get('/me', requireAuth, ctrl.me);

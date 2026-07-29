@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tannery-erp-secret-key-2024';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+const REFRESH_SECRET = process.env.REFRESH_SECRET || 'tannery-erp-refresh-secret-2024';
+const REFRESH_EXPIRES_IN = process.env.REFRESH_EXPIRES_IN || '7d';
 
 export function hashPassword(password) {
   return bcrypt.hashSync(password, 10);
@@ -25,9 +27,22 @@ export function generateToken(user) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
+export function generateRefreshToken(user) {
+  const payload = { id: user.id, username: user.username };
+  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
+}
+
 export function verifyToken(token) {
   try {
     return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+export function verifyRefreshToken(token) {
+  try {
+    return jwt.verify(token, REFRESH_SECRET);
   } catch {
     return null;
   }

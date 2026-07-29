@@ -26,6 +26,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const TOKEN_KEY = 'tannery_token';
+const REFRESH_TOKEN_KEY = 'tannery_refresh_token';
 const USER_KEY = 'tannery_user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -60,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string) => {
     try {
-      const res = await api<{ token: string; user: User } & { error?: string }>('/auth/login', {
+      const res = await api<{ token: string; refreshToken: string; user: User } & { error?: string }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       localStorage.setItem(TOKEN_KEY, res.token);
+      localStorage.setItem(REFRESH_TOKEN_KEY, res.refreshToken);
       localStorage.setItem(USER_KEY, JSON.stringify(res.user));
       setToken(res.token);
       setUser(res.user);
@@ -83,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setToken(null);
     setUser(null);
