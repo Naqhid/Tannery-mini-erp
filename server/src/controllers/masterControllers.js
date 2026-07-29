@@ -11,7 +11,9 @@ import {
   hsnCodeModel,
   taxMasterModel,
   processStageModel,
+  groupMasterModel,
   machineModel,
+  rateMasterModel,
   roleModel,
   companyModel,
   businessUnitModel,
@@ -57,9 +59,16 @@ export const processStageController = createMasterController(processStageModel, 
   { table: 'recipe_process_stages', field: 'process_stage_id', entityName: 'Recipe Process Stages' },
 ]);
 
+export const groupMasterController = createMasterController(groupMasterModel, 'Group', [
+  { table: 'products', field: 'group_id', entityName: 'Products' },
+  { table: 'materials', field: 'group_id', entityName: 'Materials' },
+]);
+
 export const machineController = createMasterController(machineModel, 'Machine/Equipment', [
   { table: 'recipe_process_stages', field: 'machine_id', entityName: 'Recipe Process Stages' },
 ]);
+
+export const rateMasterController = createMasterController(rateMasterModel, 'Rate', []);
 
 export const roleController = createMasterController(roleModel, 'Role', [
   { table: 'users', field: 'role_id', entityName: 'Users' },

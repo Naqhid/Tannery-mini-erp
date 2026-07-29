@@ -13,6 +13,9 @@ interface DropdownOption {
   machine_type?: string;
   capacity?: string;
   description?: string;
+  // Group master fields
+  category_id?: number;
+  hsn_code?: string;
   // Product specific fields
   leather_type?: string;
   thickness?: string;
@@ -42,6 +45,7 @@ type DropdownType =
   | 'hsn-codes'
   | 'process-stages'
   | 'machines'
+  | 'group-master'
   | 'products'
   | 'materials';
 

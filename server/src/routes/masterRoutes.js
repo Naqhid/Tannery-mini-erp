@@ -60,8 +60,25 @@ export const taxMasterRoutes = createMasterRoutes(ctrl.taxMasterController);
 // Process Stage routes
 export const processStageRoutes = createMasterRoutes(ctrl.processStageController);
 
+// Group Master routes
+export const groupMasterRoutes = createMasterRoutes(ctrl.groupMasterController);
+// Add a filtered dropdown endpoint for group master (filter by category_id)
+groupMasterRoutes.get('/dropdown/by-category/:categoryId', async (req, res, next) => {
+  try {
+    const categoryId = req.params.categoryId;
+    const [rows] = await pool.query(
+      `SELECT id, code, name, category_id, hsn_code, gst_rate FROM group_master WHERE status='Active' AND deleted_at IS NULL AND category_id = ? ORDER BY name ASC`,
+      [categoryId]
+    );
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+});
+
 // Machine routes
 export const machineRoutes = createMasterRoutes(ctrl.machineController);
+
+// Rate Master routes
+export const rateMasterRoutes = createMasterRoutes(ctrl.rateMasterController);
 
 // Role routes
 export const roleRoutes = createMasterRoutes(ctrl.roleController);
@@ -103,7 +120,9 @@ export default {
   gradeRoutes,
   hsnCodeRoutes,
   processStageRoutes,
+  groupMasterRoutes,
   machineRoutes,
+  rateMasterRoutes,
   roleRoutes,
   companyRoutes,
   businessUnitRoutes,

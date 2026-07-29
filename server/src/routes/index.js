@@ -27,7 +27,9 @@ import {
   hsnCodeRoutes,
   taxMasterRoutes,
   processStageRoutes,
+  groupMasterRoutes,
   machineRoutes,
+  rateMasterRoutes,
   roleRoutes,
   companyRoutes,
   businessUnitRoutes,
@@ -82,7 +84,9 @@ router.use('/grades', gradeRoutes);
 router.use('/hsn-codes', hsnCodeRoutes);
 router.use('/tax-master', taxMasterRoutes);
 router.use('/process-stages', processStageRoutes);
+router.use('/group-master', groupMasterRoutes);
 router.use('/machines', machineRoutes);
+router.use('/rate-master', rateMasterRoutes);
 
 // Settings routes
 router.use('/roles', roleRoutes);

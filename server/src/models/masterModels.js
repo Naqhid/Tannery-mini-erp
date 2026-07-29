@@ -97,12 +97,35 @@ export const processStageModel = createMasterModel(
   { uniqueFields: [{ fields: ['name'] }] }
 );
 
+export const groupMasterModel = createMasterModel(
+  'group_master',
+  'GRP',
+  ['id', 'code', 'name', 'category_id', 'hsn_code', 'gst_rate', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code', 'hsn_code'],
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    extraColumns: {
+      category_id: 'number',
+      hsn_code: 'string',
+      gst_rate: 'number',
+    },
+    filterableFields: ['category_id'],
+  }
+);
+
 export const machineModel = createMasterModel(
   'machines',
   'MAC',
-  ['id', 'code', 'name', 'machine_type', 'capacity', 'description', 'status', 'created_at', 'updated_at'],
+  ['id', 'code', 'name', 'uom_type', 'rate_indian', 'rate_imported', 'machine_type', 'capacity', 'description', 'status', 'created_at', 'updated_at'],
   ['name', 'code'],
-  { uniqueFields: [{ fields: ['name'] }] }
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    extraColumns: {
+      uom_type: 'string',
+      rate_indian: 'number',
+      rate_imported: 'number',
+    },
+  }
 );
 
 export const roleModel = createMasterModel(
@@ -111,6 +134,26 @@ export const roleModel = createMasterModel(
   ['id', 'code', 'name', 'description', 'access_level', 'status', 'created_at', 'updated_at'],
   ['name', 'code'],
   { uniqueFields: [{ fields: ['name'] }] }
+);
+
+export const rateMasterModel = createMasterModel(
+  'rate_master',
+  'RATE',
+  ['id', 'code', 'name', 'rate_type', 'component_ref_id', 'uom', 'rate_indian', 'rate_imported', 'effective_from', 'effective_to', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code', 'rate_type'],
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    extraColumns: {
+      rate_type: 'string',
+      component_ref_id: 'number',
+      uom: 'string',
+      rate_indian: 'number',
+      rate_imported: 'number',
+      effective_from: 'date',
+      effective_to: 'date',
+    },
+    filterableFields: ['rate_type'],
+  }
 );
 
 export const companyModel = createMasterModel(

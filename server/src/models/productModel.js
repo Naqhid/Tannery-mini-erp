@@ -23,7 +23,8 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
     `SELECT p.*,
       pc.name AS category_name, lt.name AS leather_type_name, u.name AS uom_name,
       th.name AS thickness_name, c.name AS color_name, ft.name AS finish_type_name,
-      g.name AS grade_name, h.name AS hsn_name, ss.name AS standard_size_name
+      g.name AS grade_name, h.name AS hsn_name, ss.name AS standard_size_name,
+      gm.name AS group_name, gm.hsn_code AS group_hsn_code, gm.gst_rate AS group_gst_rate
     FROM products p
     LEFT JOIN product_categories pc ON p.category_id = pc.id
     LEFT JOIN leather_types lt ON p.leather_type_id = lt.id
@@ -34,6 +35,7 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
     LEFT JOIN grades g ON p.grade_id = g.id
     LEFT JOIN hsn_codes h ON p.hsn_code_id = h.id
     LEFT JOIN standard_sizes ss ON p.standard_size_id = ss.id
+    LEFT JOIN group_master gm ON p.group_id = gm.id
     WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
@@ -49,7 +51,8 @@ export async function getById(id) {
     `SELECT p.*,
       pc.name AS category_name, lt.name AS leather_type_name, u.name AS uom_name,
       th.name AS thickness_name, c.name AS color_name, ft.name AS finish_type_name,
-      g.name AS grade_name, h.name AS hsn_name, ss.name AS standard_size_name
+      g.name AS grade_name, h.name AS hsn_name, ss.name AS standard_size_name,
+      gm.name AS group_name, gm.hsn_code AS group_hsn_code, gm.gst_rate AS group_gst_rate
     FROM products p
     LEFT JOIN product_categories pc ON p.category_id = pc.id
     LEFT JOIN leather_types lt ON p.leather_type_id = lt.id
@@ -60,6 +63,7 @@ export async function getById(id) {
     LEFT JOIN grades g ON p.grade_id = g.id
     LEFT JOIN hsn_codes h ON p.hsn_code_id = h.id
     LEFT JOIN standard_sizes ss ON p.standard_size_id = ss.id
+    LEFT JOIN group_master gm ON p.group_id = gm.id
     WHERE p.id = ?`,
     [id]
   );
@@ -96,12 +100,12 @@ export async function create(data, createdBy = null) {
   }
 
   const [result] = await pool.query(
-    `INSERT INTO products (code, name, category, leather_type, uom, thickness, color, finish_type, description, standard_size, grade, hsn_code, status, category_id, leather_type_id, uom_id, thickness_id, color_id, finish_type_id, grade_id, hsn_code_id, standard_size_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO products (code, name, category, leather_type, uom, thickness, color, finish_type, description, standard_size, grade, hsn_code, status, category_id, group_id, leather_type_id, uom_id, thickness_id, color_id, finish_type_id, grade_id, hsn_code_id, standard_size_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.category || 'General', leatherType, data.uom || null, data.thickness || null,
      data.color || null, data.finish_type || null, data.description, data.standard_size || null,
      grade, data.hsn_code || null, data.status || 'Active',
-     data.category_id || null, data.leather_type_id || null, data.uom_id || null,
+     data.category_id || null, data.group_id || null, data.leather_type_id || null, data.uom_id || null,
      data.thickness_id || null, data.color_id || null, data.finish_type_id || null,
      data.grade_id || null, data.hsn_code_id || null, data.standard_size_id || null,
      createdBy]
@@ -129,11 +133,11 @@ export async function update(id, data, updatedBy = null) {
   }
 
   const [result] = await pool.query(
-    `UPDATE products SET code=?, name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, hsn_code=?, status=?, category_id=?, leather_type_id=?, uom_id=?, thickness_id=?, color_id=?, finish_type_id=?, grade_id=?, hsn_code_id=?, standard_size_id=?, updated_by=? WHERE id=?`,
+    `UPDATE products SET code=?, name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, hsn_code=?, status=?, category_id=?, group_id=?, leather_type_id=?, uom_id=?, thickness_id=?, color_id=?, finish_type_id=?, grade_id=?, hsn_code_id=?, standard_size_id=?, updated_by=? WHERE id=?`,
     [data.code, data.name, data.category || null, leatherType, data.uom || null, data.thickness || null,
      data.color || null, data.finish_type || null, data.description, data.standard_size || null,
      grade, data.hsn_code || null, data.status,
-     data.category_id || null, data.leather_type_id || null, data.uom_id || null,
+     data.category_id || null, data.group_id || null, data.leather_type_id || null, data.uom_id || null,
      data.thickness_id || null, data.color_id || null, data.finish_type_id || null,
      data.grade_id || null, data.hsn_code_id || null, data.standard_size_id || null,
      updatedBy, id]

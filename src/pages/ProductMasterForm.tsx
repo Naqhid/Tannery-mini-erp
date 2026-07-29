@@ -7,11 +7,21 @@ import Select from '../components/ui/Select';
 import api from '../lib/api';
 import { useDropdowns } from '../lib/useDropdowns';
 
+interface GroupOption {
+  id: number;
+  code: string;
+  name: string;
+  category_id: number;
+  hsn_code: string;
+  gst_rate: number;
+}
+
 interface ProductData {
   id?: number;
   code: string;
   name: string;
   category_id: string;
+  group_id: string;
   leather_type_id: string;
   primary_uom_id: string;
   secondary_uom_id: string;
@@ -21,14 +31,15 @@ interface ProductData {
   finish_type_id: string;
   grade_id: string;
   hsn_code_id: string;
+  hsn_code_display: string;
   description: string;
   status: string;
 }
 
 const empty: ProductData = {
-  code: '', name: '', category_id: '', leather_type_id: '', primary_uom_id: '', secondary_uom_id: '',
+  code: '', name: '', category_id: '', group_id: '', leather_type_id: '', primary_uom_id: '', secondary_uom_id: '',
   thickness_id: '', standard_size_id: '', color_id: '', finish_type_id: '', grade_id: '',
-  hsn_code_id: '', description: '', status: 'Active',
+  hsn_code_id: '', hsn_code_display: '', description: '', status: 'Active',
 };
 
 export default function ProductMasterForm() {
@@ -38,29 +49,65 @@ export default function ProductMasterForm() {
 
   const dropdowns = useDropdowns([
     'product-categories', 'leather-types', 'uom', 'thickness',
-    'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes',
+    'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes', 'group-master',
   ]);
 
   const [form, setForm] = useState<ProductData>(empty);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [filteredGroups, setFilteredGroups] = useState<GroupOption[]>([]);
 
   const fetchProduct = useCallback(async () => {
     if (isNew) return;
     try {
       setLoading(true);
-      const res = await api<{ data: ProductData }>(`/products/${id}`);
-      setForm({ ...empty, ...res.data });
+      const res = await api<{ data: ProductData & { group_hsn_code?: string } }>(`/products/${id}`);
+      setForm({ ...empty, ...res.data, hsn_code_display: res.data.group_hsn_code || '' });
     } catch { toast.error('Failed to load product'); navigate('/product-master'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
   useEffect(() => { fetchProduct(); }, [fetchProduct]);
 
+  // Filter groups by selected category
+  useEffect(() => {
+    if (form.category_id && dropdowns['group-master']?.data) {
+      const filtered = dropdowns['group-master'].data.filter(
+        (g: any) => String(g.category_id) === form.category_id
+      );
+      setFilteredGroups(filtered as unknown as GroupOption[]);
+    } else {
+      setFilteredGroups([]);
+    }
+  }, [form.category_id, dropdowns['group-master']?.data]);
+
   const update = (key: keyof ProductData, value: string) => {
     setForm(p => ({ ...p, [key]: value }));
     setErrors(p => { const n = { ...p }; delete n[key]; return n; });
+  };
+
+  // When category changes, reset group and HSN
+  const handleCategoryChange = (value: string) => {
+    setForm(p => ({ ...p, category_id: value, group_id: '', hsn_code_display: '' }));
+    setErrors(p => { const n = { ...p }; delete n['category_id']; return n; });
+  };
+
+  // When group changes, auto-populate HSN
+  const handleGroupChange = (value: string) => {
+    setForm(p => {
+      const updated = { ...p, group_id: value };
+      if (value) {
+        const group = filteredGroups.find(g => String(g.id) === value);
+        if (group) {
+          updated.hsn_code_display = `${group.hsn_code} (GST: ${group.gst_rate}%)`;
+        }
+      } else {
+        updated.hsn_code_display = '';
+      }
+      return updated;
+    });
+    setErrors(p => { const n = { ...p }; delete n['group_id']; return n; });
   };
 
   const validate = (): boolean => {
@@ -79,6 +126,7 @@ export default function ProductMasterForm() {
     setSaving(true);
     try {
       const payload = { ...form };
+      delete (payload as any).hsn_code_display;
       if (isNew) {
         const res = await api<{ message: string }>('/products', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Product created!');
@@ -122,7 +170,16 @@ export default function ProductMasterForm() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Product Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Input label="Product Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter product name" />
-          <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => update('category_id', e.target.value)} error={errors.category_id} />
+          <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} />
+          <Select
+            label="Group"
+            options={[
+              { value: '', label: form.category_id ? 'Select group' : 'Select category first' },
+              ...filteredGroups.map(g => ({ value: String(g.id), label: g.name })),
+            ]}
+            value={form.group_id}
+            onChange={(e) => handleGroupChange(e.target.value)}
+          />
           <Select label="Leather Type" required options={[{ value: '', label: 'Select leather type' }, ...(dropdowns['leather-types']?.options || [])]} value={form.leather_type_id} onChange={(e) => update('leather_type_id', e.target.value)} error={errors.leather_type_id} />
           <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} />
           <Select label="Secondary UOM" options={[{ value: '', label: 'Select Secondary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} />
@@ -138,7 +195,13 @@ export default function ProductMasterForm() {
           <Select label="Color" options={[{ value: '', label: 'Select color' }, ...(dropdowns['colors']?.options || [])]} value={form.color_id} onChange={(e) => update('color_id', e.target.value)} />
           <Select label="Finish Type" options={[{ value: '', label: 'Select finish type' }, ...(dropdowns['finish-types']?.options || [])]} value={form.finish_type_id} onChange={(e) => update('finish_type_id', e.target.value)} />
           <Select label="Grade" options={[{ value: '', label: 'Select grade' }, ...(dropdowns['grades']?.options || [])]} value={form.grade_id} onChange={(e) => update('grade_id', e.target.value)} />
-          <Select label="HSN Code" options={[{ value: '', label: 'Select HSN Code' }, ...(dropdowns['hsn-codes']?.options || [])]} value={form.hsn_code_id} onChange={(e) => update('hsn_code_id', e.target.value)} />
+          {/* HSN auto-populated from group */}
+          <div>
+            <label className="block text-xs font-medium text-gray-900 mb-1">HSN Code <span className="text-gray-400">(from Group)</span></label>
+            <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[38px] flex items-center">
+              {form.hsn_code_display || <span className="italic text-gray-400">Select a group to auto-populate</span>}
+            </div>
+          </div>
         </div>
       </div>
 

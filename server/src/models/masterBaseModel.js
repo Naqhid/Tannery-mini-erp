@@ -112,25 +112,44 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     return null;
   }
 
+  // Date fields that need to be sanitized to YYYY-MM-DD format
+  const _dateFields = new Set(
+    Object.entries(_extraColumns)
+      .filter(([, type]) => type === 'date')
+      .map(([field]) => field)
+  );
+
+  function sanitizeValue(field, value) {
+    if (_dateFields.has(field)) {
+      if (!value || value === '') return null;
+      // Convert ISO timestamp or any date string to YYYY-MM-DD
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString().split('T')[0];
+    }
+    return value;
+  }
+
   async function create(data, createdBy = null) {
     const code = data.code || await getNextCode();
 
     const columns = ['code'];
     const values = [code];
 
-    const knownFields = [
+    const knownFields = [...new Set([
       'name', 'description', 'status', 'access_level', 'value_mm', 'rank', 'hex_code', 'seq',
       'gst_rate', 'machine_type', 'capacity', 'process_stage_id', 'parameter_name',
       'unit', 'default_value', 'min_value', 'max_value', 'required',
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',
       'address', 'city', 'state', 'country', 'phone', 'email', 'gstin',
+      'category_id', 'hsn_code', 'uom_type', 'rate_indian', 'rate_imported',
       ...Object.keys(_extraColumns),
-    ];
+    ])];
 
     for (const f of knownFields) {
       if (data[f] !== undefined) {
         columns.push(f);
-        values.push(data[f]);
+        values.push(sanitizeValue(f, data[f]));
       }
     }
 
@@ -149,19 +168,20 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
     const updates = [];
     const values = [];
 
-    const knownFields = [
+    const knownFields = [...new Set([
       'code', 'name', 'description', 'status', 'access_level', 'value_mm', 'rank', 'hex_code', 'seq',
       'gst_rate', 'machine_type', 'capacity', 'process_stage_id', 'parameter_name',
       'unit', 'default_value', 'min_value', 'max_value', 'required',
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',
       'address', 'city', 'state', 'country', 'phone', 'email', 'gstin',
+      'category_id', 'hsn_code', 'uom_type', 'rate_indian', 'rate_imported',
       ...Object.keys(_extraColumns),
-    ];
+    ])];
 
     for (const f of knownFields) {
       if (data[f] !== undefined) {
         updates.push(`${escapeField(f)} = ?`);
-        values.push(data[f]);
+        values.push(sanitizeValue(f, data[f]));
       }
     }
 

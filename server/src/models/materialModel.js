@@ -55,13 +55,13 @@ export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
     `INSERT INTO materials (
-      code, name, type, uom, category, chemical_group, appearance, color,
+      code, name, type, uom, category, chemical_group, group_id, appearance, color,
       ph_value, flash_point, hsn_code, cas_number, shelf_life, storage_condition,
       hazardous, default_warehouse, opening_stock, opening_stock_uom, current_stock,
       reorder_level, maximum_level, standard_cost, last_purchase_price,
       preferred_supplier_id, lead_time, description, application, remarks,
       attachment_path, status, created_by
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       code,
       data.name,
@@ -69,6 +69,7 @@ export async function create(data, createdBy = null) {
       data.uom || '',
       data.category || null,
       data.chemical_group || null,
+      data.group_id || null,
       data.appearance || null,
       data.color || null,
       data.ph_value || null,
@@ -102,7 +103,7 @@ export async function create(data, createdBy = null) {
 export async function update(id, data, updatedBy = null) {
   const [result] = await pool.query(
     `UPDATE materials SET
-      name=?, type=?, uom=?, category=?, chemical_group=?, appearance=?, color=?,
+      name=?, type=?, uom=?, category=?, chemical_group=?, group_id=?, appearance=?, color=?,
       ph_value=?, flash_point=?, hsn_code=?, cas_number=?, shelf_life=?, storage_condition=?,
       hazardous=?, default_warehouse=?, opening_stock=?, opening_stock_uom=?,
       reorder_level=?, maximum_level=?, standard_cost=?, last_purchase_price=?,
@@ -115,6 +116,7 @@ export async function update(id, data, updatedBy = null) {
       data.uom || '',
       data.category || null,
       data.chemical_group || null,
+      data.group_id || null,
       data.appearance || null,
       data.color || null,
       data.ph_value || null,

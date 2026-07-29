@@ -8,19 +8,22 @@ import api from '../lib/api';
 import { useDropdowns } from '../lib/useDropdowns';
 
 interface Supplier { id: number; name: string; code: string; }
+interface GroupOption { id: number; code: string; name: string; category_id: number; hsn_code: string; gst_rate: number; }
 
 interface MaterialData {
   id?: number;
   code: string;
   name: string;
+  category: string;
+  group_id: string;
   type: string;
   uom: string;
-  category: string;
   chemical_group: string;
   color: string;
   ph_value: string;
   flash_point: string;
   hsn_code: string;
+  hsn_code_display: string;
   cas_number: string;
   shelf_life: string;
   storage_condition: string;
@@ -39,8 +42,8 @@ interface MaterialData {
 }
 
 const empty: MaterialData = {
-  code: '', name: '', type: 'Chemical', uom: '', category: '', chemical_group: '',
-  color: '', ph_value: '', flash_point: '', hsn_code: '', cas_number: '',
+  code: '', name: '', category: '', group_id: '', type: 'Chemical', uom: '', chemical_group: '',
+  color: '', ph_value: '', flash_point: '', hsn_code: '', hsn_code_display: '', cas_number: '',
   shelf_life: '', storage_condition: '', hazardous: false, default_warehouse: '',
   current_stock: '0.00', reorder_level: '0.00', maximum_level: '0.00',
   preferred_supplier_id: '', lead_time: '',
@@ -49,11 +52,6 @@ const empty: MaterialData = {
 
 const MATERIAL_TYPES = ['Chemical', 'Auxiliary', 'Packing Material'];
 const STORAGE_CONDITIONS = ['Room Temperature', 'Cool & Dry', 'Refrigerated', 'Flammable Storage', 'Ventilated Area'];
-const CHEMICAL_GROUPS: Record<string, string[]> = {
-  Chemical: ['Acids', 'Alkalis', 'Dyes', 'Solvents', 'Fatliquors', 'Resins', 'Tanning Agents', 'Others'],
-  Auxiliary: ['Binders', 'Fillers', 'Wetting Agents', 'Defoamers', 'Softeners', 'Others'],
-  'Packing Material': ['Boxes', 'Wraps', 'Labels', 'Tapes', 'Others'],
-};
 const WAREHOUSES = ['Main Warehouse', 'Chemical Store', 'Finished Goods Store', 'Raw Material Store'];
 
 export default function MaterialMasterForm() {
@@ -61,13 +59,14 @@ export default function MaterialMasterForm() {
   const navigate = useNavigate();
   const isNew = !id || id === 'new';
 
-  const dropdowns = useDropdowns(['uom', 'product-categories', 'hsn-codes']);
+  const dropdowns = useDropdowns(['uom', 'product-categories', 'group-master']);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [form, setForm] = useState<MaterialData>(empty);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [filteredGroups, setFilteredGroups] = useState<GroupOption[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchSuppliers = useCallback(async () => {
@@ -91,6 +90,7 @@ export default function MaterialMasterForm() {
         shelf_life: String((res.data as any).shelf_life ?? ''),
         lead_time: String((res.data as any).lead_time ?? ''),
         preferred_supplier_id: String((res.data as any).preferred_supplier_id ?? ''),
+        group_id: String((res.data as any).group_id ?? ''),
       });
     } catch { toast.error('Failed to load material'); navigate('/chemical-master'); }
     finally { setLoading(false); }
@@ -98,9 +98,45 @@ export default function MaterialMasterForm() {
 
   useEffect(() => { fetchMaterial(); fetchSuppliers(); }, [fetchMaterial, fetchSuppliers]);
 
+  // Filter groups based on category selection
+  useEffect(() => {
+    if (form.category && dropdowns['group-master']?.data) {
+      // Find category_id from name
+      const cat = dropdowns['product-categories']?.data?.find((c: any) => c.name === form.category || String(c.id) === form.category);
+      if (cat) {
+        const filtered = dropdowns['group-master'].data.filter(
+          (g: any) => String(g.category_id) === String(cat.id)
+        );
+        setFilteredGroups(filtered as unknown as GroupOption[]);
+      } else {
+        // Show all groups if category not matched
+        setFilteredGroups(dropdowns['group-master'].data as unknown as GroupOption[]);
+      }
+    } else {
+      setFilteredGroups(dropdowns['group-master']?.data as unknown as GroupOption[] || []);
+    }
+  }, [form.category, dropdowns['group-master']?.data, dropdowns['product-categories']?.data]);
+
+  // Auto-populate HSN when group changes
+  useEffect(() => {
+    if (form.group_id && dropdowns['group-master']?.data) {
+      const group = dropdowns['group-master'].data.find((g: any) => String(g.id) === form.group_id) as any;
+      if (group) {
+        setForm(p => ({ ...p, hsn_code_display: `${group.hsn_code} (GST: ${group.gst_rate}%)` }));
+      }
+    } else {
+      setForm(p => ({ ...p, hsn_code_display: '' }));
+    }
+  }, [form.group_id, dropdowns['group-master']?.data]);
+
   const update = (key: keyof MaterialData, value: any) => {
     setForm(p => ({ ...p, [key]: value }));
     setErrors(p => { const n = { ...p }; delete n[key]; return n; });
+  };
+
+  const handleGroupChange = (value: string) => {
+    setForm(p => ({ ...p, group_id: value }));
+    setErrors(p => { const n = { ...p }; delete n['group_id']; return n; });
   };
 
   const validate = (): boolean => {
@@ -117,6 +153,7 @@ export default function MaterialMasterForm() {
     setSaving(true);
     try {
       const payload = { ...form, hazardous: form.hazardous ? 1 : 0 };
+      delete (payload as any).hsn_code_display;
       if (isNew) {
         const res = await api<{ message: string }>('/materials', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Material created!');
@@ -189,11 +226,25 @@ export default function MaterialMasterForm() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Material Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Input label="Material Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter material name" />
-          <Select label="Material Type" required options={[{ value: '', label: 'Select type' }, ...MATERIAL_TYPES.map(t => ({ value: t, label: t }))]} value={form.type} onChange={(e) => { update('type', e.target.value); update('chemical_group', ''); }} error={errors.type} />
-          <Select label="UOM" required options={[{ value: '', label: 'Select UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.uom} onChange={(e) => update('uom', e.target.value)} error={errors.uom} />
           <Select label="Category" options={[{ value: '', label: 'Select Category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category} onChange={(e) => update('category', e.target.value)} />
-          <Select label="Group" options={[{ value: '', label: 'Select group' }, ...(CHEMICAL_GROUPS[form.type] || CHEMICAL_GROUPS['Chemical']).map(g => ({ value: g, label: g }))]} value={form.chemical_group} onChange={(e) => update('chemical_group', e.target.value)} />
-          <Select label="HSN Code" options={[{ value: '', label: 'Select HSN Code' }, ...(dropdowns['hsn-codes']?.options || [])]} value={form.hsn_code} onChange={(e) => update('hsn_code', e.target.value)} />
+          <Select label="Material Type" required options={[{ value: '', label: 'Select type' }, ...MATERIAL_TYPES.map(t => ({ value: t, label: t }))]} value={form.type} onChange={(e) => { update('type', e.target.value); }} error={errors.type} />
+          <Select
+            label="Group"
+            options={[
+              { value: '', label: 'Select group' },
+              ...filteredGroups.map(g => ({ value: String(g.id), label: g.name })),
+            ]}
+            value={form.group_id}
+            onChange={(e) => handleGroupChange(e.target.value)}
+          />
+          <Select label="UOM" required options={[{ value: '', label: 'Select UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.uom} onChange={(e) => update('uom', e.target.value)} error={errors.uom} />
+          {/* HSN auto-populated from group */}
+          <div>
+            <label className="block text-xs font-medium text-gray-900 mb-1">HSN Code <span className="text-gray-400">(from Group)</span></label>
+            <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[38px] flex items-center">
+              {form.hsn_code_display || <span className="italic text-gray-400">Select a group to auto-populate</span>}
+            </div>
+          </div>
         </div>
       </div>
 
