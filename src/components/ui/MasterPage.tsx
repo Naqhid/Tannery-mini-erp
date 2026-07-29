@@ -36,6 +36,7 @@ interface FormField {
   options?: { value: string; label: string }[];
   placeholder?: string;
   gridCol?: boolean;
+  disabled?: boolean;
   validate?: 'gstin' | 'pan' | 'email' | 'phone';
 }
 
@@ -1065,7 +1066,14 @@ export default function MasterPage({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {formFields.map((field) => (
                   <div key={field.key} className={field.gridCol === false ? 'col-span-2' : ''}>
-                    {field.type === 'textarea' ? (
+                    {field.disabled && field.key === 'code' ? (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-900 mb-1">{field.label}</label>
+                        <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
+                          {formData[field.key] || <span className="italic">Will be auto-generated on save</span>}
+                        </div>
+                      </div>
+                    ) : field.type === 'textarea' ? (
                       <div>
                         <label className="block text-xs font-medium text-gray-900 mb-1">
                           {field.label} {field.required && <span className="text-red-500">*</span>}

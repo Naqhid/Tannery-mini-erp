@@ -68,7 +68,6 @@ export const menuItems: MenuItem[] = [
       { label: 'Tax Master', icon: <Receipt size={16} />, path: '/tax-master' },
       { label: 'Process Stage', icon: <ListChecks size={16} />, path: '/process-stage' },
       { label: 'Machine / Equipment', icon: <Factory size={16} />, path: '/machine' },
-      { label: 'Rate Master', icon: <Layers size={16} />, path: '/rate-master' },
       { label: 'Warehouse / Store Master', icon: <Warehouse size={16} />, path: '/warehouse-master' },
     ],
   },

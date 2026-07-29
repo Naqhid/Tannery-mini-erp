@@ -116,7 +116,7 @@ export const groupMasterModel = createMasterModel(
 export const machineModel = createMasterModel(
   'machines',
   'MAC',
-  ['id', 'code', 'name', 'uom_type', 'rate_indian', 'rate_imported', 'machine_type', 'capacity', 'description', 'status', 'created_at', 'updated_at'],
+  ['id', 'code', 'name', 'machine_type', 'uom_type', 'rate_indian', 'description', 'status', 'created_at', 'updated_at'],
   ['name', 'code'],
   {
     uniqueFields: [{ fields: ['name'] }],

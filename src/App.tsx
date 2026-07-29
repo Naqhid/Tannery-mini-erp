@@ -38,7 +38,6 @@ import ProcessStageForm from './pages/ProcessStageForm';
 import GroupMaster from './pages/GroupMaster';
 import GroupMasterForm from './pages/GroupMasterForm';
 import Machine from './pages/Machine';
-import RateMaster from './pages/RateMaster';
 import MaterialMaster from './pages/MaterialMaster';
 import MaterialMasterForm from './pages/MaterialMasterForm';
 // Sales Order Pages
@@ -150,7 +149,6 @@ function App() {
             <Route path="group-master/new" element={<GroupMasterForm />} />
             <Route path="group-master/:id" element={<GroupMasterForm />} />
             <Route path="machine" element={<Machine />} />
-            <Route path="rate-master" element={<RateMaster />} />
             {/* BOM / Recipe - BOM first, then Recipe */}
             <Route path="bom" element={<BOM />} />
             <Route path="recipe-creation" element={<RecipeCreation />} />
