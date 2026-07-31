@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import {
@@ -134,6 +135,7 @@ const emptyRecipe: Recipe = {
 
 export default function RecipeCreation() {
   const { canWrite, isReadOnly } = usePermission();
+  const navigate = useNavigate();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0 });
   const [loading, setLoading] = useState(true);
@@ -690,7 +692,7 @@ export default function RecipeCreation() {
           </div>
           <button
             className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg hover:shadow-blue-300 active:scale-95'}`}
-            onClick={canWrite ? () => openPanel() : undefined}
+            onClick={canWrite ? () => navigate('/recipe-creation/new') : undefined}
             disabled={isReadOnly}
             title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
           >
@@ -719,7 +721,7 @@ export default function RecipeCreation() {
               <div
                 key={r.id || r.code}
                 className={`p-4 border-l-4 ${cardColors[index % 8]} hover:bg-blue-50/30 transition-all cursor-pointer active:scale-[0.99]`}
-                onClick={() => openPanel(r)}
+                onClick={() => navigate(`/recipe-creation/${r.id}`)}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -759,7 +761,7 @@ export default function RecipeCreation() {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
-                  <button onClick={canWrite ? (e) => { e.stopPropagation(); openPanel(r); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-100'}`}><Edit2 size={15} /></button>
+                  <button onClick={canWrite ? (e) => { e.stopPropagation(); navigate(`/recipe-creation/${r.id}`); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-100'}`}><Edit2 size={15} /></button>
                   <button onClick={canWrite ? (e) => { e.stopPropagation(); r.id && handleDelete(r.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-100'}`}><Trash2 size={15} /></button>
                 </div>
               </div>
@@ -788,7 +790,7 @@ export default function RecipeCreation() {
               ) : recipes.length === 0 ? (
                 <tr><td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No recipes found</td></tr>
               ) : recipes.map((r, index) => (
-                <tr key={r.id || r.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(r)}>
+                <tr key={r.id || r.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => navigate(`/recipe-creation/${r.id}`)}>
                   <td className="py-3 px-4 relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${r.status === 'active' || r.status === 'Active' ? 'bg-blue-400' : 'bg-red-400'}`} />
                     <span className="font-mono text-xs text-blue-600 font-medium">{r.code}</span>
@@ -827,7 +829,7 @@ export default function RecipeCreation() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1">
-                      <button onClick={canWrite ? (e) => { e.stopPropagation(); openPanel(r); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-100'}`}><Edit2 size={14} /></button>
+                      <button onClick={canWrite ? (e) => { e.stopPropagation(); navigate(`/recipe-creation/${r.id}`); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-100'}`}><Edit2 size={14} /></button>
                       <button onClick={canWrite ? (e) => { e.stopPropagation(); r.id && handleDelete(r.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}><Trash2 size={14} /></button>
                     </div>
                   </td>

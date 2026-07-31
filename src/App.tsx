@@ -8,7 +8,9 @@ import Dashboard from './pages/Dashboard';
 import SupplierMaster from './pages/SupplierMaster';
 import SupplierMasterForm from './pages/SupplierMasterForm';
 import RecipeCreation from './pages/RecipeCreation';
+import RecipeCreationForm from './pages/RecipeCreationForm';
 import BOM from './pages/BOM';
+import BOMForm from './pages/BOMForm';
 import ProductMaster from './pages/ProductMaster';
 import ProductMasterForm from './pages/ProductMasterForm';
 import CustomerMaster from './pages/CustomerMaster';
@@ -45,6 +47,7 @@ import SalesOrder from './pages/SalesOrder';
 import SalesOrderDetail from './pages/SalesOrderDetail';
 // Settings Pages
 import UsersPage from './pages/UsersPage';
+import UserFormPage from './pages/UserForm';
 import Roles from './pages/Roles';
 import RoleForm from './pages/RoleForm';
 import Company from './pages/Company';
@@ -71,7 +74,6 @@ import SupplierPriceApproval from './pages/SupplierPriceApproval';
 import PhysicalStockEntry from './pages/PhysicalStockEntry';
 import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
 import DatabaseBackups from './pages/DatabaseBackups';
-import TaxMaster from './pages/TaxMaster';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -141,7 +143,6 @@ function App() {
             <Route path="hsn-code" element={<HSNCode />} />
             <Route path="hsn-code/new" element={<HSNCodeForm />} />
             <Route path="hsn-code/:id" element={<HSNCodeForm />} />
-            <Route path="tax-master" element={<TaxMaster />} />
             <Route path="process-stage" element={<ProcessStage />} />
             <Route path="process-stage/new" element={<ProcessStageForm />} />
             <Route path="process-stage/:id" element={<ProcessStageForm />} />
@@ -151,8 +152,11 @@ function App() {
             <Route path="machine" element={<Machine />} />
             {/* BOM / Recipe - BOM first, then Recipe */}
             <Route path="bom" element={<BOM />} />
+            <Route path="bom/new" element={<BOMForm />} />
+            <Route path="bom/:id" element={<BOMForm />} />
             <Route path="recipe-creation" element={<RecipeCreation />} />
-            <Route path="bom-revision" element={<PlaceholderPage />} />
+            <Route path="recipe-creation/new" element={<RecipeCreationForm />} />
+            <Route path="recipe-creation/:id" element={<RecipeCreationForm />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
             <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
             <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />
@@ -196,6 +200,8 @@ function App() {
             <Route path="cost-analysis" element={<PlaceholderPage />} />
             {/* Settings */}
             <Route path="users" element={<UsersPage />} />
+            <Route path="users/new" element={<UserFormPage />} />
+            <Route path="users/:id" element={<UserFormPage />} />
             <Route path="roles" element={<Roles />} />
             <Route path="roles/new" element={<RoleForm />} />
             <Route path="roles/:id" element={<RoleForm />} />

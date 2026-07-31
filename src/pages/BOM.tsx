@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import {
@@ -100,6 +101,7 @@ const emptyBOM: BOM = {
 
 export default function BOM() {
   const { canWrite, isReadOnly } = usePermission();
+  const navigate = useNavigate();
   const [boms, setBoms] = useState<BOM[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0 });
   const [loading, setLoading] = useState(true);
@@ -566,7 +568,7 @@ export default function BOM() {
           </div>
           <button
             className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg hover:shadow-blue-300 active:scale-95'}`}
-            onClick={canWrite ? () => openPanel() : undefined}
+            onClick={canWrite ? () => navigate('/bom/new') : undefined}
             disabled={isReadOnly}
             title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
           >
@@ -600,9 +602,9 @@ export default function BOM() {
               {loading ? (
                 <SkeletonLoader rows={5} cols={6} />
               ) : boms.length === 0 ? (
-                <tr><td colSpan={8}><EmptyState title="No BOMs found" message="Create a new BOM or adjust your search" actionLabel="New BOM" onAction={() => openPanel()} /></td></tr>
+                <tr><td colSpan={8}><EmptyState title="No BOMs found" message="Create a new BOM or adjust your search" actionLabel="New BOM" onAction={() => navigate('/bom/new')} /></td></tr>
               ) : boms.map((b, index) => (
-                <tr key={b.id || b.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => openPanel(b)}>
+                <tr key={b.id || b.code} className={`hover:bg-blue-50/50 transition-all group cursor-pointer relative ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => navigate(`/bom/${b.id}`)}>
                   <td className="py-3 px-4 relative">
                     <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${b.status === 'Active' || b.status === 'active' ? 'bg-blue-400' : 'bg-red-400'}`} />
                     <span className="font-mono text-xs text-blue-600 font-medium">{b.code}</span>
@@ -638,7 +640,7 @@ export default function BOM() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1">
-                      <button onClick={canWrite ? (e) => { e.stopPropagation(); openPanel(b); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-100'}`}><Edit2 size={14} /></button>
+                      <button onClick={canWrite ? (e) => { e.stopPropagation(); navigate(`/bom/${b.id}`); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-100'}`}><Edit2 size={14} /></button>
                       <button onClick={canWrite ? (e) => { e.stopPropagation(); b.id && handleDelete(b.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}><Trash2 size={14} /></button>
                     </div>
                   </td>
@@ -651,7 +653,7 @@ export default function BOM() {
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-gray-50">
           {boms.map((b) => (
-            <div key={b.id || b.code} className="p-4 hover:bg-blue-50/30 transition-colors" onClick={() => openPanel(b)}>
+            <div key={b.id || b.code} className="p-4 hover:bg-blue-50/30 transition-colors" onClick={() => navigate(`/bom/${b.id}`)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -671,7 +673,7 @@ export default function BOM() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={canWrite ? (e) => { e.stopPropagation(); openPanel(b); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}><Edit2 size={14} /></button>
+                  <button onClick={canWrite ? (e) => { e.stopPropagation(); navigate(`/bom/${b.id}`); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}><Edit2 size={14} /></button>
                   <button onClick={canWrite ? (e) => { e.stopPropagation(); b.id && handleDelete(b.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50'}`}><Trash2 size={14} /></button>
                 </div>
               </div>
