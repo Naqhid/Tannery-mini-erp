@@ -655,8 +655,8 @@ export default function BOMForm() {
                         <td className="py-2 px-2 text-gray-900">{item.material_name}</td>
                         <td className="py-2 px-2 text-gray-600">{item.type || '-'}</td>
                         <td className="py-2 px-2 text-gray-600">{item.uom}</td>
-                        <td className="py-2 px-2 font-medium text-gray-900">{item.qty.toFixed(4)}</td>
-                        <td className="py-2 px-2 text-gray-600">{(item.scrap_percent || 0).toFixed(2)}</td>
+                        <td className="py-2 px-2 font-medium text-gray-900">{Number(item.qty || 0).toFixed(4)}</td>
+                        <td className="py-2 px-2 text-gray-600">{Number(item.scrap_percent || 0).toFixed(2)}</td>
                         <td className="py-2 px-2 text-gray-600">{formatDisplayDate(item.effective_from)}</td>
                         <td className="py-2 px-2 text-gray-600">{formatDisplayDate(item.effective_to)}</td>
                         <td className="py-2 px-2 text-gray-500 italic">{item.remarks || '-'}</td>
