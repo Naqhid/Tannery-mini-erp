@@ -77,22 +77,16 @@ const emptyBOM: BOM = {
   status: 'Active', description: '', version: 1,
 };
 
-interface BOMFormProps {
-  overview?: boolean;
-}
-
-export default function BOMForm({ overview = false }: BOMFormProps) {
-  const { id: routeId } = useParams<{ id: string }>();
+export default function BOMForm() {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [overviewId, setOverviewId] = useState<string | undefined>();
-  const id = routeId ?? overviewId;
-  const isNew = routeId === 'new';
+  const isNew = !id || id === 'new';
   const { canWrite, isReadOnly } = usePermission();
 
   const [formData, setFormData] = useState<BOM>(emptyBOM);
   const [items, setItems] = useState<BOMItemRow[]>([]);
   const [versions, setVersions] = useState<BOMVersion[]>([]);
-  const [loading, setLoading] = useState(overview || !isNew);
+  const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -141,32 +135,8 @@ export default function BOMForm({ overview = false }: BOMFormProps) {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  useEffect(() => {
-    if (!overview || routeId) return;
-    let cancelled = false;
-
-    const loadCurrentBOM = async () => {
-      try {
-        const res = await api<{ data: BOM[] }>('/boms?limit=1');
-        const currentBOM = res.data?.[0];
-        if (!cancelled) {
-          setOverviewId(currentBOM?.id ? String(currentBOM.id) : undefined);
-          if (!currentBOM) setLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          toast.error('Failed to load BOM');
-          setLoading(false);
-        }
-      }
-    };
-
-    loadCurrentBOM();
-    return () => { cancelled = true; };
-  }, [overview, routeId]);
-
   const fetchBOM = useCallback(async () => {
-    if (isNew || !id) return;
+    if (isNew) return;
     try {
       setLoading(true);
       const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${id}`);
@@ -226,7 +196,20 @@ export default function BOMForm({ overview = false }: BOMFormProps) {
         toast.success(res.message || 'BOM updated successfully!');
         navigate('/bom');
       } else {
-        const res = await api('/boms', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await api<{ data: { id: number }; message?: string }>('/boms', { method: 'POST', body: JSON.stringify(payload) });
+        await Promise.all(items.map((item) => api(`/boms/${res.data.id}/items`, {
+          method: 'POST',
+          body: JSON.stringify({
+            material_id: item.material_id,
+            type: item.type,
+            uom: item.uom,
+            qty: item.qty,
+            unit_cost: item.unit_cost,
+            amount: item.amount,
+            remarks: item.remarks,
+            supplier_id: item.supplier_id || null,
+          }),
+        })));
         toast.success(res.message || 'BOM created successfully!');
         navigate('/bom');
       }
@@ -235,10 +218,6 @@ export default function BOMForm({ overview = false }: BOMFormProps) {
   };
 
   const handleCancel = () => {
-    if (overview) {
-      fetchBOM();
-      return;
-    }
     navigate('/bom');
   };
 
@@ -359,8 +338,8 @@ export default function BOMForm({ overview = false }: BOMFormProps) {
             <ArrowLeft size={16} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Bill of Materials (BOM)</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Maintain BOM and manage versions</p>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">{isNew ? 'Create Bill of Materials' : 'Edit Bill of Materials'}</h1>
+            <p className="text-xs text-gray-500 mt-0.5">{isNew ? 'Create a BOM and its components' : 'Update the BOM, components, and version details'}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
