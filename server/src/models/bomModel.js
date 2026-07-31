@@ -72,19 +72,29 @@ export async function create(data, createdBy = null) {
      data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
      createdBy]
   );
+  await createRevision(result.insertId, createdBy, 'Initial BOM created');
   return { id: result.insertId, code };
 }
 
 export async function update(id, data, updatedBy = null) {
-  const [result] = await pool.query(
-    `UPDATE boms SET code=?, name=?, product_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
-    [data.code, data.name, data.product_id, data.recipe_id, data.leather_type,
-     data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
-     data.status, data.description, data.version,
-     data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
-     updatedBy, id]
-  );
-  return result.affectedRows > 0;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [result] = await conn.query(
+      `UPDATE boms SET code=?, name=?, product_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
+      [data.code, data.name, data.product_id, data.recipe_id, data.leather_type,
+       data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
+       data.status, data.description, data.version,
+       data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
+       updatedBy, id]
+    );
+    if (result.affectedRows) await createRevisionSnapshot(conn, id, updatedBy, data.change_reason);
+    await conn.commit();
+    return result.affectedRows > 0;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
 }
 
 export async function remove(id) {
@@ -107,25 +117,70 @@ export async function getItems(bomId) {
 
 export async function addItem(bomId, data, createdBy = null) {
   const [result] = await pool.query(
-    `INSERT INTO bom_items (bom_id, material_id, type, uom, qty, unit_cost, amount, remarks, supplier_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO bom_items (bom_id, material_id, type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [bomId, data.material_id, data.type, data.uom, data.qty,
-     data.unit_cost, data.amount, data.remarks, data.supplier_id || null, createdBy]
+     data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null,
+     data.remarks, data.supplier_id || null, createdBy]
   );
+  await createRevision(bomId, createdBy, 'Component added');
   return { id: result.insertId };
 }
 
 export async function updateItem(id, data, updatedBy = null) {
   const [result] = await pool.query(
-    `UPDATE bom_items SET material_id=?, type=?, uom=?, qty=?, unit_cost=?, amount=?, remarks=?, supplier_id=?, updated_by=? WHERE id=?`,
-    [data.material_id, data.type, data.uom, data.qty, data.unit_cost, data.amount, data.remarks, data.supplier_id || null, updatedBy, id]
+    `UPDATE bom_items SET material_id=?, type=?, uom=?, qty=?, unit_cost=?, amount=?, scrap_percent=?, effective_from=?, effective_to=?, remarks=?, supplier_id=?, updated_by=? WHERE id=?`,
+    [data.material_id, data.type, data.uom, data.qty, data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null, data.remarks, data.supplier_id || null, updatedBy, id]
   );
+  if (result.affectedRows) {
+    const [[item]] = await pool.query('SELECT bom_id FROM bom_items WHERE id=?', [id]);
+    if (item) await createRevision(item.bom_id, updatedBy, 'Component updated');
+  }
   return result.affectedRows > 0;
 }
 
 export async function removeItem(id) {
+  const [[item]] = await pool.query('SELECT bom_id FROM bom_items WHERE id=?', [id]);
   const [result] = await pool.query('DELETE FROM bom_items WHERE id = ?', [id]);
+  if (result.affectedRows && item) await createRevision(item.bom_id, null, 'Component removed');
   return result.affectedRows > 0;
+}
+
+async function createRevisionSnapshot(conn, bomId, userId = null, changeReason = null) {
+  const [[bom]] = await conn.query('SELECT * FROM boms WHERE id=?', [bomId]);
+  const [items] = await conn.query('SELECT * FROM bom_items WHERE bom_id=? ORDER BY id', [bomId]);
+  const [[latest]] = await conn.query('SELECT version_no, revision_no FROM bom_versions WHERE bom_id=? ORDER BY version_no DESC, revision_no DESC LIMIT 1', [bomId]);
+  const versionNo = latest?.version_no || Number(bom.version) || 1;
+  const revisionNo = latest ? latest.revision_no + 1 : 1;
+  await conn.query("UPDATE bom_versions SET status='Superseded' WHERE bom_id=? AND status='Active'", [bomId]);
+  await conn.query(
+    `INSERT INTO bom_versions (bom_id, version_no, revision_no, status, effective_from, effective_to, change_reason, snapshot, created_by, released_by, released_on)
+     VALUES (?,?,?,?,?,?,?,?,?,?,NOW())`,
+    [bomId, versionNo, revisionNo, 'Active', bom.valid_from || null, bom.valid_to || null, changeReason || null,
+      JSON.stringify({ bom, items }), userId, userId]
+  );
+}
+
+export async function createRevision(bomId, userId = null, changeReason = null) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await createRevisionSnapshot(conn, bomId, userId, changeReason);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
+}
+
+export async function getVersions(bomId) {
+  const [rows] = await pool.query(
+    `SELECT id, version_no, revision_no, status, effective_from, effective_to, change_reason,
+      created_by, released_by, released_on, created_at
+     FROM bom_versions WHERE bom_id=? ORDER BY version_no DESC, revision_no DESC`,
+    [bomId]
+  );
+  return rows;
 }
 
 export async function getStats() {

@@ -33,6 +33,7 @@ interface BOMItemRow {
 }
 
 interface BOMVersion {
+  id: number;
   version: string;
   revision: string;
   effective_from: string;
@@ -92,6 +93,8 @@ export default function BOMForm() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [activeTab, setActiveTab] = useState<'components' | 'routings' | 'attachments' | 'notes'>('components');
   const [selectedVersion, setSelectedVersion] = useState<string>('');
+  const [componentSearch, setComponentSearch] = useState('');
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
 
   // Item modal
   const [showItemModal, setShowItemModal] = useState(false);
@@ -139,7 +142,7 @@ export default function BOMForm() {
     if (isNew) return;
     try {
       setLoading(true);
-      const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${id}`);
+      const detail = await api<{ data: BOM & { items: BOMItemRow[]; versions: Array<{ id: number; version_no: number; revision_no: number; effective_from: string; effective_to: string; status: string; released_by: string; released_on: string }> } }>(`/boms/${id}`);
       const bom = detail.data;
       setFormData({ ...emptyBOM, ...bom, valid_from: formatDate(bom.valid_from), valid_to: formatDate(bom.valid_to) });
       setItems((detail.data.items || []).map(item => ({
@@ -148,18 +151,20 @@ export default function BOMForm() {
         effective_from: item.effective_from || bom.valid_from || '',
         effective_to: item.effective_to || bom.valid_to || '',
       })));
-      // Build version history (mock from current data)
-      setVersions([{
-        version: `V0${bom.version || 1}`,
-        revision: `R0${bom.version || 1}`,
-        effective_from: formatDisplayDate(bom.valid_from),
-        effective_to: formatDisplayDate(bom.valid_to),
-        status: bom.status === 'Active' ? 'Active' : 'Superseded',
-        released_by: bom.updated_by || 'Admin User',
-        released_on: formatDisplayDate(bom.updated_at || bom.created_at),
-        is_current: true,
-      }]);
-      setSelectedVersion(`V0${bom.version || 1}`);
+      setSelectedItemIds([]);
+      const loadedVersions = (detail.data.versions || []).map((version) => ({
+        id: version.id,
+        version: `V${String(version.version_no).padStart(2, '0')}`,
+        revision: `R${String(version.revision_no).padStart(2, '0')}`,
+        effective_from: formatDisplayDate(version.effective_from),
+        effective_to: formatDisplayDate(version.effective_to),
+        status: version.status,
+        released_by: version.released_by || 'Admin User',
+        released_on: formatDisplayDate(version.released_on),
+        is_current: version.status === 'Active',
+      }));
+      setVersions(loadedVersions);
+      setSelectedVersion(loadedVersions.find((version) => version.is_current)?.version || '');
     } catch { toast.error('Failed to load BOM'); navigate('/bom'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
@@ -219,6 +224,20 @@ export default function BOMForm() {
 
   const handleCancel = () => {
     navigate('/bom');
+  };
+
+  const handleNewRevision = async () => {
+    if (isNew || !id) {
+      toast.info('Save the BOM before creating a revision.');
+      return;
+    }
+    try {
+      await api(`/boms/${id}/revisions`, { method: 'POST', body: JSON.stringify({ change_reason: 'Manual revision' }) });
+      toast.success('New BOM revision created.');
+      fetchBOM();
+    } catch (err) {
+      toast.error('Failed to create BOM revision: ' + (err as Error).message);
+    }
   };
 
   // Component CRUD
@@ -288,7 +307,31 @@ export default function BOMForm() {
         setItems(detail.data.items || []);
       } else { setItems(prev => prev.filter(i => i.id !== itemId)); }
       toast.success('Component deleted!');
+      setSelectedItemIds((current) => current.filter((selectedId) => selectedId !== itemId));
     } catch (err) { toast.error('Failed to delete: ' + (err as Error).message); }
+  };
+
+  const filteredItems = items.filter((item) => {
+    const query = componentSearch.trim().toLowerCase();
+    return !query || item.material_code.toLowerCase().includes(query) || item.material_name.toLowerCase().includes(query);
+  });
+
+  const toggleItemSelection = (itemId: number) => {
+    setSelectedItemIds((current) => current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]);
+  };
+
+  const toggleAllItems = () => {
+    const visibleIds = filteredItems.map((item) => item.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedItemIds.includes(id));
+    setSelectedItemIds((current) => allVisibleSelected ? current.filter((id) => !visibleIds.includes(id)) : [...new Set([...current, ...visibleIds])]);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedItemIds.length) { toast.error('Select components to delete'); return; }
+    try {
+      await Promise.all(selectedItemIds.map((itemId) => handleDeleteItem(itemId)));
+      setSelectedItemIds([]);
+    } catch { /* individual delete errors are already shown */ }
   };
 
   // Import BOM
@@ -448,7 +491,7 @@ export default function BOMForm() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold text-blue-700">BOM Versions</h2>
-            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all">
+            <button onClick={handleNewRevision} disabled={isReadOnly} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all disabled:opacity-50">
               <Plus size={12} /> New Revision
             </button>
           </div>
@@ -544,7 +587,7 @@ export default function BOMForm() {
                   <button onClick={openImportModal} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-all">
                     <Plus size={12} /> Add From Template
                   </button>
-                  <button onClick={() => { const selectedIds = items.filter(i => (i as any)._selected).map(i => i.id); if (selectedIds.length === 0) { toast.error('Select items to delete'); return; } selectedIds.forEach(id => handleDeleteItem(id)); }}
+                  <button onClick={handleBulkDelete} disabled={!selectedItemIds.length}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all">
                     <Trash2 size={12} /> Delete
                   </button>
@@ -562,7 +605,7 @@ export default function BOMForm() {
                   </div>
                   <div className="relative">
                     <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input type="text" placeholder="Search Component" className="pl-7 pr-3 py-1.5 text-[11px] border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    <input type="text" value={componentSearch} onChange={(event) => setComponentSearch(event.target.value)} placeholder="Search Component" className="pl-7 pr-3 py-1.5 text-[11px] border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                 </div>
               </div>
@@ -572,7 +615,7 @@ export default function BOMForm() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-gray-200">
-                      <th className="py-2.5 px-2 w-8"><input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" /></th>
+                      <th className="py-2.5 px-2 w-8"><input type="checkbox" checked={filteredItems.length > 0 && filteredItems.every((item) => selectedItemIds.includes(item.id))} onChange={toggleAllItems} className="w-3.5 h-3.5 rounded border-gray-300" /></th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Component Code</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Component Description</th>
@@ -589,9 +632,9 @@ export default function BOMForm() {
                   <tbody className="divide-y divide-gray-100">
                     {items.length === 0 ? (
                       <tr><td colSpan={12} className="py-8 text-center text-gray-400 text-xs">No components added yet. Click "Add Component" to start.</td></tr>
-                    ) : items.map((item, idx) => (
+                    ) : filteredItems.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
-                        <td className="py-2 px-2"><input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" /></td>
+                        <td className="py-2 px-2"><input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={() => toggleItemSelection(item.id)} className="w-3.5 h-3.5 rounded border-gray-300" /></td>
                         <td className="py-2 px-2 text-gray-500">{idx + 1}</td>
                         <td className="py-2 px-2 font-mono text-blue-600 font-medium">{item.material_code}</td>
                         <td className="py-2 px-2 text-gray-900">{item.material_name}</td>
@@ -614,7 +657,7 @@ export default function BOMForm() {
                 </table>
               </div>
               {items.length > 0 && (
-                <p className="text-[11px] text-gray-400 mt-2">Showing 1 to {items.length} of {items.length} articles</p>
+                <p className="text-[11px] text-gray-400 mt-2">Showing {filteredItems.length} of {items.length} components</p>
               )}
             </div>
           )}

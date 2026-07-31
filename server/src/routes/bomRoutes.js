@@ -8,6 +8,8 @@ const router = Router();
 router.get('/', validatePagination, ctrl.list);
 router.get('/stats', ctrl.stats);
 router.get('/:id', validateId, ctrl.getOne);
+router.get('/:id/versions', validateId, ctrl.listVersions);
+router.post('/:id/revisions', validateId, requireWriteAccess, ctrl.createRevision);
 
 // BOM items
 router.get('/:id/items', validateId, ctrl.listItems);

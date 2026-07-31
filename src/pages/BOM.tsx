@@ -107,6 +107,7 @@ export default function BOM() {
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 350);
+  const [statusFilter, setStatusFilter] = useState('');
   const [showPanel, setShowPanel] = useState(false);
   const [selectedBOM, setSelectedBOM] = useState<BOM | null>(null);
   const [formData, setFormData] = useState<BOM>(emptyBOM);
@@ -168,6 +169,7 @@ export default function BOM() {
       setLoading(true);
       const params = new URLSearchParams();
       if (debouncedSearch) params.set('search', debouncedSearch);
+      if (statusFilter) params.set('status', statusFilter);
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) {
@@ -183,7 +185,7 @@ export default function BOM() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, statusFilter, currentPage, pageSize, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -195,7 +197,7 @@ export default function BOM() {
   useEffect(() => { fetchBOMs(); }, [fetchBOMs]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, sortBy, sortOrder, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, statusFilter, sortBy, sortOrder, pageSize]);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -536,9 +538,15 @@ export default function BOM() {
                 className="w-full pl-9 pr-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all bg-white"
               />
             </div>
-            <button className="p-2 rounded-lg border border-purple-200 text-purple-500 hover:bg-purple-50 hover:border-purple-300 transition-all">
-              <Filter size={15} />
-            </button>
+            <div className="relative">
+              <Filter size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-purple-500 pointer-events-none" />
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="appearance-none rounded-lg border border-purple-200 bg-white py-2 pl-7 pr-6 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-200">
+                <option value="">All statuses</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Draft">Draft</option>
+              </select>
+            </div>
             <ExportMenu
               onPreview={() => {
                 const columns = ['Code', 'Name', 'Product', 'Leather Type', 'Thickness', 'Status'];

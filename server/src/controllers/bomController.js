@@ -14,8 +14,20 @@ export async function getOne(req, res, next) {
   try {
     const bom = await model.getById(req.params.id);
     if (!bom) return res.status(404).json({ error: 'BOM not found' });
-    const items = await model.getItems(req.params.id);
-    res.json({ data: { ...bom, items } });
+    const [items, versions] = await Promise.all([model.getItems(req.params.id), model.getVersions(req.params.id)]);
+    res.json({ data: { ...bom, items, versions } });
+  } catch (err) { next(err); }
+}
+
+export async function listVersions(req, res, next) {
+  try { res.json({ data: await model.getVersions(req.params.id) }); }
+  catch (err) { next(err); }
+}
+
+export async function createRevision(req, res, next) {
+  try {
+    await model.createRevision(req.params.id, req.user?.id || null, req.body.change_reason || 'Manual revision');
+    res.status(201).json({ data: await model.getVersions(req.params.id), message: 'BOM revision created successfully!' });
   } catch (err) { next(err); }
 }
 
