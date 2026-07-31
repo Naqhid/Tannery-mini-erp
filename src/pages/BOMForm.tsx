@@ -167,7 +167,7 @@ export default function BOMForm() {
         is_current: version.status === 'Active',
       }));
       setVersions(loadedVersions);
-      setSelectedVersion(loadedVersions.find((version) => version.is_current)?.version || '');
+      setSelectedVersion(String(loadedVersions.find((version) => version.is_current)?.id || ''));
     } catch { toast.error('Failed to load BOM'); navigate('/bom'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
@@ -521,7 +521,7 @@ export default function BOMForm() {
                 ) : versions.map((v, idx) => (
                   <tr key={idx} className={`transition-all ${v.is_current ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
                     <td className="py-2 px-2">
-                      <input type="radio" name="version" checked={selectedVersion === v.version} onChange={() => setSelectedVersion(v.version)} className="w-3.5 h-3.5 text-blue-600" />
+                      <input type="radio" name="version" checked={selectedVersion === String(v.id)} onChange={() => setSelectedVersion(String(v.id))} className="w-3.5 h-3.5 text-blue-600" />
                     </td>
                     <td className="py-2 px-2 font-medium text-gray-900">{v.version}</td>
                     <td className="py-2 px-2">
@@ -603,7 +603,7 @@ export default function BOMForm() {
                     <span>Compare with</span>
                     <select className="px-2 py-1 text-[11px] border border-gray-200 rounded-lg bg-white">
                       <option>-- Select Version --</option>
-                      {versions.map(v => <option key={v.version} value={v.version}>{v.version}</option>)}
+                      {versions.map(v => <option key={v.id} value={v.id}>{v.version} {v.revision}</option>)}
                     </select>
                   </div>
                   <div className="relative">
