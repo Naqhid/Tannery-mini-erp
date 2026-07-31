@@ -194,8 +194,7 @@ export default function BOMForm() {
       if (!isNew) {
         const res = await api(`/boms/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success(res.message || 'BOM updated successfully!');
-        // Refresh the BOM data after saving
-        await fetchBOM();
+        navigate('/bom');
       } else {
         const res = await api('/boms', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'BOM created successfully!');
@@ -328,10 +327,16 @@ export default function BOMForm() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {isNew ? (
-            <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 active:scale-95">
-              <Save size={14} /> {saving ? 'Saving...' : 'Save BOM'}
-            </button>
+            <>
+              <button onClick={() => navigate('/bom')} disabled={saving}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50">
+                <X size={14} /> Cancel
+              </button>
+              <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 active:scale-95">
+                <Save size={14} /> {saving ? 'Saving...' : 'Save BOM'}
+              </button>
+            </>
           ) : (
             <>
               <button onClick={() => navigate('/bom/new')} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
@@ -340,6 +345,10 @@ export default function BOMForm() {
               <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 active:scale-95">
                 <Save size={14} /> {saving ? 'Saving...' : 'Save BOM'}
+              </button>
+              <button onClick={() => navigate('/bom')} disabled={saving}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50">
+                <X size={14} /> Cancel
               </button>
               <button onClick={openImportModal} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
                 <Copy size={14} /> Copy BOM
