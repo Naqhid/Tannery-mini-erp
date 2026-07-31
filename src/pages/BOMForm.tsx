@@ -77,16 +77,22 @@ const emptyBOM: BOM = {
   status: 'Active', description: '', version: 1,
 };
 
-export default function BOMForm() {
-  const { id } = useParams<{ id: string }>();
+interface BOMFormProps {
+  overview?: boolean;
+}
+
+export default function BOMForm({ overview = false }: BOMFormProps) {
+  const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const isNew = !id || id === 'new';
+  const [overviewId, setOverviewId] = useState<string | undefined>();
+  const id = routeId ?? overviewId;
+  const isNew = routeId === 'new';
   const { canWrite, isReadOnly } = usePermission();
 
   const [formData, setFormData] = useState<BOM>(emptyBOM);
   const [items, setItems] = useState<BOMItemRow[]>([]);
   const [versions, setVersions] = useState<BOMVersion[]>([]);
-  const [loading, setLoading] = useState(!isNew);
+  const [loading, setLoading] = useState(overview || !isNew);
   const [saving, setSaving] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -135,8 +141,32 @@ export default function BOMForm() {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
+  useEffect(() => {
+    if (!overview || routeId) return;
+    let cancelled = false;
+
+    const loadCurrentBOM = async () => {
+      try {
+        const res = await api<{ data: BOM[] }>('/boms?limit=1');
+        const currentBOM = res.data?.[0];
+        if (!cancelled) {
+          setOverviewId(currentBOM?.id ? String(currentBOM.id) : undefined);
+          if (!currentBOM) setLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          toast.error('Failed to load BOM');
+          setLoading(false);
+        }
+      }
+    };
+
+    loadCurrentBOM();
+    return () => { cancelled = true; };
+  }, [overview, routeId]);
+
   const fetchBOM = useCallback(async () => {
-    if (isNew) return;
+    if (isNew || !id) return;
     try {
       setLoading(true);
       const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${id}`);
@@ -202,6 +232,14 @@ export default function BOMForm() {
       }
     } catch (err) { toast.error('Failed to save BOM: ' + (err as Error).message); }
     finally { setSaving(false); }
+  };
+
+  const handleCancel = () => {
+    if (overview) {
+      fetchBOM();
+      return;
+    }
+    navigate('/bom');
   };
 
   // Component CRUD
@@ -328,7 +366,7 @@ export default function BOMForm() {
         <div className="flex items-center gap-2 flex-wrap">
           {isNew ? (
             <>
-              <button onClick={() => navigate('/bom')} disabled={saving}
+              <button onClick={handleCancel} disabled={saving}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50">
                 <X size={14} /> Cancel
               </button>
@@ -346,7 +384,7 @@ export default function BOMForm() {
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 active:scale-95">
                 <Save size={14} /> {saving ? 'Saving...' : 'Save BOM'}
               </button>
-              <button onClick={() => navigate('/bom')} disabled={saving}
+              <button onClick={handleCancel} disabled={saving}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50">
                 <X size={14} /> Cancel
               </button>

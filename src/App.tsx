@@ -9,7 +9,6 @@ import SupplierMaster from './pages/SupplierMaster';
 import SupplierMasterForm from './pages/SupplierMasterForm';
 import RecipeCreation from './pages/RecipeCreation';
 import RecipeCreationForm from './pages/RecipeCreationForm';
-import BOM from './pages/BOM';
 import BOMForm from './pages/BOMForm';
 import ProductMaster from './pages/ProductMaster';
 import ProductMasterForm from './pages/ProductMasterForm';
@@ -151,7 +150,7 @@ function App() {
             <Route path="group-master/:id" element={<GroupMasterForm />} />
             <Route path="machine" element={<Machine />} />
             {/* BOM / Recipe - BOM first, then Recipe */}
-            <Route path="bom" element={<BOM />} />
+            <Route path="bom" element={<BOMForm overview />} />
             <Route path="bom/new" element={<BOMForm />} />
             <Route path="bom/:id" element={<BOMForm />} />
             <Route path="recipe-creation" element={<RecipeCreation />} />
