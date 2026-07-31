@@ -5,7 +5,7 @@ interface SkeletonLoaderProps {
 
 export default function SkeletonLoader({ rows = 5, cols = 4 }: SkeletonLoaderProps) {
   return (
-    <tbody>
+    <>
       {Array.from({ length: rows }).map((_, i) => (
         <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
           <td className="py-3.5 px-5">
@@ -27,6 +27,6 @@ export default function SkeletonLoader({ rows = 5, cols = 4 }: SkeletonLoaderPro
           </td>
         </tr>
       ))}
-    </tbody>
+    </>
   );
 }

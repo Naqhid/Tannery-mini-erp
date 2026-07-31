@@ -147,7 +147,10 @@ export default function BOMForm() {
       setFormData({ ...emptyBOM, ...bom, valid_from: formatDate(bom.valid_from), valid_to: formatDate(bom.valid_to) });
       setItems((detail.data.items || []).map(item => ({
         ...item,
-        scrap_percent: item.scrap_percent || 0,
+        qty: Number(item.qty) || 0,
+        unit_cost: Number(item.unit_cost) || 0,
+        amount: Number(item.amount) || 0,
+        scrap_percent: Number(item.scrap_percent) || 0,
         effective_from: item.effective_from || bom.valid_from || '',
         effective_to: item.effective_to || bom.valid_to || '',
       })));
