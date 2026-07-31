@@ -73,7 +73,7 @@ interface BOM {
 }
 
 const emptyBOM: BOM = {
-  code: '', name: '', product_id: null, leather_type: '', process_type: 'Manufacturing',
+  code: '', name: '', product_id: null, leather_type: '', process_type: 'manufacturing',
   thickness: '', uom: '', valid_from: '', valid_to: '',
   status: 'Active', description: '', version: 1,
 };
@@ -144,7 +144,13 @@ export default function BOMForm() {
       setLoading(true);
       const detail = await api<{ data: BOM & { items: BOMItemRow[]; versions: Array<{ id: number; version_no: number; revision_no: number; effective_from: string; effective_to: string; status: string; released_by: string; released_on: string }> } }>(`/boms/${id}`);
       const bom = detail.data;
-      setFormData({ ...emptyBOM, ...bom, valid_from: formatDate(bom.valid_from), valid_to: formatDate(bom.valid_to) });
+      setFormData({
+        ...emptyBOM,
+        ...bom,
+        process_type: String(bom.process_type || 'manufacturing').toLowerCase(),
+        valid_from: formatDate(bom.valid_from),
+        valid_to: formatDate(bom.valid_to),
+      });
       setItems((detail.data.items || []).map(item => ({
         ...item,
         qty: Number(item.qty) || 0,
@@ -196,6 +202,7 @@ export default function BOMForm() {
 
   const handleSave = async () => {
     if (!formData.name) { toast.error('BOM Name is required'); return; }
+    if (!formData.product_id) { toast.error('Product / Article is required'); return; }
     setSaving(true);
     try {
       const payload = { ...formData };
@@ -318,6 +325,14 @@ export default function BOMForm() {
     const query = componentSearch.trim().toLowerCase();
     return !query || item.material_code.toLowerCase().includes(query) || item.material_name.toLowerCase().includes(query);
   });
+
+  const productOptions = [
+    { value: '', label: dropdowns['products']?.loading ? 'Loading...' : 'Select product' },
+    ...(formData.product_id && !dropdowns['products']?.options.some((option: { value: string }) => option.value === String(formData.product_id))
+      ? [{ value: String(formData.product_id), label: formData.product_name || `Product #${formData.product_id}` }]
+      : []),
+    ...(dropdowns['products']?.options || []),
+  ];
 
   const toggleItemSelection = (itemId: number) => {
     setSelectedItemIds((current) => current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]);
@@ -442,10 +457,7 @@ export default function BOMForm() {
             <div>
               <label className="block text-[11px] font-medium text-gray-600 mb-1">Product / Article <span className="text-red-500">*</span></label>
               <Select
-                options={[
-                  { value: '', label: dropdowns['products']?.loading ? 'Loading...' : 'Select product' },
-                  ...(dropdowns['products']?.options || []),
-                ]}
+                options={productOptions}
                 value={String(formData.product_id || '')}
                 onChange={(e) => handleProductChange(e.target.value)}
               />
@@ -460,12 +472,12 @@ export default function BOMForm() {
               <Select
                 label="BOM Type"
                 options={[
-                  { value: 'Manufacturing', label: 'Manufacturing' },
-                  { value: 'Finishing', label: 'Finishing' },
-                  { value: 'Tanning', label: 'Tanning' },
-                  { value: 'Dyeing', label: 'Dyeing' },
+                  { value: 'manufacturing', label: 'Manufacturing' },
+                  { value: 'finishing', label: 'Finishing' },
+                  { value: 'tanning', label: 'Tanning' },
+                  { value: 'dyeing', label: 'Dyeing' },
                 ]}
-                value={formData.process_type || 'Manufacturing'}
+                value={formData.process_type || 'manufacturing'}
                 onChange={(e) => updateField('process_type', e.target.value)}
               />
             </div>
