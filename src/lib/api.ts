@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+export const API_BASE = import.meta.env.VITE_API_BASE || `${import.meta.env.BASE_URL}api`;
 
 const TOKEN_KEY = 'tannery_token';
 const REFRESH_TOKEN_KEY = 'tannery_refresh_token';
@@ -49,7 +49,7 @@ function redirectToLogin() {
   localStorage.removeItem('tannery_user');
   // Only redirect if not already on login page
   if (!window.location.pathname.includes('/login')) {
-    window.location.href = '/login';
+    window.location.href = `${import.meta.env.BASE_URL}login`;
   }
 }
 

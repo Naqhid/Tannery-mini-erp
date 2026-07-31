@@ -36,7 +36,7 @@ import { previewPDF, downloadPDF } from '../lib/pdfExport';
 import { exportToExcel } from '../lib/excelExport';
 import { useDropdowns } from '../lib/useDropdowns';
 import { usePermission } from '../lib/usePermission';
-import api from '../lib/api';
+import api, { API_BASE } from '../lib/api';
 
 interface ProcessStage {
   id?: number;
@@ -1109,7 +1109,7 @@ export default function RecipeCreation() {
                                   const fd = new FormData();
                                   fd.append('file', file);
                                   const token = localStorage.getItem('tannery_token');
-                                  const res = await fetch(`/api/recipes/${selectedRecipe.id}/attachments`, {
+                                  const res = await fetch(`${API_BASE}/recipes/${selectedRecipe.id}/attachments`, {
                                     method: 'POST',
                                     headers: {
                                       ...(token ? { Authorization: `Bearer ${token}` } : {}),

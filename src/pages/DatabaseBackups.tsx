@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { Download, Trash2, Plus, HardDrive, RefreshCw } from 'lucide-react';
-import api from '../lib/api';
+import api, { API_BASE } from '../lib/api';
 
 interface Backup {
   filename: string;
@@ -57,8 +57,7 @@ export default function DatabaseBackups() {
 
   const handleDownload = (filename: string) => {
     const token = localStorage.getItem('tannery_token');
-    const baseUrl = import.meta.env.VITE_API_BASE || '/api';
-    const url = `${baseUrl}/backups/download/${encodeURIComponent(filename)}`;
+    const url = `${API_BASE}/backups/download/${encodeURIComponent(filename)}`;
 
     // Download as .sql (server decompresses .gz on the fly)
     const downloadName = filename.endsWith('.sql.gz') ? filename.replace('.gz', '') : filename;

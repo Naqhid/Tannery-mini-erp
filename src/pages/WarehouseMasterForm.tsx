@@ -9,7 +9,7 @@ import {
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import AddressFields from '../components/ui/AddressFields';
-import api from '../lib/api';
+import api, { API_BASE } from '../lib/api';
 
 interface WarehouseData {
   id?: number;
@@ -241,7 +241,7 @@ export default function WarehouseMasterForm() {
       const formData = new FormData();
       formData.append('file', file);
       const token = localStorage.getItem('tannery_token');
-      const res = await fetch(`${import.meta.env.VITE_API_BASE || '/api'}/warehouses/${id}/attachments`, {
+      const res = await fetch(`${API_BASE}/warehouses/${id}/attachments`, {
         method: 'POST',
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: formData,

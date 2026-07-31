@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
-import api from '../lib/api';
+import api, { API_BASE } from '../lib/api';
 
 // ---- Types ----
 interface Customer { id: number; code: string; name: string; contact_person?: string; address?: string; }
@@ -349,7 +349,7 @@ export default function SalesOrderDetail() {
       fd.append('category', uploadCategory);
       fd.append('remarks', uploadRemarks);
       const token = localStorage.getItem('tannery_token');
-      const res = await fetch(`/api/sales-orders/${id}/attachments`, {
+      const res = await fetch(`${API_BASE}/sales-orders/${id}/attachments`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,

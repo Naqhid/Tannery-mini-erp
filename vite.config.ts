@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.VITE_BASE || '/',
+  base: process.env.VITE_BASE || '/demo/',
   plugins: [react()],
   optimizeDeps: {
     include: ['lucide-react', 'jspdf', 'jspdf-autotable'],
@@ -24,6 +24,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/demo/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/demo/, ''),
+      },
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,

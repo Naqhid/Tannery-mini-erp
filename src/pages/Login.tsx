@@ -48,7 +48,7 @@ export default function Login() {
         {/* Logo and Title - Same as main dashboard */}
         <div className="text-center mb-4">
           <div className="flex items-center justify-center -mt-16">
-            <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" className="h-[180px] object-contain brightness-[2] drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
+            <img src={`${import.meta.env.BASE_URL}images/company-logo.png`} alt="Demo Leather" className="h-[180px] object-contain brightness-[2] drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
           </div>
           <h1 className="text-4xl font-black text-white mb-1.5 tracking-wider -mt-12">CORIX</h1>
           <p className="text-white text-xs font-semibold tracking-[0.25em] uppercase">Powering Modern Tanneries</p>

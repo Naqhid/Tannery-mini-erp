@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, FlaskConical, Upload, Paperclip } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
-import api from '../lib/api';
+import api, { API_BASE } from '../lib/api';
 import { useDropdowns } from '../lib/useDropdowns';
 
 interface Supplier { id: number; name: string; code: string; }
@@ -176,7 +176,7 @@ export default function MaterialMasterForm() {
       const fd = new FormData();
       fd.append('file', file);
       const token = localStorage.getItem('tannery_token');
-      const res = await fetch(`/api/materials/${form.id}/attachment`, {
+      const res = await fetch(`${API_BASE}/materials/${form.id}/attachment`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
