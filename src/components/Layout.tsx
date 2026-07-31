@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
-import { Search, Bell, ChevronDown, ChevronRight, Menu, LogOut } from 'lucide-react';
+import { Search, Bell, ChevronDown, ChevronRight, Menu, LogOut, X } from 'lucide-react';
 import Sidebar, { menuItems } from './Sidebar';
 import { useAuth } from '../lib/authContext';
 
@@ -50,6 +50,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const path = location.pathname;
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -133,7 +134,7 @@ export default function Layout() {
       <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
       <div className={`flex-1 min-w-0 transition-all duration-300 overflow-y-auto ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
         {/* Top Header */}
-        <header className="bg-white border-b border-gray-200/60 shadow-sm">
+        <header className="relative bg-white border-b border-gray-200/60 shadow-sm">
           {/* First row - Title, Logo, Actions */}
           <div className="h-14 sm:h-16 flex items-center justify-between px-2 sm:px-4 lg:px-6">
             {/* Left section - Hamburger + Logo */}
@@ -213,7 +214,11 @@ export default function Layout() {
             </div>
 
             {/* Mobile search button */}
-            <button className="md:hidden p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
+            <button
+              onClick={() => { setMobileSearchOpen(true); setSearchFocused(true); }}
+              className="md:hidden p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+              aria-label="Search menu"
+            >
               <Search size={18} />
             </button>
 
@@ -265,6 +270,66 @@ export default function Layout() {
             </div>
           </div>
           </div>
+
+          {mobileSearchOpen && (
+            <div ref={searchRef} className="md:hidden absolute inset-x-0 top-0 z-50 bg-white border-b border-gray-200 shadow-lg p-3">
+              <div className="flex items-center gap-2 rounded-xl border border-blue-400 bg-white px-3 py-2 shadow-sm">
+                <Search size={18} className="shrink-0 text-blue-500" />
+                <input
+                  ref={searchInputRef}
+                  autoFocus
+                  type="text"
+                  placeholder="Search menu..."
+                  value={searchQuery}
+                  className="min-w-0 flex-1 bg-transparent border-none outline-none text-sm text-gray-700 placeholder-gray-400"
+                  onFocus={() => setSearchFocused(true)}
+                  onChange={(e) => { setSearchQuery(e.target.value); setHighlightedIndex(-1); setSearchFocused(true); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setHighlightedIndex(prev => Math.min(prev + 1, searchResults.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setHighlightedIndex(prev => Math.max(prev - 1, 0));
+                    } else if (e.key === 'Enter' && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+                      e.preventDefault();
+                      navigate(searchResults[highlightedIndex].path);
+                      setSearchQuery('');
+                      setSearchFocused(false);
+                      setMobileSearchOpen(false);
+                    } else if (e.key === 'Escape') {
+                      setSearchQuery('');
+                      setSearchFocused(false);
+                      setMobileSearchOpen(false);
+                    }
+                  }}
+                />
+                <button onClick={() => { setSearchQuery(''); setSearchFocused(false); setMobileSearchOpen(false); }} className="p-1 text-gray-400 hover:text-gray-700" aria-label="Close search">
+                  <X size={18} />
+                </button>
+              </div>
+              {showSearchResults && (
+                <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                  {searchResults.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-400 text-center">No results found</div>
+                  ) : searchResults.map((item, idx) => (
+                    <button
+                      key={item.path}
+                      onMouseDown={(e) => { e.preventDefault(); navigate(item.path); setSearchQuery(''); setSearchFocused(false); setMobileSearchOpen(false); }}
+                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${idx === highlightedIndex ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <Search size={14} className="text-gray-400 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{item.label}</div>
+                        {item.parent && <div className="text-[11px] text-gray-400">{item.parent}</div>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </header>
 
         {/* Main Content */}
