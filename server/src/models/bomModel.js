@@ -80,11 +80,14 @@ export async function update(id, data, updatedBy = null) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // Auto-increment version on each update
+    const [[current]] = await conn.query('SELECT version FROM boms WHERE id=?', [id]);
+    const newVersion = (current?.version || 0) + 1;
     const [result] = await conn.query(
       `UPDATE boms SET code=?, name=?, product_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
       [data.code, data.name, data.product_id, data.recipe_id, data.leather_type,
        data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
-       data.status, data.description, data.version,
+       data.status, data.description, newVersion,
        data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
        updatedBy, id]
     );
@@ -105,9 +108,11 @@ export async function remove(id) {
 // --- BOM Items ---
 export async function getItems(bomId) {
   const [rows] = await pool.query(
-    `SELECT bi.*, m.code AS material_code, m.name AS material_name
+    `SELECT bi.*, m.code AS material_code, m.name AS material_name,
+       s.name AS supplier_name
      FROM bom_items bi
      JOIN materials m ON bi.material_id = m.id
+     LEFT JOIN suppliers s ON bi.supplier_id = s.id
      WHERE bi.bom_id = ?
      ORDER BY bi.id`,
     [bomId]

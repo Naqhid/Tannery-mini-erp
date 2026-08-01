@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import {
   Plus, Save, X, Edit2, Trash2, ArrowLeft, ClipboardList, Download, Search,
-  RotateCcw, Copy, Pencil, MoreHorizontal, FileText, Paperclip, MessageSquare,
+  RotateCcw, Copy, FileText, Paperclip, MessageSquare,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -420,6 +420,9 @@ export default function BOMForm() {
               <button onClick={() => navigate('/bom/new')} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
                 <Plus size={14} /> New BOM
               </button>
+              <button onClick={openImportModal} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
+                <Download size={14} /> Import
+              </button>
               <button onClick={canWrite ? handleSave : undefined} disabled={saving || isReadOnly}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 active:scale-95">
                 <Save size={14} /> {saving ? 'Saving...' : 'Save BOM'}
@@ -427,12 +430,6 @@ export default function BOMForm() {
               <button onClick={handleCancel} disabled={saving}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50">
                 <X size={14} /> Cancel
-              </button>
-              <button onClick={openImportModal} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
-                <Copy size={14} /> Copy BOM
-              </button>
-              <button className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
-                <MoreHorizontal size={14} /> More
               </button>
             </>
           )}
@@ -502,69 +499,35 @@ export default function BOMForm() {
           </div>
         </div>
 
-        {/* BOM Versions */}
+        {/* BOM Version & Validity */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-blue-700">BOM Versions</h2>
-            <button onClick={handleNewRevision} disabled={isReadOnly} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all disabled:opacity-50">
-              <Plus size={12} /> New Revision
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-gray-200">
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600 w-8"></th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600">Version</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600">Revision</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600">Effective From</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600">Effective To</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600">Status</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600">Released By</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600">Released On</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-600 w-12">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {versions.length === 0 ? (
-                  <tr><td colSpan={9} className="py-6 text-center text-gray-400 text-xs">
-                    {isNew ? 'Version will be created on save' : 'No version history'}
-                  </td></tr>
-                ) : versions.map((v, idx) => (
-                  <tr key={idx} className={`transition-all ${v.is_current ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
-                    <td className="py-2 px-2">
-                      <input type="radio" name="version" checked={selectedVersion === String(v.id)} onChange={() => setSelectedVersion(String(v.id))} className="w-3.5 h-3.5 text-blue-600" />
-                    </td>
-                    <td className="py-2 px-2 font-medium text-gray-900">{v.version}</td>
-                    <td className="py-2 px-2">
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${v.is_current ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {v.revision} {v.is_current && <span className="ml-1 text-[9px] bg-blue-600 text-white px-1 rounded">Current</span>}
-                      </span>
-                    </td>
-                    <td className="py-2 px-2 text-gray-600">{v.effective_from}</td>
-                    <td className="py-2 px-2 text-gray-600">{v.effective_to}</td>
-                    <td className="py-2 px-2">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        v.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        v.status === 'Superseded' ? 'bg-gray-100 text-gray-500 border border-gray-200' :
-                        'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>{v.status}</span>
-                    </td>
-                    <td className="py-2 px-2 text-gray-600">{v.released_by}</td>
-                    <td className="py-2 px-2 text-gray-600">{v.released_on}</td>
-                    <td className="py-2 px-2">
-                      <button className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* Version Legend */}
-          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
-            <span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-sm bg-blue-600"></span> Current</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-sm bg-emerald-500"></span> Active</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-sm bg-gray-400"></span> Superseded</span>
+          <h2 className="text-sm font-bold text-blue-700 mb-4">Version & Validity</h2>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1">Version</label>
+                <div className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-700 min-h-[34px] flex items-center font-bold">
+                  {formData.version || 1}
+                  <span className="ml-2 text-[10px] text-gray-400 font-normal">(auto-increments on save)</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1">Status</label>
+                <Select
+                  options={[
+                    { value: 'Active', label: 'Active' },
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'Inactive', label: 'Inactive' },
+                  ]}
+                  value={formData.status || 'Active'}
+                  onChange={(e) => updateField('status', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Effective From" type="date" value={formData.valid_from || ''} onChange={(e) => updateField('valid_from', e.target.value)} />
+              <Input label="Effective To" type="date" value={formData.valid_to || ''} onChange={(e) => updateField('valid_to', e.target.value)} />
+            </div>
           </div>
         </div>
       </div>
@@ -638,15 +601,14 @@ export default function BOMForm() {
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">UOM</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Quantity</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Scrap %</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Effective From</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Effective To</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Vendor</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Remarks</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-16">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {items.length === 0 ? (
-                      <tr><td colSpan={12} className="py-8 text-center text-gray-400 text-xs">No components added yet. Click "Add Component" to start.</td></tr>
+                      <tr><td colSpan={11} className="py-8 text-center text-gray-400 text-xs">No components added yet. Click "Add Component" to start.</td></tr>
                     ) : filteredItems.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
                         <td className="py-2 px-2"><input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={() => toggleItemSelection(item.id)} className="w-3.5 h-3.5 rounded border-gray-300" /></td>
@@ -657,8 +619,7 @@ export default function BOMForm() {
                         <td className="py-2 px-2 text-gray-600">{item.uom}</td>
                         <td className="py-2 px-2 font-medium text-gray-900">{Number(item.qty || 0).toFixed(4)}</td>
                         <td className="py-2 px-2 text-gray-600">{Number(item.scrap_percent || 0).toFixed(2)}</td>
-                        <td className="py-2 px-2 text-gray-600">{formatDisplayDate(item.effective_from)}</td>
-                        <td className="py-2 px-2 text-gray-600">{formatDisplayDate(item.effective_to)}</td>
+                        <td className="py-2 px-2 text-blue-600">{item.supplier_name || '-'}</td>
                         <td className="py-2 px-2 text-gray-500 italic">{item.remarks || '-'}</td>
                         <td className="py-2 px-2">
                           <div className="flex items-center gap-0.5">
@@ -759,10 +720,6 @@ export default function BOMForm() {
                 <Input label="Quantity *" type="number" value={itemForm.qty} onChange={(e) => setItemForm(prev => ({ ...prev, qty: e.target.value }))} />
                 <Input label="Unit Cost" type="number" value={itemForm.unit_cost} onChange={(e) => setItemForm(prev => ({ ...prev, unit_cost: e.target.value }))} />
                 <Input label="Scrap %" type="number" value={itemForm.scrap_percent} onChange={(e) => setItemForm(prev => ({ ...prev, scrap_percent: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Input label="Effective From" type="date" value={itemForm.effective_from} onChange={(e) => setItemForm(prev => ({ ...prev, effective_from: e.target.value }))} />
-                <Input label="Effective To" type="date" value={itemForm.effective_to} onChange={(e) => setItemForm(prev => ({ ...prev, effective_to: e.target.value }))} />
               </div>
               <Select
                 label="Vendor (Supplier)"
