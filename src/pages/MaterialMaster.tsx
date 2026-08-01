@@ -6,9 +6,8 @@ import api from '../lib/api';
 import { toast } from 'react-toastify';
 
 const TYPE_COLORS: Record<string, string> = {
-  Chemical: 'bg-blue-50 text-blue-700 border border-blue-200',
-  Auxiliary: 'bg-green-50 text-green-700 border border-green-200',
-  'Packing Material': 'bg-orange-50 text-orange-700 border border-orange-200',
+  'Wet-end': 'bg-blue-50 text-blue-700 border border-blue-200',
+  'Finishing': 'bg-green-50 text-green-700 border border-green-200',
 };
 
 export default function MaterialMaster() {
@@ -37,7 +36,7 @@ export default function MaterialMaster() {
 
   const filterOptions = [
     { key: 'status', label: 'Status', options: [{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }] },
-    { key: 'type', label: 'Type', options: [{ value: 'Chemical', label: 'Chemical' }, { value: 'Auxiliary', label: 'Auxiliary' }, { value: 'Packing Material', label: 'Packing Material' }] },
+    { key: 'type', label: 'Type', options: [{ value: 'Wet-end', label: 'Wet-end' }, { value: 'Finishing', label: 'Finishing' }] },
   ];
 
   const handleDelete = async (id: number) => {

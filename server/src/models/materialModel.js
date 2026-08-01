@@ -34,9 +34,12 @@ export async function getAll({ search, type, category, status, page = 1, limit =
 
 export async function getById(id) {
   const [rows] = await pool.query(
-    `SELECT m.*, s.name AS preferred_supplier_name
+    `SELECT m.*, s.name AS preferred_supplier_name,
+       pu.name AS primary_uom_name, su.name AS secondary_uom_name
      FROM materials m
      LEFT JOIN suppliers s ON m.preferred_supplier_id = s.id
+     LEFT JOIN uom pu ON m.primary_uom_id = pu.id
+     LEFT JOIN uom su ON m.secondary_uom_id = su.id
      WHERE m.id = ?`,
     [id]
   );
@@ -55,18 +58,22 @@ export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
     `INSERT INTO materials (
-      code, name, type, uom, category, chemical_group, group_id, appearance, color,
+      code, name, type, uom, primary_uom_id, secondary_uom_id, currency,
+      category, chemical_group, group_id, appearance, color,
       ph_value, flash_point, hsn_code, cas_number, shelf_life, storage_condition,
       hazardous, default_warehouse, opening_stock, opening_stock_uom, current_stock,
       reorder_level, maximum_level, standard_cost, last_purchase_price,
       preferred_supplier_id, lead_time, description, application, remarks,
       attachment_path, status, created_by
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       code,
       data.name,
-      data.type || 'Chemical',
+      data.type || 'Wet-end',
       data.uom || '',
+      data.primary_uom_id || null,
+      data.secondary_uom_id || null,
+      data.currency || 'INR',
       data.category || null,
       data.chemical_group || null,
       data.group_id || null,
@@ -103,7 +110,8 @@ export async function create(data, createdBy = null) {
 export async function update(id, data, updatedBy = null) {
   const [result] = await pool.query(
     `UPDATE materials SET
-      name=?, type=?, uom=?, category=?, chemical_group=?, group_id=?, appearance=?, color=?,
+      name=?, type=?, uom=?, primary_uom_id=?, secondary_uom_id=?, currency=?,
+      category=?, chemical_group=?, group_id=?, appearance=?, color=?,
       ph_value=?, flash_point=?, hsn_code=?, cas_number=?, shelf_life=?, storage_condition=?,
       hazardous=?, default_warehouse=?, opening_stock=?, opening_stock_uom=?,
       reorder_level=?, maximum_level=?, standard_cost=?, last_purchase_price=?,
@@ -112,8 +120,11 @@ export async function update(id, data, updatedBy = null) {
      WHERE id=?`,
     [
       data.name,
-      data.type || 'Chemical',
+      data.type || 'Wet-end',
       data.uom || '',
+      data.primary_uom_id || null,
+      data.secondary_uom_id || null,
+      data.currency || 'INR',
       data.category || null,
       data.chemical_group || null,
       data.group_id || null,
@@ -170,7 +181,13 @@ export async function remove(id) {
 
 export async function getDropdown() {
   const [rows] = await pool.query(
-    `SELECT id, code, name, uom, type, category FROM materials WHERE status='Active' ORDER BY name ASC`
+    `SELECT m.id, m.code, m.name, m.uom, m.type, m.category,
+       m.primary_uom_id, m.secondary_uom_id, m.currency,
+       pu.name AS primary_uom_name, su.name AS secondary_uom_name
+     FROM materials m
+     LEFT JOIN uom pu ON m.primary_uom_id = pu.id
+     LEFT JOIN uom su ON m.secondary_uom_id = su.id
+     WHERE m.status='Active' ORDER BY m.name ASC`
   );
   return rows;
 }

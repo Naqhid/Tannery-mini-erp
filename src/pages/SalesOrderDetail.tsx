@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Plus, Trash2, Save, X, Edit2, Printer, Copy, Upload, Paperclip,
+  Plus, Trash2, Save, X, Printer, Copy, Upload, Paperclip,
   Eye, Download, ChevronDown, Package, Truck, CreditCard, FileText,
   MessageSquare, Calendar, IndianRupee, AlertCircle, CheckCircle2,
   Clock, Ban, Send, MoreVertical,
@@ -14,6 +14,7 @@ import api from '../lib/api';
 // ---- Types ----
 interface Customer { id: number; code: string; name: string; contact_person?: string; address?: string; }
 interface TaxOption { id: number; name: string; gst_percent: number; cess_percent: number; }
+interface GroupMasterOption { id: number; code: string; name: string; hsn_code: string; gst_rate: number; }
 interface SalesOrderItem {
   _key?: string;
   item_code: string;
@@ -114,6 +115,8 @@ export default function SalesOrderDetail() {
   const [order, setOrder] = useState<SalesOrderFull>(emptyOrder);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
+  const [groupOptions, setGroupOptions] = useState<GroupMasterOption[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'items' | 'delivery' | 'payment' | 'attachments' | 'remarks'>('items');
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -147,6 +150,13 @@ export default function SalesOrderDetail() {
     } catch { setTaxOptions([]); }
   }, []);
 
+  const fetchGroupOptions = useCallback(async () => {
+    try {
+      const res = await api<{ data: GroupMasterOption[] }>('/group-master/dropdown');
+      setGroupOptions(res.data || []);
+    } catch { setGroupOptions([]); }
+  }, []);
+
   const fetchOrder = useCallback(async () => {
     if (isNew) return;
     try {
@@ -174,7 +184,7 @@ export default function SalesOrderDetail() {
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
-  useEffect(() => { fetchCustomers(); fetchTaxOptions(); fetchOrder(); }, [fetchCustomers, fetchTaxOptions, fetchOrder]);
+  useEffect(() => { fetchCustomers(); fetchTaxOptions(); fetchGroupOptions(); fetchOrder(); }, [fetchCustomers, fetchTaxOptions, fetchGroupOptions, fetchOrder]);
 
   const updateField = (field: keyof SalesOrderFull, value: any) => {
     setOrder(prev => {
@@ -458,26 +468,45 @@ export default function SalesOrderDetail() {
         <div className="p-6 space-y-5">
           {/* Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Order No.</label>
+              <div className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600 font-mono font-bold min-h-[38px] flex items-center">
+                {order.order_no || <span className="italic text-gray-400 font-normal">Auto-generated on save</span>}
+              </div>
+            </div>
             <Select label="Customer" required options={customerOptions} value={String(order.customer_id || '')} onChange={(e) => handleCustomerChange(e.target.value)} />
             <Input label="Order Date" required type="date" value={order.order_date} onChange={(e) => updateField('order_date', e.target.value)} />
             <Input label="Customer PO No." value={order.customer_po_no} placeholder="PO reference number" onChange={(e) => updateField('customer_po_no', e.target.value)} />
-            <Select label="Order Type" options={ORDER_TYPE_OPTS.map(o => ({ value: o, label: o }))} value={order.order_type} onChange={(e) => updateField('order_type', e.target.value)} />
           </div>
           {/* Row 2 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Select label="Order Type" options={ORDER_TYPE_OPTS.map(o => ({ value: o, label: o }))} value={order.order_type} onChange={(e) => updateField('order_type', e.target.value)} />
             <Input label="Contact Person" value={order.contact_person} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
-            <Input label="Delivery Date" type="date" value={order.delivery_date} onChange={(e) => updateField('delivery_date', e.target.value)} />
-            <div className="lg:col-span-1">
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
-              <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
-            </div>
-            <Select label="Price List" options={[{ value: '', label: 'Select price list' }, { value: 'Standard Export Price List', label: 'Standard Export Price List' }, { value: 'Standard Domestic Price List', label: 'Standard Domestic Price List' }]} value={order.price_list} onChange={(e) => updateField('price_list', e.target.value)} />
+            <Select label="Payment Terms" options={[{ value: '', label: 'Select terms' }, ...PAYMENT_TERMS_OPTS.map(o => ({ value: o, label: o }))]} value={order.payment_terms} onChange={(e) => updateField('payment_terms', e.target.value)} />
+            <Select label="Currency" options={CURRENCY_OPTS.map(o => ({ value: o.split(' - ')[0], label: o }))} value={order.currency} onChange={(e) => updateField('currency', e.target.value)} />
           </div>
           {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Select label="Payment Terms" options={[{ value: '', label: 'Select terms' }, ...PAYMENT_TERMS_OPTS.map(o => ({ value: o, label: o }))]} value={order.payment_terms} onChange={(e) => updateField('payment_terms', e.target.value)} />
-            <Select label="Currency" options={CURRENCY_OPTS.map(o => ({ value: o.split(' - ')[0], label: o }))} value={order.currency} onChange={(e) => updateField('currency', e.target.value)} />
-            <Input label="Sales Person" value={order.sales_person} placeholder="Sales person name" onChange={(e) => updateField('sales_person', e.target.value)} />
+            <Select
+              label="Group (HSN / Tax)"
+              options={[
+                { value: '', label: 'Select group for tax' },
+                ...groupOptions.map(g => ({ value: String(g.id), label: `${g.name} (HSN: ${g.hsn_code}, GST: ${g.gst_rate}%)` })),
+              ]}
+              value={selectedGroupId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedGroupId(val);
+                const group = groupOptions.find(g => String(g.id) === val);
+                if (group) {
+                  updateField('tax_percent', group.gst_rate);
+                }
+              }}
+            />
+            <div className="lg:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
+              <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
+            </div>
             <Select label="Status" options={['Draft', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'].map(s => ({ value: s, label: s }))} value={order.status} onChange={(e) => updateField('status', e.target.value)} />
           </div>
         </div>
@@ -512,7 +541,10 @@ export default function SalesOrderDetail() {
             </div>
             <div>
               {activeTab === 'items' && (
-                <button onClick={openAddItem} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm">
+                <button onClick={() => {
+                  const newItem: SalesOrderItem = { ...emptyItem, _key: String(Math.random()) };
+                  setOrder(prev => ({ ...prev, items: [...prev.items, newItem] }));
+                }} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm">
                   <Plus size={13} /> Add Item
                 </button>
               )}
@@ -548,7 +580,7 @@ export default function SalesOrderDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                        {['#', 'Item Code', 'Description', 'Leather Type', 'Finish / Color', 'Thickness', 'UOM', 'Qty', 'Rate (₹)', 'Discount %', 'Amount (₹)', ''].map(h => (
+                        {['#', 'Article Code', 'Article', 'Leather Type', 'Finish / Color', 'Thickness', 'UOM', 'Qty', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
                           <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -558,39 +590,74 @@ export default function SalesOrderDetail() {
                         <tr><td colSpan={12} className="py-12 text-center">
                           <Package size={32} className="mx-auto text-gray-300 mb-3" />
                           <p className="text-sm font-medium text-gray-500">No items added yet</p>
-                          <p className="text-xs text-gray-400 mt-1">Click "Add Item" to get started</p>
+                          <p className="text-xs text-gray-400 mt-1">Click "Add Item" to add a row</p>
                         </td></tr>
                       ) : order.items.map((item, i) => (
                         <tr key={item._key || i} className="hover:bg-blue-50/40 transition-colors">
-                          <td className="py-3 px-3.5 text-gray-400 font-medium">{i + 1}</td>
-                          <td className="py-3 px-3.5 font-mono text-xs text-gray-700 font-medium">{item.item_code || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-900 font-medium max-w-[180px] truncate">{item.item_description || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.leather_type || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.finish_color || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.thickness || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.uom}</td>
-                          <td className="py-3 px-3.5 text-gray-900 font-medium">{Number(item.quantity).toLocaleString('en-IN')}</td>
-                          <td className="py-3 px-3.5 text-gray-900">{Number(item.unit_price).toFixed(2)}</td>
-                          <td className="py-3 px-3.5">
-                            <input
-                              type="number"
-                              value={item.discount_percent}
-                              onChange={(e) => {
-                                const updated = calcItem({ ...item, discount_percent: Number(e.target.value) });
-                                const newItems = order.items.map(i2 => i2._key === item._key ? updated : i2);
-                                const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
-                                setOrder(prev => ({ ...prev, items: newItems, ...tots }));
-                              }}
-                              min={0} max={100} step={0.01}
-                              className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-all"
-                            />
+                          <td className="py-2.5 px-3.5 text-gray-400 font-medium">{i + 1}</td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.item_code} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, item_code: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[90px]" placeholder="Code" />
                           </td>
-                          <td className="py-3 px-3.5 font-bold text-gray-900">{formatCurrency(item.amount)}</td>
-                          <td className="py-3 px-3.5">
-                            <div className="flex items-center gap-0.5">
-                              <button onClick={() => openEditItem(item)} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"><Edit2 size={13} /></button>
-                              <button onClick={() => handleDeleteItem(item._key!)} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
-                            </div>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.item_description} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, item_description: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" placeholder="Article" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.leather_type} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, leather_type: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[80px]" placeholder="Type" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.finish_color} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, finish_color: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[80px]" placeholder="Color" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.thickness} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, thickness: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="mm" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.uom} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, uom: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="UOM" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.quantity} onChange={(e) => {
+                              const updated = calcItem({ ...item, quantity: Number(e.target.value) });
+                              const newItems = order.items.map(it => it._key === item._key ? updated : it);
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+                              setOrder(prev => ({ ...prev, items: newItems, ...tots }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="0" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.unit_price} onChange={(e) => {
+                              const updated = calcItem({ ...item, unit_price: Number(e.target.value) });
+                              const newItems = order.items.map(it => it._key === item._key ? updated : it);
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+                              setOrder(prev => ({ ...prev, items: newItems, ...tots }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[70px]" placeholder="0.00" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.discount_percent} onChange={(e) => {
+                              const updated = calcItem({ ...item, discount_percent: Number(e.target.value) });
+                              const newItems = order.items.map(it => it._key === item._key ? updated : it);
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+                              setOrder(prev => ({ ...prev, items: newItems, ...tots }));
+                            }} min={0} max={100} className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-400/30" placeholder="0" />
+                          </td>
+                          <td className="py-2.5 px-3.5 font-bold text-gray-900 text-right">{formatCurrency(item.amount)}</td>
+                          <td className="py-2.5 px-3.5">
+                            <button onClick={() => handleDeleteItem(item._key!)} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
                           </td>
                         </tr>
                       ))}
@@ -638,24 +705,8 @@ export default function SalesOrderDetail() {
                         <input type="number" value={order.freight} onChange={(e) => updateField('freight', Number(e.target.value))} min={0} className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                       </div>
                       <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-600">Tax</span>
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={order.tax_percent}
-                            onChange={(e) => {
-                              const selectedPercent = Number(e.target.value);
-                              updateField('tax_percent', selectedPercent);
-                            }}
-                            className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
-                          >
-                            <option value={0}>No Tax</option>
-                            {taxOptions.map(t => {
-                              const pct = parseFloat(String(t.gst_percent));
-                              return <option key={t.id} value={pct}>{t.name} ({pct}%)</option>;
-                            })}
-                          </select>
-                          <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
-                        </div>
+                        <span className="text-sm text-gray-600">Tax ({order.tax_percent}%)</span>
+                        <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
                       </div>
                       <div className="border-t border-gray-200 pt-3 mt-2">
                         <div className="flex items-center justify-between">
@@ -1009,42 +1060,6 @@ export default function SalesOrderDetail() {
 
 
       {/* ==================== MODALS ==================== */}
-
-      {/* Item Modal */}
-      {showItemModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setShowItemModal(false)}>
-          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-blue-100"><Package size={14} className="text-blue-600" /></div>
-                <h3 className="text-sm font-bold text-gray-900">{editingItem ? 'Edit Item' : 'Add Item'}</h3>
-              </div>
-              <button onClick={() => setShowItemModal(false)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"><X size={16} /></button>
-            </div>
-            <div className="p-6 grid grid-cols-2 gap-4">
-              <Input label="Item Code" value={itemForm.item_code} placeholder="e.g. ITM-00045" onChange={(e) => setItemForm(p => ({ ...p, item_code: e.target.value }))} />
-              <Input label="Item Description" required value={itemForm.item_description} placeholder="e.g. Finished Leather" onChange={(e) => setItemForm(p => ({ ...p, item_description: e.target.value }))} />
-              <Input label="Leather Type" value={itemForm.leather_type} placeholder="e.g. Cow, Buffalo" onChange={(e) => setItemForm(p => ({ ...p, leather_type: e.target.value }))} />
-              <Input label="Finish / Color" value={itemForm.finish_color} placeholder="e.g. Black Finish" onChange={(e) => setItemForm(p => ({ ...p, finish_color: e.target.value }))} />
-              <Input label="Thickness (mm)" value={itemForm.thickness} placeholder="e.g. 1.2 - 1.4" onChange={(e) => setItemForm(p => ({ ...p, thickness: e.target.value }))} />
-              <Input label="UOM" value={itemForm.uom} placeholder="e.g. Sq.Ft." onChange={(e) => setItemForm(p => ({ ...p, uom: e.target.value }))} />
-              <Input label="Quantity" required type="number" value={String(itemForm.quantity)} onChange={(e) => setItemForm(p => ({ ...p, quantity: Number(e.target.value) }))} />
-              <Input label="Unit Price (₹)" required type="number" value={String(itemForm.unit_price)} onChange={(e) => setItemForm(p => ({ ...p, unit_price: Number(e.target.value) }))} />
-              <Input label="Discount (%)" type="number" value={String(itemForm.discount_percent)} onChange={(e) => setItemForm(p => ({ ...p, discount_percent: Number(e.target.value) }))} />
-              <div className="flex flex-col justify-end">
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Calculated Amount</label>
-                <div className="px-3.5 py-2.5 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg font-bold">
-                  {formatCurrency(calcItem(itemForm).amount)}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl">
-              <button onClick={() => setShowItemModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all">Cancel</button>
-              <button onClick={handleSaveItem} className="px-5 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 shadow-sm transition-all">{editingItem ? 'Update Item' : 'Add Item'}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delivery Modal */}
       {showDeliveryModal && (

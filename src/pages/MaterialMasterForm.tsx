@@ -18,6 +18,9 @@ interface MaterialData {
   group_id: string;
   type: string;
   uom: string;
+  primary_uom_id: string;
+  secondary_uom_id: string;
+  currency: string;
   chemical_group: string;
   color: string;
   ph_value: string;
@@ -42,7 +45,8 @@ interface MaterialData {
 }
 
 const empty: MaterialData = {
-  code: '', name: '', category: '', group_id: '', type: 'Chemical', uom: '', chemical_group: '',
+  code: '', name: '', category: '', group_id: '', type: 'Wet-end', uom: '',
+  primary_uom_id: '', secondary_uom_id: '', currency: 'INR', chemical_group: '',
   color: '', ph_value: '', flash_point: '', hsn_code: '', hsn_code_display: '', cas_number: '',
   shelf_life: '', storage_condition: '', hazardous: false, default_warehouse: '',
   current_stock: '0.00', reorder_level: '0.00', maximum_level: '0.00',
@@ -50,7 +54,13 @@ const empty: MaterialData = {
   description: '', application: '', remarks: '', attachment_path: '', status: 'Active',
 };
 
-const MATERIAL_TYPES = ['Chemical', 'Auxiliary', 'Packing Material'];
+const MATERIAL_TYPES = ['Wet-end', 'Finishing'];
+const CURRENCY_OPTIONS = [
+  { value: 'INR', label: 'INR - Indian Rupee' },
+  { value: 'USD', label: 'USD - US Dollar' },
+  { value: 'EUR', label: 'EUR - Euro' },
+  { value: 'GBP', label: 'GBP - British Pound' },
+];
 const STORAGE_CONDITIONS = ['Room Temperature', 'Cool & Dry', 'Refrigerated', 'Flammable Storage', 'Ventilated Area'];
 const WAREHOUSES = ['Main Warehouse', 'Chemical Store', 'Finished Goods Store', 'Raw Material Store'];
 
@@ -91,6 +101,9 @@ export default function MaterialMasterForm() {
         lead_time: String((res.data as any).lead_time ?? ''),
         preferred_supplier_id: String((res.data as any).preferred_supplier_id ?? ''),
         group_id: String((res.data as any).group_id ?? ''),
+        primary_uom_id: String((res.data as any).primary_uom_id ?? ''),
+        secondary_uom_id: String((res.data as any).secondary_uom_id ?? ''),
+        currency: (res.data as any).currency || 'INR',
       });
     } catch { toast.error('Failed to load material'); navigate('/chemical-master'); }
     finally { setLoading(false); }
@@ -143,7 +156,7 @@ export default function MaterialMasterForm() {
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = 'Material name is required';
     if (!form.type) errs.type = 'Material type is required';
-    if (!form.uom) errs.uom = 'UOM is required';
+    if (!form.primary_uom_id) errs.primary_uom_id = 'Primary UOM is required';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -237,7 +250,9 @@ export default function MaterialMasterForm() {
             value={form.group_id}
             onChange={(e) => handleGroupChange(e.target.value)}
           />
-          <Select label="UOM" required options={[{ value: '', label: 'Select UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.uom} onChange={(e) => update('uom', e.target.value)} error={errors.uom} />
+          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} />
+          <Select label="Secondary UOM" options={[{ value: '', label: 'NA' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} />
+          <Select label="Currency" options={CURRENCY_OPTIONS} value={form.currency} onChange={(e) => update('currency', e.target.value)} />
           {/* HSN auto-populated from group */}
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">HSN Code <span className="text-gray-400">(from Group)</span></label>

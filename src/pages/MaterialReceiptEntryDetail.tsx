@@ -8,18 +8,24 @@ import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; }
 interface Supplier { id: number; code: string; name: string; }
-interface Material { id: number; code: string; name: string; uom: string; }
+interface Material { id: number; code: string; name: string; uom: string; primary_uom_name?: string; secondary_uom_name?: string; currency?: string; }
 interface Item {
   _key: string;
   material_id: string;
   material_code: string;
   material_name: string;
   uom: string;
+  primary_uom: string;
+  secondary_uom: string;
   order_qty: string;
-  received_qty: string;
-  rate: string;
-  amount: number;
-  batch_no: string;
+  primary_uom_qty: string;
+  secondary_uom_qty: string;
+  currency: string;
+  exchange_rate: string;
+  rate_fc: string;
+  rate_inr: number;
+  amount_fc: number;
+  amount_inr: number;
   expiry_date: string;
 }
 
@@ -41,17 +47,18 @@ interface ReceiptData {
   freight: string;
   loading_charges: string;
   other_charges: string;
+  gst_percent: string;
   remarks: string;
   status: string;
 }
 
-const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', order_qty: '', received_qty: '', rate: '', amount: 0, batch_no: '', expiry_date: '' };
+const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', primary_uom: '', secondary_uom: '', order_qty: '', primary_uom_qty: '', secondary_uom_qty: '', currency: 'INR', exchange_rate: '1', rate_fc: '', rate_inr: 0, amount_fc: 0, amount_inr: 0, expiry_date: '' };
 
 const emptyReceipt: ReceiptData = {
   receipt_no: '', receipt_date: new Date().toISOString().split('T')[0], receipt_type: 'Direct Purchase',
   supplier_id: '', purchase_order_no: '', po_date: '', challan_no: '', challan_date: '',
   lr_grn_no: '', lr_grn_date: '', transporter: '', gate_entry_no: '', warehouse_id: '',
-  freight: '', loading_charges: '', other_charges: '', remarks: '', status: 'Posted',
+  freight: '', loading_charges: '', other_charges: '', gst_percent: '', remarks: '', status: 'Posted',
 };
 
 const RECEIPT_TYPES = [
@@ -84,7 +91,7 @@ export default function MaterialReceiptEntryDetail() {
       const [wh, sup, mat] = await Promise.all([
         api<{ data: Warehouse[] }>('/warehouses/dropdown'),
         api<{ data: Supplier[] }>('/suppliers?limit=500'),
-        api<{ data: Material[] }>('/materials?limit=500'),
+        api<{ data: Material[] }>('/materials/dropdown'),
       ]);
       setWarehouses(wh.data || []);
       setSuppliers(sup.data || []);
@@ -116,6 +123,7 @@ export default function MaterialReceiptEntryDetail() {
         freight: String(d.freight || ''),
         loading_charges: String(d.loading_charges || ''),
         other_charges: String(d.other_charges || ''),
+        gst_percent: String(d.gst_percent || ''),
       });
       setItems((d.items || []).map((it: any) => ({
         _key: genKey(),
@@ -123,11 +131,17 @@ export default function MaterialReceiptEntryDetail() {
         material_code: it.material_code || '',
         material_name: it.material_name || '',
         uom: it.uom || '',
+        primary_uom: it.primary_uom || it.material_primary_uom || '',
+        secondary_uom: it.secondary_uom || it.material_secondary_uom || '',
         order_qty: String(it.order_qty || ''),
-        received_qty: String(it.received_qty),
-        rate: String(it.rate),
-        amount: parseFloat(it.amount) || 0,
-        batch_no: it.batch_no || '',
+        primary_uom_qty: String(it.primary_uom_qty || ''),
+        secondary_uom_qty: String(it.secondary_uom_qty || ''),
+        currency: it.currency || 'INR',
+        exchange_rate: String(it.exchange_rate || '1'),
+        rate_fc: String(it.rate_fc || it.rate || ''),
+        rate_inr: parseFloat(it.rate_inr) || 0,
+        amount_fc: parseFloat(it.amount_fc) || 0,
+        amount_inr: parseFloat(it.amount_inr) || parseFloat(it.amount) || 0,
         expiry_date: it.expiry_date?.split('T')[0] || '',
       })));
     } catch { toast.error('Failed to load receipt'); }
@@ -144,13 +158,23 @@ export default function MaterialReceiptEntryDetail() {
       const updated = { ...it, [field]: value };
       if (field === 'material_id') {
         const mat = materials.find((m) => String(m.id) === value);
-        if (mat) { updated.uom = mat.uom; updated.material_code = mat.code; updated.material_name = mat.name; }
+        if (mat) {
+          updated.uom = mat.uom;
+          updated.material_code = mat.code;
+          updated.material_name = mat.name;
+          updated.primary_uom = (mat as any).primary_uom_name || mat.uom || '';
+          updated.secondary_uom = (mat as any).secondary_uom_name || '';
+          updated.currency = (mat as any).currency || 'INR';
+          updated.exchange_rate = updated.currency === 'INR' ? '1' : updated.exchange_rate;
+        }
       }
-      if (field === 'received_qty' || field === 'rate' || field === 'material_id') {
-        const qty = parseFloat(updated.received_qty) || 0;
-        const rate = parseFloat(updated.rate) || 0;
-        updated.amount = parseFloat((qty * rate).toFixed(2));
-      }
+      // Recalculate derived values
+      const rateFc = parseFloat(updated.rate_fc) || 0;
+      const exchangeRate = parseFloat(updated.exchange_rate) || 1;
+      const primaryQty = parseFloat(updated.primary_uom_qty) || 0;
+      updated.rate_inr = parseFloat((rateFc * exchangeRate).toFixed(4));
+      updated.amount_fc = parseFloat((primaryQty * rateFc).toFixed(4));
+      updated.amount_inr = parseFloat((updated.amount_fc * exchangeRate).toFixed(4));
       return updated;
     }));
   };
@@ -161,19 +185,24 @@ export default function MaterialReceiptEntryDetail() {
   const handleClear = () => { setReceipt(emptyReceipt); setItems([{ ...emptyItem, _key: genKey() }]); };
 
   const totalItems = items.filter((i) => i.material_id).length;
-  const totalQty = items.reduce((s, i) => s + (parseFloat(i.received_qty) || 0), 0);
-  const totalAmount = items.reduce((s, i) => s + (i.amount || 0), 0);
+  const totalAmountInr = items.reduce((s, i) => s + (i.amount_inr || 0), 0);
   const freight = parseFloat(receipt.freight) || 0;
   const loadingCharges = parseFloat(receipt.loading_charges) || 0;
   const otherCharges = parseFloat(receipt.other_charges) || 0;
   const totalOtherCharges = freight + loadingCharges + otherCharges;
-  const grandTotal = totalAmount + totalOtherCharges;
+  const gstPercent = parseFloat(receipt.gst_percent) || 0;
+  const cgstPercent = gstPercent / 2;
+  const sgstPercent = gstPercent / 2;
+  const cgstAmount = totalAmountInr * cgstPercent / 100;
+  const sgstAmount = totalAmountInr * sgstPercent / 100;
+  const totalGstAmount = cgstAmount + sgstAmount;
+  const grandTotal = totalAmountInr + totalGstAmount + totalOtherCharges;
 
   const handleSave = async () => {
     if (!receipt.warehouse_id) { toast.error('Warehouse is required'); return; }
     if (!receipt.receipt_date) { toast.error('Receipt date is required'); return; }
-    const validItems = items.filter((i) => i.material_id && i.received_qty);
-    if (!validItems.length) { toast.error('At least one item is required'); return; }
+    const validItems = items.filter((i) => i.material_id && (parseFloat(i.primary_uom_qty) > 0));
+    if (!validItems.length) { toast.error('At least one item with quantity is required'); return; }
     setSaving(true);
     try {
       const payload = {
@@ -181,15 +210,27 @@ export default function MaterialReceiptEntryDetail() {
         supplier_id: receipt.supplier_id ? Number(receipt.supplier_id) : null,
         warehouse_id: Number(receipt.warehouse_id),
         freight, loading_charges: loadingCharges, other_charges: otherCharges,
-        total_amount: totalAmount, grand_total: grandTotal,
+        gst_percent: gstPercent,
+        cgst_amount: cgstAmount,
+        sgst_amount: sgstAmount,
+        total_gst_amount: totalGstAmount,
+        total_other_charges: totalOtherCharges,
+        total_amount: totalAmountInr, grand_total: grandTotal,
         items: validItems.map((i) => ({
           material_id: Number(i.material_id),
           uom: i.uom,
+          primary_uom: i.primary_uom,
+          secondary_uom: i.secondary_uom,
           order_qty: parseFloat(i.order_qty) || 0,
-          received_qty: parseFloat(i.received_qty) || 0,
-          rate: parseFloat(i.rate) || 0,
-          amount: i.amount,
-          batch_no: i.batch_no || null,
+          primary_uom_qty: parseFloat(i.primary_uom_qty) || 0,
+          secondary_uom_qty: parseFloat(i.secondary_uom_qty) || 0,
+          currency: i.currency,
+          exchange_rate: parseFloat(i.exchange_rate) || 1,
+          rate_fc: parseFloat(i.rate_fc) || 0,
+          rate_inr: i.rate_inr,
+          amount_fc: i.amount_fc,
+          amount_inr: i.amount_inr,
+          batch_no: null,
           expiry_date: i.expiry_date || null,
         })),
       };
@@ -297,13 +338,16 @@ export default function MaterialReceiptEntryDetail() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name <span className="text-rose-500">*</span></th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">UOM</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Received Qty <span className="text-rose-500">*</span></th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Rate (₹)</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (₹)</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Batch No.</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Expiry Date</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Primary UOM</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Secondary UOM</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Primary UOM Qty <span className="text-rose-500">*</span></th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sec. UOM Qty</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Currency</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Exchange Rate</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Rate(FC)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Rate(INR)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount(FC)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount(INR)</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
               </tr>
             </thead>
@@ -319,28 +363,32 @@ export default function MaterialReceiptEntryDetail() {
                       {materials.map((m) => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
                     </select>
                   </td>
-                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.primary_uom || '-'}</td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.secondary_uom || 'NA'}</td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.order_qty} onChange={(e) => updateItem(item._key, 'order_qty', e.target.value)}
+                    <input type="number" value={item.primary_uom_qty} onChange={(e) => updateItem(item._key, 'primary_uom_qty', e.target.value)}
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.received_qty} onChange={(e) => updateItem(item._key, 'received_qty', e.target.value)}
+                    <input type="number" value={item.secondary_uom_qty}
+                      onChange={(e) => updateItem(item._key, 'secondary_uom_qty', e.target.value)}
+                      disabled={!item.secondary_uom || item.secondary_uom === 'NA'}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right ${!item.secondary_uom || item.secondary_uom === 'NA' ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder="0.00" />
+                  </td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700 font-medium">{item.currency || 'INR'}</td>
+                  <td className="py-2.5 px-3">
+                    <input type="number" value={item.exchange_rate}
+                      onChange={(e) => updateItem(item._key, 'exchange_rate', e.target.value)}
+                      readOnly={item.currency === 'INR'}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[70px] text-right ${item.currency === 'INR' ? 'bg-gray-100' : ''}`} placeholder="1.00" />
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <input type="number" value={item.rate_fc} onChange={(e) => updateItem(item._key, 'rate_fc', e.target.value)}
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
-                  <td className="py-2.5 px-3">
-                    <input type="number" value={item.rate} onChange={(e) => updateItem(item._key, 'rate', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
-                  </td>
-                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2.5 px-3">
-                    <input value={item.batch_no} onChange={(e) => updateItem(item._key, 'batch_no', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[90px]" placeholder="BATCH-001" />
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <input type="date" value={item.expiry_date} onChange={(e) => updateItem(item._key, 'expiry_date', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
-                  </td>
+                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.rate_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount_fc || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2.5 px-3 text-xs font-bold text-teal-700 text-right">{(item.amount_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
                       <Trash2 size={14} />
@@ -357,19 +405,32 @@ export default function MaterialReceiptEntryDetail() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">3. Summary</h2>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left - Totals */}
+          {/* Left - Totals & GST */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-600">Total Items</span>
               <span className="text-sm font-bold text-gray-900 bg-gray-100 px-3 py-1 rounded-lg">{totalItems}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-600">Total Qty</span>
-              <span className="text-sm font-bold text-gray-900 bg-gray-100 px-3 py-1 rounded-lg">{totalQty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              <span className="text-xs text-gray-600">Total Amount (INR)</span>
+              <span className="text-sm font-bold text-teal-700 bg-teal-50 px-3 py-1 rounded-lg">{totalAmountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+              <span className="text-xs font-medium text-gray-700">GST %</span>
+              <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
+                className="w-24 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-600">Total Amount (₹)</span>
-              <span className="text-sm font-bold text-teal-700 bg-teal-50 px-3 py-1 rounded-lg">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              <span className="text-xs text-gray-500">CGST ({cgstPercent.toFixed(1)}%)</span>
+              <span className="text-xs font-semibold text-gray-700">{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500">SGST ({sgstPercent.toFixed(1)}%)</span>
+              <span className="text-xs font-semibold text-gray-700">{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-gray-700">Total GST Amount</span>
+              <span className="text-sm font-bold text-gray-900">{totalGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
           {/* Middle - Other Charges */}
@@ -390,12 +451,24 @@ export default function MaterialReceiptEntryDetail() {
               <input type="number" value={receipt.other_charges} onChange={(e) => update('other_charges', e.target.value)}
                 className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
-          </div>
-          {/* Right - Grand Total */}
-          <div className="flex flex-col justify-center items-end space-y-2 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
-            <div className="flex items-center justify-between w-full">
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
               <span className="text-xs font-medium text-gray-700">Total Other Charges (₹)</span>
               <span className="text-sm font-bold text-gray-900">{totalOtherCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+          {/* Right - Grand Total */}
+          <div className="flex flex-col justify-center items-end space-y-3 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs text-gray-600">Total Amount (INR)</span>
+              <span className="text-sm font-semibold text-gray-900">{totalAmountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs text-gray-600">Total GST Amount</span>
+              <span className="text-sm font-semibold text-gray-900">{totalGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs text-gray-600">Total Other Charges</span>
+              <span className="text-sm font-semibold text-gray-900">{totalOtherCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex items-center justify-between w-full pt-2 border-t border-orange-200">
               <span className="text-sm font-bold text-gray-900">Grand Total</span>
