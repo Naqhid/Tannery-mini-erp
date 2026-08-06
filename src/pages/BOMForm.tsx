@@ -453,7 +453,7 @@ export default function BOMForm() {
               </div>
 
               {/* Inline Editable Grid */}
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <div className="border border-gray-200 rounded-lg">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-gray-200">
