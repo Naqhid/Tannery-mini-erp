@@ -30,6 +30,7 @@ import {
   Plus,
   CheckCircle,
   HardDrive,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export interface ChildItem {
@@ -122,6 +123,7 @@ export const menuItems: MenuItem[] = [
       { label: 'Company', icon: <Building2 size={16} />, path: '/company' },
       { label: 'Business Units', icon: <Factory size={16} />, path: '/business-units' },
       { label: 'Database Backups', icon: <HardDrive size={16} />, path: '/database-backups' },
+      { label: 'Data Templates', icon: <FileSpreadsheet size={16} />, path: '/data-templates' },
     ],
   },
 ];

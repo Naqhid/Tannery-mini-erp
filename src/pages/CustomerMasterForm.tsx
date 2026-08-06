@@ -70,9 +70,10 @@ export default function CustomerMasterForm() {
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = 'Customer name is required';
     if (!form.contact_person.trim()) errs.contact_person = 'Contact person is required';
-    if (!form.phone.trim()) errs.phone = 'Phone is required';
-    const phoneErr = validatePhone(form.phone);
-    if (phoneErr) errs.phone = phoneErr;
+    if (form.phone) {
+      const phoneErr = validatePhone(form.phone);
+      if (phoneErr) errs.phone = phoneErr;
+    }
     const emailErr = validateEmail(form.email);
     if (emailErr) errs.email = emailErr;
     const gstinErr = validateGSTIN(form.gstin);
@@ -131,7 +132,7 @@ export default function CustomerMasterForm() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Input label="Customer Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter customer name" />
           <Input label="Contact Person" required value={form.contact_person} onChange={(e) => update('contact_person', e.target.value)} error={errors.contact_person} placeholder="Enter contact person" />
-          <Input label="Phone" required value={form.phone} onChange={(e) => update('phone', e.target.value)} error={errors.phone} placeholder="+91 9876543210" />
+          <Input label="Phone" value={form.phone} onChange={(e) => update('phone', e.target.value)} error={errors.phone} placeholder="+91 9876543210" />
           <Input label="Alt. Phone" value={form.alt_phone} onChange={(e) => update('alt_phone', e.target.value)} placeholder="Alternate phone" />
           <Input label="Email" value={form.email} onChange={(e) => update('email', e.target.value)} error={errors.email} placeholder="email@example.com" />
           <Select label="Category" options={[{ value: 'domestic', label: 'Domestic' }, { value: 'international', label: 'International' }]} value={form.category} onChange={(e) => update('category', e.target.value)} />

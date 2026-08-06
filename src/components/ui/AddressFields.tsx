@@ -237,7 +237,7 @@ export default function AddressFields({
         <>
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">
-              Billing Address <span className="text-red-500">*</span>
+              Billing Address
             </label>
             <textarea
               rows={3}

@@ -49,6 +49,7 @@ export default function Machine() {
       emptyData={{ code: '', machine_type: '', name: '', uom_type: '', rate_indian: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
       pdfAccentColor={[71, 85, 105]}
+      formRoute="/machine"
     />
   );
 }

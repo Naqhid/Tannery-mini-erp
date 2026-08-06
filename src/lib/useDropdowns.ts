@@ -47,7 +47,8 @@ type DropdownType =
   | 'machines'
   | 'group-master'
   | 'products'
-  | 'materials';
+  | 'materials'
+  | 'customers';
 
 export function useDropdown(type: DropdownType) {
   const [state, setState] = useState<DropdownState>({
@@ -62,6 +63,7 @@ export function useDropdown(type: DropdownType) {
       let endpoint = `/${type}/dropdown`;
       if (type === 'products') endpoint = '/products/dropdown';
       if (type === 'materials') endpoint = '/materials/dropdown';
+      if (type === 'customers') endpoint = '/customers/dropdown';
       const res = await api<{ data: DropdownOption[] }>(endpoint);
       setState({ data: res.data || [], loading: false, error: null });
     } catch (err) {
@@ -114,6 +116,7 @@ export function useDropdowns(types: DropdownType[]) {
       let endpoint = `/${type}/dropdown`;
       if (type === 'products') endpoint = '/products/dropdown';
       if (type === 'materials') endpoint = '/materials/dropdown';
+      if (type === 'customers') endpoint = '/customers/dropdown';
       const res = await api<{ data: DropdownOption[] }>(endpoint);
       setStates(prev => ({
         ...prev,

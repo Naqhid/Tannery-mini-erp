@@ -40,6 +40,7 @@ import ProcessStageForm from './pages/ProcessStageForm';
 import GroupMaster from './pages/GroupMaster';
 import GroupMasterForm from './pages/GroupMasterForm';
 import Machine from './pages/Machine';
+import MachineForm from './pages/MachineForm';
 import MaterialMaster from './pages/MaterialMaster';
 import MaterialMasterForm from './pages/MaterialMasterForm';
 // Sales Order Pages
@@ -74,6 +75,7 @@ import SupplierPriceApproval from './pages/SupplierPriceApproval';
 import PhysicalStockEntry from './pages/PhysicalStockEntry';
 import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
 import DatabaseBackups from './pages/DatabaseBackups';
+import DataTemplates from './pages/DataTemplates';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -150,6 +152,8 @@ function App() {
             <Route path="group-master/new" element={<GroupMasterForm />} />
             <Route path="group-master/:id" element={<GroupMasterForm />} />
             <Route path="machine" element={<Machine />} />
+            <Route path="machine/new" element={<MachineForm />} />
+            <Route path="machine/:id" element={<MachineForm />} />
             {/* BOM / Recipe - BOM first, then Recipe */}
             <Route path="bom" element={<BOM />} />
             <Route path="bom/new" element={<BOMForm />} />
@@ -208,6 +212,7 @@ function App() {
             <Route path="company" element={<Company />} />
             <Route path="business-units" element={<BusinessUnits />} />
             <Route path="database-backups" element={<DatabaseBackups />} />
+            <Route path="data-templates" element={<DataTemplates />} />
             <Route path="notifications" element={<PlaceholderPage />} />
           </Route>
         </Routes>

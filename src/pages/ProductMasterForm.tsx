@@ -20,6 +20,7 @@ interface ProductData {
   id?: number;
   code: string;
   name: string;
+  customer_id: string;
   category_id: string;
   group_id: string;
   leather_type_id: string;
@@ -37,7 +38,7 @@ interface ProductData {
 }
 
 const empty: ProductData = {
-  code: '', name: '', category_id: '', group_id: '', leather_type_id: '', primary_uom_id: '', secondary_uom_id: '',
+  code: '', name: '', customer_id: '', category_id: '', group_id: '', leather_type_id: '', primary_uom_id: '', secondary_uom_id: '',
   thickness_id: '', standard_size_id: '', color_id: '', finish_type_id: '', grade_id: '',
   hsn_code_id: '', hsn_code_display: '', description: '', status: 'Active',
 };
@@ -49,7 +50,7 @@ export default function ProductMasterForm() {
 
   const dropdowns = useDropdowns([
     'product-categories', 'leather-types', 'uom', 'thickness',
-    'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes', 'group-master',
+    'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes', 'group-master', 'customers',
   ]);
 
   const [form, setForm] = useState<ProductData>(empty);
@@ -62,21 +63,42 @@ export default function ProductMasterForm() {
     if (isNew) return;
     try {
       setLoading(true);
-      const res = await api<{ data: ProductData & { group_hsn_code?: string } }>(`/products/${id}`);
-      setForm({ ...empty, ...res.data, hsn_code_display: res.data.group_hsn_code || '' });
+      const res = await api<{ data: any }>(`/products/${id}`);
+      const d = res.data;
+      setForm({
+        ...empty,
+        ...d,
+        category_id: d.category_id ? String(d.category_id) : '',
+        group_id: d.group_id ? String(d.group_id) : '',
+        leather_type_id: d.leather_type_id ? String(d.leather_type_id) : '',
+        primary_uom_id: d.uom_id ? String(d.uom_id) : '',
+        secondary_uom_id: d.secondary_uom_id ? String(d.secondary_uom_id) : '',
+        thickness_id: d.thickness_id ? String(d.thickness_id) : '',
+        standard_size_id: d.standard_size_id ? String(d.standard_size_id) : '',
+        color_id: d.color_id ? String(d.color_id) : '',
+        finish_type_id: d.finish_type_id ? String(d.finish_type_id) : '',
+        grade_id: d.grade_id ? String(d.grade_id) : '',
+        hsn_code_id: d.hsn_code_id ? String(d.hsn_code_id) : '',
+        customer_id: d.customer_id ? String(d.customer_id) : '',
+        hsn_code_display: d.group_hsn_code || '',
+      });
     } catch { toast.error('Failed to load product'); navigate('/product-master'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
   useEffect(() => { fetchProduct(); }, [fetchProduct]);
 
-  // Filter groups by selected category
+  // Filter groups by selected category (show all if no category selected)
   useEffect(() => {
-    if (form.category_id && dropdowns['group-master']?.data) {
-      const filtered = dropdowns['group-master'].data.filter(
-        (g: any) => String(g.category_id) === form.category_id
-      );
-      setFilteredGroups(filtered as unknown as GroupOption[]);
+    if (dropdowns['group-master']?.data) {
+      if (form.category_id) {
+        const filtered = dropdowns['group-master'].data.filter(
+          (g: any) => !g.category_id || String(g.category_id) === form.category_id
+        );
+        setFilteredGroups(filtered as unknown as GroupOption[]);
+      } else {
+        setFilteredGroups(dropdowns['group-master'].data as unknown as GroupOption[]);
+      }
     } else {
       setFilteredGroups([]);
     }
@@ -125,8 +147,11 @@ export default function ProductMasterForm() {
     if (!validate()) { toast.error('Please fix validation errors'); return; }
     setSaving(true);
     try {
-      const payload = { ...form };
-      delete (payload as any).hsn_code_display;
+      const payload: any = { ...form };
+      delete payload.hsn_code_display;
+      // Map frontend field names to backend field names
+      payload.uom_id = payload.primary_uom_id || null;
+      delete payload.primary_uom_id;
       if (isNew) {
         const res = await api<{ message: string }>('/products', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Product created!');
@@ -170,6 +195,7 @@ export default function ProductMasterForm() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Product Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Input label="Product Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter product name" />
+          <Select label="Customer" options={[{ value: '', label: 'Select customer' }, ...(dropdowns['customers']?.options || [])]} value={form.customer_id} onChange={(e) => update('customer_id', e.target.value)} />
           <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} />
           <Select
             label="Group"

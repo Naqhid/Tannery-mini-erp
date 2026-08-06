@@ -10,6 +10,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Table from '../components/ui/Table';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import { useDropdowns } from '../lib/useDropdowns';
 import { usePermission } from '../lib/usePermission';
 import api from '../lib/api';
@@ -45,7 +46,7 @@ interface BOMVersion {
 }
 
 interface Supplier { id: number; code: string; name: string; }
-interface Material { id: number; code: string; name: string; uom: string; type: string; }
+interface Material { id: number; code: string; name: string; uom: string; type: string; standard_cost?: number; last_purchase_price?: number; preferred_supplier_id?: number; }
 
 interface BOM {
   id?: number;
@@ -100,7 +101,7 @@ export default function BOMForm() {
   const [showItemModal, setShowItemModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<BOMItemRow | null>(null);
   const [itemForm, setItemForm] = useState({
-    material_id: '', qty: '', unit_cost: '', scrap_percent: '', effective_from: '', effective_to: '', remarks: '', supplier_id: ''
+    material_id: '', qty: '', unit_cost: '', effective_from: '', effective_to: '', remarks: '', supplier_id: ''
   });
 
   // Import BOM modal
@@ -113,7 +114,15 @@ export default function BOMForm() {
   const dropdowns = useDropdowns(['products', 'leather-types', 'uom', 'thickness']);
 
   const fetchMaterials = useCallback(async () => {
-    try { const res = await api<{ data: Material[] }>('/materials?limit=500'); setMaterials(res.data || []); }
+    try {
+      const res = await api<{ data: any[] }>('/machines/dropdown');
+      const machines = (res.data || []).map((m: any) => ({
+        id: m.id, code: m.code, name: m.name, uom: m.uom_type || 'Per Hour', type: m.machine_type || 'Machine',
+        standard_cost: Number(m.rate_indian) || 0, last_purchase_price: Number(m.rate_indian) || 0,
+        preferred_supplier_id: m.supplier_id || null,
+      }));
+      setMaterials(machines);
+    }
     catch { setMaterials([]); }
   }, []);
 
@@ -253,7 +262,7 @@ export default function BOMForm() {
   // Component CRUD
   const openAddItem = () => {
     setSelectedItem(null);
-    setItemForm({ material_id: '', qty: '', unit_cost: '', scrap_percent: '0', effective_from: formData.valid_from || '', effective_to: formData.valid_to || '', remarks: '', supplier_id: '' });
+    setItemForm({ material_id: '', qty: '', unit_cost: '', effective_from: formData.valid_from || '', effective_to: formData.valid_to || '', remarks: '', supplier_id: '' });
     setShowItemModal(true);
   };
 
@@ -261,14 +270,14 @@ export default function BOMForm() {
     setSelectedItem(item);
     setItemForm({
       material_id: String(item.material_id), qty: String(item.qty), unit_cost: String(item.unit_cost),
-      scrap_percent: String(item.scrap_percent || 0), effective_from: formatDate(item.effective_from),
+      effective_from: formatDate(item.effective_from),
       effective_to: formatDate(item.effective_to), remarks: item.remarks || '', supplier_id: String(item.supplier_id || ''),
     });
     setShowItemModal(true);
   };
 
   const handleSaveItem = async () => {
-    if (!itemForm.material_id || !itemForm.qty) { toast.error('Material and Qty are required'); return; }
+    if (!itemForm.material_id || !itemForm.qty) { toast.error('Product and Qty are required'); return; }
     const material = materials.find(m => m.id === Number(itemForm.material_id));
     if (!material) return;
     const qty = parseFloat(itemForm.qty) || 0;
@@ -279,25 +288,25 @@ export default function BOMForm() {
     try {
       if (!isNew && formData.id) {
         const payload = {
-          material_id: Number(itemForm.material_id), type: material.type, uom: material.uom,
-          qty, unit_cost: unitCost, amount, scrap_percent: parseFloat(itemForm.scrap_percent) || 0,
+          material_id: Number(itemForm.material_id), type: material.type, uom: 'Kg',
+          qty, unit_cost: unitCost, amount, scrap_percent: 0,
           effective_from: itemForm.effective_from, effective_to: itemForm.effective_to,
           remarks: itemForm.remarks, supplier_id: itemForm.supplier_id ? Number(itemForm.supplier_id) : null,
         };
         if (selectedItem?.id) {
           await api(`/boms/${formData.id}/items/${selectedItem.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-          toast.success('Component updated!');
+          toast.success('Product updated!');
         } else {
           await api(`/boms/${formData.id}/items`, { method: 'POST', body: JSON.stringify(payload) });
-          toast.success('Component added!');
+          toast.success('Product added!');
         }
         const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${formData.id}`);
         setItems(detail.data.items || []);
       } else {
         const newItem: BOMItemRow = {
           id: Date.now(), material_id: material.id, material_code: material.code, material_name: material.name,
-          type: material.type, uom: material.uom, qty, unit_cost: unitCost, amount,
-          scrap_percent: parseFloat(itemForm.scrap_percent) || 0,
+          type: material.type, uom: 'Kg', qty, unit_cost: unitCost, amount,
+          scrap_percent: 0,
           effective_from: itemForm.effective_from, effective_to: itemForm.effective_to,
           remarks: itemForm.remarks, supplier_id: itemForm.supplier_id ? Number(itemForm.supplier_id) : null,
           supplier_name: supplier?.name || '',
@@ -306,7 +315,7 @@ export default function BOMForm() {
         else { setItems(prev => [...prev, newItem]); }
       }
       setShowItemModal(false);
-    } catch (err) { toast.error('Failed to save component: ' + (err as Error).message); }
+    } catch (err) { toast.error('Failed to save product: ' + (err as Error).message); }
   };
 
   const handleDeleteItem = async (itemId: number) => {
@@ -316,7 +325,7 @@ export default function BOMForm() {
         const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${formData.id}`);
         setItems(detail.data.items || []);
       } else { setItems(prev => prev.filter(i => i.id !== itemId)); }
-      toast.success('Component deleted!');
+      toast.success('Product deleted!');
       setSelectedItemIds((current) => current.filter((selectedId) => selectedId !== itemId));
     } catch (err) { toast.error('Failed to delete: ' + (err as Error).message); }
   };
@@ -345,7 +354,7 @@ export default function BOMForm() {
   };
 
   const handleBulkDelete = async () => {
-    if (!selectedItemIds.length) { toast.error('Select components to delete'); return; }
+    if (!selectedItemIds.length) { toast.error('Select products to delete'); return; }
     try {
       await Promise.all(selectedItemIds.map((itemId) => handleDeleteItem(itemId)));
       setSelectedItemIds([]);
@@ -378,7 +387,7 @@ export default function BOMForm() {
         uom: sourceBOM.uom || '', description: sourceBOM.description || '' });
       setItems(sourceItems.map(item => ({ ...item, id: Date.now() + Math.random(), scrap_percent: item.scrap_percent || 0, effective_from: item.effective_from || '', effective_to: item.effective_to || '' })));
       setShowImportModal(false);
-      toast.success(`Imported ${sourceItems.length} components from ${sourceBOM.name}`);
+      toast.success(`Imported ${sourceItems.length} products from ${sourceBOM.name}`);
     } catch (err) { toast.error('Failed to import: ' + (err as Error).message); }
   };
 
@@ -537,7 +546,7 @@ export default function BOMForm() {
         {/* Tab Headers */}
         <div className="flex items-center border-b border-gray-200 px-5">
           {[
-            { id: 'components' as const, label: 'BOM Components' },
+            { id: 'components' as const, label: 'BOM Products' },
             { id: 'routings' as const, label: 'Routings' },
             { id: 'attachments' as const, label: 'Attachments' },
             { id: 'notes' as const, label: 'Notes' },
@@ -560,7 +569,7 @@ export default function BOMForm() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={openAddItem} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
-                    <Plus size={12} /> Add Component
+                    <Plus size={12} /> Add Product
                   </button>
                   <button onClick={openImportModal} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-all">
                     <Plus size={12} /> Add From Template
@@ -583,7 +592,7 @@ export default function BOMForm() {
                   </div>
                   <div className="relative">
                     <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input type="text" value={componentSearch} onChange={(event) => setComponentSearch(event.target.value)} placeholder="Search Component" className="pl-7 pr-3 py-1.5 text-[11px] border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    <input type="text" value={componentSearch} onChange={(event) => setComponentSearch(event.target.value)} placeholder="Search Product" className="pl-7 pr-3 py-1.5 text-[11px] border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                 </div>
               </div>
@@ -595,12 +604,12 @@ export default function BOMForm() {
                     <tr className="bg-slate-50 border-b border-gray-200">
                       <th className="py-2.5 px-2 w-8"><input type="checkbox" checked={filteredItems.length > 0 && filteredItems.every((item) => selectedItemIds.includes(item.id))} onChange={toggleAllItems} className="w-3.5 h-3.5 rounded border-gray-300" /></th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Component Code</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Component Description</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Product Code</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Product Description</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Specification</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">UOM</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Quantity</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Scrap %</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Cost</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Vendor</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600">Remarks</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-16">Action</th>
@@ -608,7 +617,7 @@ export default function BOMForm() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {items.length === 0 ? (
-                      <tr><td colSpan={11} className="py-8 text-center text-gray-400 text-xs">No components added yet. Click "Add Component" to start.</td></tr>
+                      <tr><td colSpan={11} className="py-8 text-center text-gray-400 text-xs">No products added yet. Click "Add Product" to start.</td></tr>
                     ) : filteredItems.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
                         <td className="py-2 px-2"><input type="checkbox" checked={selectedItemIds.includes(item.id)} onChange={() => toggleItemSelection(item.id)} className="w-3.5 h-3.5 rounded border-gray-300" /></td>
@@ -618,7 +627,7 @@ export default function BOMForm() {
                         <td className="py-2 px-2 text-gray-600">{item.type || '-'}</td>
                         <td className="py-2 px-2 text-gray-600">{item.uom}</td>
                         <td className="py-2 px-2 font-medium text-gray-900">{Number(item.qty || 0).toFixed(4)}</td>
-                        <td className="py-2 px-2 text-gray-600">{Number(item.scrap_percent || 0).toFixed(2)}</td>
+                        <td className="py-2 px-2 text-gray-600">₹{Number(item.unit_cost || 0).toFixed(2)}</td>
                         <td className="py-2 px-2 text-blue-600">{item.supplier_name || '-'}</td>
                         <td className="py-2 px-2 text-gray-500 italic">{item.remarks || '-'}</td>
                         <td className="py-2 px-2">
@@ -633,7 +642,7 @@ export default function BOMForm() {
                 </table>
               </div>
               {items.length > 0 && (
-                <p className="text-[11px] text-gray-400 mt-2">Showing {filteredItems.length} of {items.length} components</p>
+                <p className="text-[11px] text-gray-400 mt-2">Showing {filteredItems.length} of {items.length} products</p>
               )}
             </div>
           )}
@@ -700,26 +709,43 @@ export default function BOMForm() {
         </div>
       </div>
 
-      {/* Component Add/Edit Modal */}
+      {/* Product Add/Edit Modal */}
       {showItemModal && createPortal(
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[70] flex items-center justify-center" onClick={() => setShowItemModal(false)}>
           <div className="w-full max-w-lg bg-white rounded-xl shadow-xl mx-3 p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-bold text-gray-900 mb-4">{selectedItem ? 'Edit Component' : 'Add Component'}</h3>
+            <h3 className="text-sm font-bold text-gray-900 mb-4">{selectedItem ? 'Edit Product' : 'Add Product'}</h3>
             <div className="space-y-3">
-              <Select
-                label="Component (Material)"
-                required
-                options={[
-                  { value: '', label: 'Select material' },
-                  ...materials.map(m => ({ value: String(m.id), label: `${m.code} - ${m.name}` })),
-                ]}
-                value={itemForm.material_id}
-                onChange={(e) => setItemForm(prev => ({ ...prev, material_id: e.target.value }))}
-              />
+              {/* Searchable Product/Material dropdown */}
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1">Product (Material/Machine) <span className="text-red-500">*</span></label>
+                <SearchableSelect
+                  options={materials.map(m => ({ value: String(m.id), label: `${m.code} - ${m.name}` }))}
+                  value={itemForm.material_id}
+                  onChange={(val) => {
+                    const material = materials.find(m => m.id === Number(val));
+                    setItemForm(prev => ({
+                      ...prev,
+                      material_id: val,
+                      unit_cost: material
+                        ? String(material.last_purchase_price != null && material.last_purchase_price > 0
+                            ? material.last_purchase_price
+                            : (material.standard_cost != null && material.standard_cost > 0 ? material.standard_cost : 0))
+                        : prev.unit_cost,
+                      supplier_id: material?.preferred_supplier_id ? String(material.preferred_supplier_id) : '',
+                    }));
+                  }}
+                  placeholder="Search product/material/machine..."
+                />
+              </div>
               <div className="grid grid-cols-3 gap-3">
                 <Input label="Quantity *" type="number" value={itemForm.qty} onChange={(e) => setItemForm(prev => ({ ...prev, qty: e.target.value }))} />
                 <Input label="Unit Cost" type="number" value={itemForm.unit_cost} onChange={(e) => setItemForm(prev => ({ ...prev, unit_cost: e.target.value }))} />
-                <Input label="Scrap %" type="number" value={itemForm.scrap_percent} onChange={(e) => setItemForm(prev => ({ ...prev, scrap_percent: e.target.value }))} />
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">UOM</label>
+                  <div className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-700 min-h-[34px] flex items-center">
+                    Kg
+                  </div>
+                </div>
               </div>
               <Select
                 label="Vendor (Supplier)"
