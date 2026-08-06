@@ -162,6 +162,7 @@ export default function BOMForm() {
       });
       setItems((detail.data.items || []).map(item => ({
         ...item,
+        material_id: item.machine_id || item.material_id,
         qty: Number(item.qty) || 0,
         unit_cost: Number(item.unit_cost) || 0,
         amount: Number(item.amount) || 0,

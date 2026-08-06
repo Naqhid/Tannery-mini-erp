@@ -108,10 +108,13 @@ export async function remove(id) {
 // --- BOM Items ---
 export async function getItems(bomId) {
   const [rows] = await pool.query(
-    `SELECT bi.*, m.code AS material_code, m.name AS material_name,
+    `SELECT bi.*,
+       COALESCE(m.code, mac.code) AS material_code,
+       COALESCE(m.name, mac.name) AS material_name,
        s.name AS supplier_name
      FROM bom_items bi
-     JOIN materials m ON bi.material_id = m.id
+     LEFT JOIN materials m ON bi.material_id = m.id
+     LEFT JOIN machines mac ON bi.machine_id = mac.id
      LEFT JOIN suppliers s ON bi.supplier_id = s.id
      WHERE bi.bom_id = ?
      ORDER BY bi.id`,
@@ -121,10 +124,11 @@ export async function getItems(bomId) {
 }
 
 export async function addItem(bomId, data, createdBy = null) {
+  const isMachine = data.type === 'Machine' || data.type === 'Wet End' || data.type === 'Finishing';
   const [result] = await pool.query(
-    `INSERT INTO bom_items (bom_id, material_id, type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [bomId, data.material_id, data.type, data.uom, data.qty,
+    `INSERT INTO bom_items (bom_id, material_id, machine_id, type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [bomId, isMachine ? null : data.material_id, isMachine ? data.material_id : null, data.type, data.uom, data.qty,
      data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null,
      data.remarks, data.supplier_id || null, createdBy]
   );
@@ -133,9 +137,10 @@ export async function addItem(bomId, data, createdBy = null) {
 }
 
 export async function updateItem(id, data, updatedBy = null) {
+  const isMachine = data.type === 'Machine' || data.type === 'Wet End' || data.type === 'Finishing';
   const [result] = await pool.query(
-    `UPDATE bom_items SET material_id=?, type=?, uom=?, qty=?, unit_cost=?, amount=?, scrap_percent=?, effective_from=?, effective_to=?, remarks=?, supplier_id=?, updated_by=? WHERE id=?`,
-    [data.material_id, data.type, data.uom, data.qty, data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null, data.remarks, data.supplier_id || null, updatedBy, id]
+    `UPDATE bom_items SET material_id=?, machine_id=?, type=?, uom=?, qty=?, unit_cost=?, amount=?, scrap_percent=?, effective_from=?, effective_to=?, remarks=?, supplier_id=?, updated_by=? WHERE id=?`,
+    [isMachine ? null : data.material_id, isMachine ? data.material_id : null, data.type, data.uom, data.qty, data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null, data.remarks, data.supplier_id || null, updatedBy, id]
   );
   if (result.affectedRows) {
     const [[item]] = await pool.query('SELECT bom_id FROM bom_items WHERE id=?', [id]);
