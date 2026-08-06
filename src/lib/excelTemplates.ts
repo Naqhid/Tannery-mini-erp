@@ -67,6 +67,36 @@ export function downloadGroupTemplate() {
   downloadTemplate(columns, 'Groups', 'Group_Import_Template');
 }
 
+// ─── Chemical / Material Template ───
+export function downloadChemicalTemplate() {
+  const columns: TemplateColumn[] = [
+    { header: 'Name *', width: 30, example: 'Formic Acid 85%', note: 'Required' },
+    { header: 'Type *', width: 15, example: 'Wet-end', note: 'Wet-end / Finishing' },
+    { header: 'Category', width: 20, example: 'Tanning Chemicals', note: 'Must match existing category name' },
+    { header: 'Group', width: 20, example: 'Tanning Chemicals', note: 'Must match existing group name' },
+    { header: 'Primary UOM *', width: 15, example: 'Kilogram', note: 'Must match existing UOM name' },
+    { header: 'Secondary UOM', width: 15, example: 'Litre', note: 'Must match existing UOM name' },
+    { header: 'Currency', width: 10, example: 'INR', note: 'INR / USD / EUR / GBP' },
+    { header: 'Color', width: 12, example: 'Clear', note: 'Optional' },
+    { header: 'pH Value', width: 10, example: '2.5', note: 'Optional' },
+    { header: 'Flash Point (°C)', width: 15, example: '69', note: 'Optional' },
+    { header: 'CAS Number', width: 15, example: '64-18-6', note: 'Optional' },
+    { header: 'Shelf Life (Months)', width: 18, example: '24', note: 'Optional' },
+    { header: 'Storage Condition', width: 20, example: 'Cool & Dry', note: 'Room Temperature / Cool & Dry / Refrigerated / Flammable Storage / Ventilated Area' },
+    { header: 'Hazardous', width: 10, example: 'No', note: 'Yes / No' },
+    { header: 'Default Warehouse', width: 20, example: 'Chemical Store', note: 'Optional' },
+    { header: 'Reorder Level', width: 12, example: '100', note: 'Optional, number' },
+    { header: 'Maximum Level', width: 12, example: '1000', note: 'Optional, number' },
+    { header: 'Preferred Supplier', width: 25, example: 'Modi Leather Supplies', note: 'Must match existing supplier name' },
+    { header: 'Lead Time (Days)', width: 15, example: '7', note: 'Optional' },
+    { header: 'Description', width: 40, example: 'Used in pickling process', note: 'Optional' },
+    { header: 'Application / Use', width: 40, example: 'Pickling, neutralization', note: 'Optional' },
+    { header: 'Remarks', width: 40, example: 'Handle with care', note: 'Optional' },
+    { header: 'Status', width: 10, example: 'Active', note: 'Active / Inactive' },
+  ];
+  downloadTemplate(columns, 'Chemicals', 'Chemical_Material_Import_Template');
+}
+
 // ─── Warehouse Template ───
 export function downloadWarehouseTemplate() {
   const columns: TemplateColumn[] = [

@@ -17,9 +17,11 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
     `SELECT b.*, p.name AS product_name, p.code AS product_code,
+      cust.name AS customer_name,
       lt.name AS leather_type_name, u.name AS uom_name, th.name AS thickness_name
     FROM boms b
     LEFT JOIN products p ON b.product_id = p.id
+    LEFT JOIN customers cust ON b.customer_id = cust.id
     LEFT JOIN leather_types lt ON b.leather_type_id = lt.id
     LEFT JOIN uom u ON b.uom_id = u.id
     LEFT JOIN thickness th ON b.thickness_id = th.id
@@ -37,9 +39,11 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
 export async function getById(id) {
   const [rows] = await pool.query(
     `SELECT b.*, p.name AS product_name, p.code AS product_code,
+      cust.name AS customer_name,
       lt.name AS leather_type_name, u.name AS uom_name, th.name AS thickness_name
     FROM boms b
     LEFT JOIN products p ON b.product_id = p.id
+    LEFT JOIN customers cust ON b.customer_id = cust.id
     LEFT JOIN leather_types lt ON b.leather_type_id = lt.id
     LEFT JOIN uom u ON b.uom_id = u.id
     LEFT JOIN thickness th ON b.thickness_id = th.id
@@ -54,7 +58,18 @@ export async function getByCode(code) {
   return rows[0] || null;
 }
 
-export async function getNextCode() {
+export async function getNextCode(customerName = null) {
+  if (customerName) {
+    const prefix = customerName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+    const [[row]] = await pool.query(
+      "SELECT code FROM boms WHERE code LIKE ? ORDER BY code DESC LIMIT 1",
+      [`${prefix}%`]
+    );
+    if (!row) return `${prefix}0001`;
+    const numPart = row.code.substring(prefix.length);
+    const num = parseInt(numPart, 10) + 1;
+    return `${prefix}${String(num).padStart(4, '0')}`;
+  }
   const [[row]] = await pool.query("SELECT code FROM boms ORDER BY id DESC LIMIT 1");
   if (!row) return 'BOM-00001';
   const num = parseInt(row.code.split('-')[1], 10) + 1;
@@ -62,11 +77,11 @@ export async function getNextCode() {
 }
 
 export async function create(data, createdBy = null) {
-  const code = data.code || await getNextCode();
+  const code = data.code || await getNextCode(data.customer_name || null);
   const [result] = await pool.query(
-    `INSERT INTO boms (code, name, product_id, recipe_id, leather_type, process_type, thickness, uom, valid_from, valid_to, status, description, version, leather_type_id, uom_id, thickness_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [code, data.name, data.product_id, data.recipe_id, data.leather_type,
+    `INSERT INTO boms (code, name, product_id, customer_id, recipe_id, leather_type, process_type, thickness, uom, valid_from, valid_to, status, description, version, leather_type_id, uom_id, thickness_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [code, data.name, data.product_id, data.customer_id || null, data.recipe_id, data.leather_type,
      data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
      data.status || 'Draft', data.description, data.version || 1,
      data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
@@ -84,8 +99,8 @@ export async function update(id, data, updatedBy = null) {
     const [[current]] = await conn.query('SELECT version FROM boms WHERE id=?', [id]);
     const newVersion = (current?.version || 0) + 1;
     const [result] = await conn.query(
-      `UPDATE boms SET code=?, name=?, product_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
-      [data.code, data.name, data.product_id, data.recipe_id, data.leather_type,
+      `UPDATE boms SET code=?, name=?, product_id=?, customer_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
+      [data.code, data.name, data.product_id, data.customer_id || null, data.recipe_id, data.leather_type,
        data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
        data.status, data.description, newVersion,
        data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,

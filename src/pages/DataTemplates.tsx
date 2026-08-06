@@ -3,6 +3,7 @@ import {
   downloadProductTemplate,
   downloadCategoryTemplate,
   downloadGroupTemplate,
+  downloadChemicalTemplate,
   downloadWarehouseTemplate,
 } from '../lib/excelTemplates';
 
@@ -24,6 +25,12 @@ const templates = [
     description: 'Template for group master data — includes category, HSN code, and GST rate.',
     icon: '📂',
     onDownload: downloadGroupTemplate,
+  },
+  {
+    title: 'Chemical / Material Master',
+    description: 'Template for chemicals and materials — type, UOM, properties, storage, supplier, inventory levels.',
+    icon: '🧪',
+    onDownload: downloadChemicalTemplate,
   },
   {
     title: 'Warehouse Master',

@@ -65,6 +65,15 @@ export async function stats(_req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function generateCode(req, res, next) {
+  try {
+    const customerName = req.params.customerName;
+    if (!customerName) return res.status(400).json({ error: 'Customer name is required' });
+    const code = await model.getNextCode(customerName);
+    res.json({ data: { code } });
+  } catch (err) { next(err); }
+}
+
 // --- BOM Items ---
 export async function listItems(req, res, next) {
   try {
