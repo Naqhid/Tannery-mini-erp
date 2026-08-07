@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { X, Camera, SwitchCamera } from 'lucide-react';
 
 interface BarcodeScannerProps {
@@ -15,11 +15,25 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
   const [activeCameraIdx, setActiveCameraIdx] = useState(0);
   const containerId = 'barcode-scanner-container';
 
+  // Supported 1D barcode formats for production cards
+  const formatsToSupport = [
+    Html5QrcodeSupportedFormats.CODE_128,
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.CODE_93,
+    Html5QrcodeSupportedFormats.EAN_13,
+    Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.ITF,
+    Html5QrcodeSupportedFormats.CODABAR,
+    Html5QrcodeSupportedFormats.QR_CODE,
+  ];
+
   useEffect(() => {
     if (!isOpen) return;
 
     let mounted = true;
-    const scanner = new Html5Qrcode(containerId);
+    const scanner = new Html5Qrcode(containerId, { formatsToSupport, verbose: false });
     scannerRef.current = scanner;
 
     const startScanner = async () => {
@@ -35,14 +49,18 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
         setCameras(devices);
         // Prefer back camera
         const backCamIdx = devices.findIndex(
-          (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear')
+          (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment')
         );
         const cameraIdx = backCamIdx >= 0 ? backCamIdx : 0;
         setActiveCameraIdx(cameraIdx);
 
         await scanner.start(
           devices[cameraIdx].id,
-          { fps: 10, qrbox: { width: 280, height: 150 } },
+          {
+            fps: 15,
+            qrbox: { width: 450, height: 200 },
+            aspectRatio: 1.5,
+          },
           (decodedText) => {
             onScan(decodedText);
             stopScanner();
@@ -88,7 +106,11 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
       }
       await scannerRef.current?.start(
         cameras[nextIdx].id,
-        { fps: 10, qrbox: { width: 280, height: 150 } },
+        {
+          fps: 15,
+          qrbox: { width: 450, height: 200 },
+          aspectRatio: 1.5,
+        },
         (decodedText) => {
           onScan(decodedText);
           stopScanner();
@@ -111,7 +133,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
@@ -149,12 +171,12 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
             </div>
           ) : (
             <div className="relative rounded-xl overflow-hidden bg-black">
-              <div id={containerId} className="w-full" style={{ minHeight: '280px' }} />
+              <div id={containerId} className="w-full" style={{ minHeight: '350px' }} />
               <div className="absolute inset-0 pointer-events-none border-2 border-blue-400/30 rounded-xl" />
             </div>
           )}
           <p className="text-xs text-gray-500 text-center mt-3">
-            Position the barcode within the frame to scan automatically
+            Hold the barcode steady inside the frame. Keep the full barcode visible.
           </p>
         </div>
       </div>
