@@ -66,6 +66,15 @@ export const getBatchByBarcode = catchAsync(async (req, res) => {
   res.json({ success: true, data: batch });
 });
 
+export const searchForTracking = catchAsync(async (req, res) => {
+  const { barcode, batch_no, production_date, stage } = req.query;
+  const batch = await batchModel.searchBatchForTracking({ barcode, batch_no, production_date, stage });
+  if (!batch) {
+    return res.status(404).json({ success: false, message: 'Batch not found' });
+  }
+  res.json({ success: true, data: batch });
+});
+
 export const getBatchSummary = catchAsync(async (req, res) => {
   const { batchId } = req.params;
   const summary = await batchModel.getBatchSummary(batchId);

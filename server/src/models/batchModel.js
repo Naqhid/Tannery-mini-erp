@@ -279,6 +279,58 @@ export async function getBatchByBarcode(barcode) {
   return rows[0] || null;
 }
 
+export async function searchBatchForTracking({ barcode, batch_no, production_date, stage }) {
+  const params = [];
+  let where = 'b.deleted_at IS NULL';
+
+  const searchTerm = barcode || batch_no;
+  if (searchTerm) {
+    where += ' AND (b.batch_no LIKE ? OR b.batch_no = ?)';
+    params.push(`%${searchTerm}%`, searchTerm);
+  }
+  if (production_date) {
+    where += ' AND b.production_date = ?';
+    params.push(production_date);
+  }
+  if (stage) {
+    where += ' AND (b.stage = ? OR b.current_stage = ?)';
+    params.push(stage, stage);
+  }
+
+  const [[batch]] = await pool.query(
+    `SELECT b.*,
+       c.name AS customer_name, c.code AS customer_code,
+       pp.plan_no AS production_plan_no,
+       so.order_no AS sales_order_no
+     FROM batches b
+     LEFT JOIN customers c ON b.customer_id = c.id
+     LEFT JOIN production_plans pp ON b.production_plan_id = pp.id
+     LEFT JOIN sales_orders so ON b.sales_order_id = so.id
+     WHERE ${where}
+     ORDER BY b.id DESC
+     LIMIT 1`,
+    params
+  );
+
+  if (!batch) return null;
+
+  const [items] = await pool.query(
+    `SELECT * FROM batch_line_items WHERE batch_id = ? ORDER BY seq ASC`, [batch.id]
+  );
+
+  // Recalculate totals from line items if items exist
+  if (items.length > 0) {
+    const totalReceipt = items.reduce((sum, i) => sum + parseFloat(i.receipt_qty || 0), 0);
+    const totalOutput = items.reduce((sum, i) => sum + parseFloat(i.output_qty || 0), 0);
+    const yieldPct = totalReceipt > 0 ? (totalOutput / totalReceipt) * 100 : 0;
+    batch.total_receipt_qty = totalReceipt;
+    batch.total_output_qty = totalOutput;
+    batch.yield_percent = parseFloat(yieldPct.toFixed(2));
+  }
+
+  return { ...batch, items };
+}
+
 export async function getBatchSummary(batchId) {
   const [[summary]] = await pool.query(
     `SELECT
