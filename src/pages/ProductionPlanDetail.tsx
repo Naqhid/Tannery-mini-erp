@@ -297,7 +297,7 @@ export default function ProductionPlanDetail() {
           .main-table .label { font-weight: bold; width: 20%; font-size: 11px; }
           .main-table .value { font-size: 12px; }
           .main-table .barcode-cell { text-align: center; }
-          .main-table .barcode-cell svg { height: 40px; }
+          .main-table .barcode-cell svg { height: 60px; }
           .hours-table { width: 100%; border-collapse: collapse; border: 2px solid #333; }
           .hours-table th { background: #2c3e50; color: white; padding: 8px 10px; font-size: 11px; text-align: center; }
           .hours-table td { border: 1px solid #999; padding: 6px 10px; font-size: 11px; height: 28px; }
@@ -310,7 +310,7 @@ export default function ProductionPlanDetail() {
           document.addEventListener('DOMContentLoaded', function() {
             ${Array.from({length: totalBatches}, (_, i) => {
               const serialNo = `${batchNo}-${String(i+1).padStart(3, '0')}`;
-              return `try { JsBarcode("#barcode-${i+1}", "${serialNo}", { format: "CODE128", height: 40, displayValue: true, fontSize: 10 }); } catch(e) {}`;
+              return `try { JsBarcode("#barcode-${i+1}", "${serialNo}", { format: "CODE128", height: 60, width: 2, displayValue: true, fontSize: 12, margin: 5 }); } catch(e) {}`;
             }).join('\n')}
             setTimeout(function() { window.print(); }, 500);
           });

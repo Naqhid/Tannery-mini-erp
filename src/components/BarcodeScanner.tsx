@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { X, Camera, SwitchCamera } from 'lucide-react';
+import { X, Camera, SwitchCamera, FlashlightOff, Flashlight } from 'lucide-react';
 
 interface BarcodeScannerProps {
   isOpen: boolean;
@@ -13,9 +13,10 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
   const [error, setError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
   const [activeCameraIdx, setActiveCameraIdx] = useState(0);
+  const [torchOn, setTorchOn] = useState(false);
   const containerId = 'barcode-scanner-container';
 
-  // Supported 1D barcode formats for production cards
+  // Support all common 1D and 2D barcode formats
   const formatsToSupport = [
     Html5QrcodeSupportedFormats.CODE_128,
     Html5QrcodeSupportedFormats.CODE_39,
@@ -27,13 +28,28 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
     Html5QrcodeSupportedFormats.ITF,
     Html5QrcodeSupportedFormats.CODABAR,
     Html5QrcodeSupportedFormats.QR_CODE,
+    Html5QrcodeSupportedFormats.DATA_MATRIX,
   ];
+
+  const scanConfig = {
+    fps: 20,
+    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+      // Use 90% of width and 50% of height for barcode scanning area
+      const width = Math.min(Math.floor(viewfinderWidth * 0.9), 600);
+      const height = Math.min(Math.floor(viewfinderHeight * 0.5), 250);
+      return { width, height };
+    },
+    disableFlip: false,
+  };
 
   useEffect(() => {
     if (!isOpen) return;
 
     let mounted = true;
-    const scanner = new Html5Qrcode(containerId, { formatsToSupport, verbose: false });
+    const scanner = new Html5Qrcode(containerId, {
+      formatsToSupport,
+      verbose: false,
+    });
     scannerRef.current = scanner;
 
     const startScanner = async () => {
@@ -47,30 +63,45 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
         }
 
         setCameras(devices);
-        // Prefer back camera
+        // Prefer back/environment camera
         const backCamIdx = devices.findIndex(
-          (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment')
+          (d) =>
+            d.label.toLowerCase().includes('back') ||
+            d.label.toLowerCase().includes('rear') ||
+            d.label.toLowerCase().includes('environment')
         );
         const cameraIdx = backCamIdx >= 0 ? backCamIdx : 0;
         setActiveCameraIdx(cameraIdx);
 
         await scanner.start(
           devices[cameraIdx].id,
-          {
-            fps: 15,
-            qrbox: { width: 450, height: 200 },
-            aspectRatio: 1.5,
-          },
+          scanConfig,
           (decodedText) => {
             onScan(decodedText);
             stopScanner();
             onClose();
           },
-          () => { /* ignore scan failures */ }
+          () => {}
         );
       } catch (err: any) {
         if (mounted) {
-          setError(err?.message || 'Unable to access camera. Please allow camera permissions.');
+          // If specific camera fails, try with facingMode constraint
+          try {
+            await scanner.start(
+              { facingMode: 'environment' },
+              scanConfig,
+              (decodedText) => {
+                onScan(decodedText);
+                stopScanner();
+                onClose();
+              },
+              () => {}
+            );
+          } catch (fallbackErr: any) {
+            setError(
+              fallbackErr?.message || 'Unable to access camera. Please allow camera permissions.'
+            );
+          }
         }
       }
     };
@@ -106,11 +137,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
       }
       await scannerRef.current?.start(
         cameras[nextIdx].id,
-        {
-          fps: 15,
-          qrbox: { width: 450, height: 200 },
-          aspectRatio: 1.5,
-        },
+        scanConfig,
         (decodedText) => {
           onScan(decodedText);
           stopScanner();
@@ -123,28 +150,53 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
     }
   };
 
+  const toggleTorch = async () => {
+    try {
+      const track = scannerRef.current?.getRunningTrackCameraCapabilities();
+      if (track?.torchFeature()?.isSupported()) {
+        const newState = !torchOn;
+        await track.torchFeature().apply(newState);
+        setTorchOn(newState);
+      }
+    } catch {
+      // Torch not supported on this device
+    }
+  };
+
   const handleClose = () => {
     stopScanner();
     setError(null);
+    setTorchOn(false);
     onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center gap-2">
             <Camera className="w-5 h-5 text-blue-600" />
             <h3 className="text-base font-semibold text-gray-900">Scan Barcode</h3>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleTorch}
+              className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+              title="Toggle Flashlight"
+            >
+              {torchOn ? (
+                <Flashlight className="w-5 h-5 text-yellow-500" />
+              ) : (
+                <FlashlightOff className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
             {cameras.length > 1 && (
               <button
                 onClick={switchCamera}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
                 title="Switch Camera"
               >
                 <SwitchCamera className="w-5 h-5 text-gray-600" />
@@ -152,7 +204,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
             )}
             <button
               onClick={handleClose}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
             >
               <X className="w-5 h-5 text-gray-600" />
             </button>
@@ -160,7 +212,7 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
         </div>
 
         {/* Scanner Area */}
-        <div className="p-4">
+        <div className="p-3">
           {error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-3">
@@ -168,15 +220,20 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
               </div>
               <p className="text-sm text-red-600 font-medium mb-1">Camera Error</p>
               <p className="text-xs text-gray-500 max-w-xs">{error}</p>
+              <button
+                onClick={handleClose}
+                className="mt-4 px-4 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Close
+              </button>
             </div>
           ) : (
             <div className="relative rounded-xl overflow-hidden bg-black">
-              <div id={containerId} className="w-full" style={{ minHeight: '350px' }} />
-              <div className="absolute inset-0 pointer-events-none border-2 border-blue-400/30 rounded-xl" />
+              <div id={containerId} className="w-full" style={{ minHeight: '380px' }} />
             </div>
           )}
-          <p className="text-xs text-gray-500 text-center mt-3">
-            Hold the barcode steady inside the frame. Keep the full barcode visible.
+          <p className="text-xs text-gray-500 text-center mt-2">
+            Align the barcode within the highlighted area. Keep steady until detected.
           </p>
         </div>
       </div>
