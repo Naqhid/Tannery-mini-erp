@@ -77,6 +77,7 @@ export const menuItems: MenuItem[] = [
     children: [
       { label: 'BOM (Bill of Materials)', icon: <Layers size={16} />, path: '/bom' },
       { label: 'Recipe Creation', icon: <PenTool size={16} />, path: '/recipe-creation' },
+      { label: 'Cost Breakdown', icon: <FileText size={16} />, path: '/cost-breakdown' },
       { label: 'BOM Revision', icon: <GitBranch size={16} />, path: '/bom-revision' },
       { label: 'Material Requirement', icon: <ListChecks size={16} />, path: '/material-requirement' },
     ],
@@ -85,11 +86,7 @@ export const menuItems: MenuItem[] = [
     label: 'Purchase',
     icon: <Truck size={20} />,
     children: [
-      { label: 'Purchase Order', icon: <FileText size={16} />, path: '/purchase-orders' },
-      { label: 'GRN', icon: <PackageOpen size={16} />, path: '/grn' },
-      { label: 'Supplier Invoice', icon: <FileText size={16} />, path: '/supplier-invoice' },
-      { label: 'Supplier Return', icon: <ArrowLeftRight size={16} />, path: '/supplier-return' },
-      { label: 'Supplier Master', icon: <Users size={16} />, path: '/supplier-master' },
+      { label: 'Chemical / Material Master', icon: <FlaskConical size={16} />, path: '/chemical-master' },
       { label: 'Supplier Pricing History', icon: <Receipt size={16} />, path: '/supplier-pricing-history' },
       { label: 'Supplier Price Approval', icon: <CheckCircle size={16} />, path: '/supplier-price-approval' },
     ],
@@ -105,9 +102,7 @@ export const menuItems: MenuItem[] = [
   { label: 'Production', icon: <Factory size={20} />, children: [
       { label: 'Production Plan', icon: <ClipboardList size={16} />, path: '/production-plan' },
       { label: 'Batch Creation', icon: <ListChecks size={16} />, path: '/production-plan/new' },
-      { label: 'Material Issue', icon: <Factory size={16} />, path: '/material-issue' },
-      { label: 'Batch Process', icon: <Layers size={16} />, path: '/batch-process' },
-      { label: 'Batch Completion', icon: <ListChecks size={16} />, path: '/batch-completion' },
+      { label: 'Material Requisition Note', icon: <Layers size={16} />, path: '/batch-process' },
       { label: 'Batch / Lot Tracking', icon: <Package size={16} />, path: '/batch-lot-tracking' },
     ],
   },

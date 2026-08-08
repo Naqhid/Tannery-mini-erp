@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import {
   Plus, Save, X, Edit2, Trash2, ArrowLeft, FlaskConical, RotateCcw,
-  ClipboardList, Settings, Paperclip, MessageSquare,
+  ClipboardList, Settings, Paperclip, MessageSquare, Send,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -121,6 +121,8 @@ export default function RecipeCreationForm() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [originalVersion, setOriginalVersion] = useState<number>(1);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isPosted, setIsPosted] = useState(false);
+  const [posting, setPosting] = useState(false);
 
   // Item/Stage modals
   const [showItemModal, setShowItemModal] = useState(false);
@@ -168,7 +170,8 @@ export default function RecipeCreationForm() {
       });
       setOriginalVersion(recipe.version || 1);
       setHasChanges(false);
-      setStatusToggle(recipe.status === 'active' || recipe.status === 'Active');
+      setIsPosted(recipe.status === 'posted' || recipe.status === 'Posted');
+      setStatusToggle(recipe.status === 'active' || recipe.status === 'Active' || recipe.status === 'posted' || recipe.status === 'Posted');
       setRecipeItems(detail.data.items || []);
       setStages(detail.data.stages || []);
       setAttachments(detail.data.attachments || []);
@@ -241,6 +244,19 @@ export default function RecipeCreationForm() {
     } catch (err) {
       toast.error('Failed to save recipe: ' + (err as Error).message);
     } finally { setSaving(false); }
+  };
+
+  const handlePost = async () => {
+    if (!formData.id) return;
+    if (!confirm('Once posted, this recipe cannot be edited or deleted. Continue?')) return;
+    setPosting(true);
+    try {
+      await api(`/recipes/${formData.id}`, { method: 'PUT', body: JSON.stringify({ ...formData, status: 'posted' }) });
+      toast.success('Recipe posted successfully!');
+      setIsPosted(true);
+    } catch (err) {
+      toast.error('Failed to post recipe: ' + (err as Error).message);
+    } finally { setPosting(false); }
   };
 
   // Item CRUD
@@ -687,13 +703,22 @@ export default function RecipeCreationForm() {
         <button onClick={() => navigate('/recipe-creation')} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all">
           <RotateCcw size={13} /> Cancel
         </button>
-        <button
-          onClick={canWrite ? handleSave : undefined}
-          disabled={saving || isReadOnly}
-          className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg active:scale-95'}`}
-        >
-          <Save size={13} /> {saving ? 'Saving...' : isNew ? 'Save Recipe' : 'Update'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={canWrite && !isPosted ? handlePost : undefined}
+            disabled={isNew || isPosted || posting || isReadOnly}
+            className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-medium text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${(isNew || isPosted || isReadOnly) ? 'cursor-not-allowed' : 'shadow-emerald-200 hover:shadow-lg active:scale-95'}`}
+          >
+            <Send size={13} /> {posting ? 'Posting...' : isPosted ? 'Posted' : 'Post'}
+          </button>
+          <button
+            onClick={canWrite && !isPosted ? handleSave : undefined}
+            disabled={saving || isReadOnly || isPosted}
+            className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${(isReadOnly || isPosted) ? 'cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg active:scale-95'}`}
+          >
+            <Save size={13} /> {saving ? 'Saving...' : isNew ? 'Save Recipe' : 'Update'}
+          </button>
+        </div>
       </div>
 
       {/* Item Modal */}

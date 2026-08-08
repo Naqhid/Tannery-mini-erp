@@ -161,6 +161,7 @@ function App() {
             <Route path="recipe-creation" element={<RecipeCreation />} />
             <Route path="recipe-creation/new" element={<RecipeCreationForm />} />
             <Route path="recipe-creation/:id" element={<RecipeCreationForm />} />
+            <Route path="cost-breakdown" element={<PlaceholderPage />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
             <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
             <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />

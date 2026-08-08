@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Save, X, ArrowLeft, Plus, Trash2, Factory, RotateCcw, Info, Minus } from 'lucide-react';
+import { Save, X, ArrowLeft, Plus, Trash2, Factory, RotateCcw, Info, Minus, Send } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import api from '../lib/api';
@@ -86,6 +86,8 @@ export default function MaterialIssueToBatchDetail() {
   const [batchOptions, setBatchOptions] = useState<BatchOption[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [isPosted, setIsPosted] = useState(false);
+  const [posting, setPosting] = useState(false);
   const [searchItem, setSearchItem] = useState('');
 
   const fetchWarehouses = useCallback(async () => {
@@ -122,6 +124,7 @@ export default function MaterialIssueToBatchDetail() {
         loading_unloading: String(d.loading_unloading || ''),
         other_charges: String(d.other_charges || ''),
       });
+      setIsPosted(d.status === 'Posted' || d.status === 'posted');
       setItems((d.items || []).map((it: any) => ({
         _key: genKey(), material_id: String(it.material_id),
         material_code: it.material_code || '', material_name: it.material_name || '',
@@ -261,6 +264,18 @@ export default function MaterialIssueToBatchDetail() {
       navigate('/material-issue');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { setSaving(false); }
+  };
+
+  const handlePost = async () => {
+    if (!issue.id) return;
+    if (!confirm('Once posted, this material issue cannot be edited or deleted. Continue?')) return;
+    setPosting(true);
+    try {
+      await api(`/material-issues/${issue.id}`, { method: 'PUT', body: JSON.stringify({ ...issue, status: 'Posted' }) });
+      toast.success('Material issue posted successfully!');
+      setIsPosted(true);
+    } catch (err) { toast.error('Failed to post: ' + (err as Error).message); }
+    finally { setPosting(false); }
   };
 
   if (loading) {
@@ -486,10 +501,17 @@ export default function MaterialIssueToBatchDetail() {
         <button onClick={() => navigate('/material-issue')} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
           <X size={14} /> Cancel
         </button>
-        <button onClick={handleClear} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+        <button onClick={handleClear} disabled={isPosted} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50">
           <RotateCcw size={14} /> Clear
         </button>
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+        <button
+          onClick={handlePost}
+          disabled={isNew || isPosted || posting}
+          className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Send size={14} /> {posting ? 'Posting...' : isPosted ? 'Posted' : 'Post'}
+        </button>
+        <button onClick={handleSave} disabled={saving || isPosted} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>

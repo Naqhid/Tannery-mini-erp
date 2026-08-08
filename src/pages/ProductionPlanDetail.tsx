@@ -213,7 +213,7 @@ export default function ProductionPlanDetail() {
     const customerName = customers.find((c) => String(c.id) === plan.customer_id)?.name || '-';
     const batchNo = plan.plan_no ? plan.plan_no.replace('PLAN-', '') : '000001';
     const batchDate = plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-    const prodHours = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
+    const prodHours = ['08:00 to 09:00','09:00 to 10:00','10:00 to 11:00','11:00 to 12:00','12:00 to 13:00','13:00 to 14:00','14:00 to 15:00','15:00 to 16:00','16:00 to 17:00','17:00 to 18:00'];
 
     // Generate one card per batch
     const cards: string[] = [];
