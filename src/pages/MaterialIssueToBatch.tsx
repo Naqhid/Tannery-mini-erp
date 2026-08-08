@@ -68,6 +68,7 @@ export default function MaterialIssueToBatch() {
       deleteMessage="Are you sure? This will remove the material issue entry."
       searchPlaceholder="Search issues..."
       enableBulkDelete={true}
+      isRowActionDisabled={(row) => row.status === 'Posted' || row.status === 'posted'}
     />
   );
 }

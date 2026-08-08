@@ -761,8 +761,8 @@ export default function RecipeCreation() {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
-                  <button onClick={canWrite ? (e) => { e.stopPropagation(); navigate(`/recipe-creation/${r.id}`); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-100'}`}><Edit2 size={15} /></button>
-                  <button onClick={canWrite ? (e) => { e.stopPropagation(); r.id && handleDelete(r.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-2 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-100'}`}><Trash2 size={15} /></button>
+                  <button onClick={canWrite && r.status !== 'posted' ? (e) => { e.stopPropagation(); navigate(`/recipe-creation/${r.id}`); } : undefined} disabled={isReadOnly || r.status === 'posted'} title={r.status === 'posted' ? 'Posted - cannot edit' : isReadOnly ? 'Read-only access' : 'Edit'} className={`p-2 rounded-lg transition-all ${isReadOnly || r.status === 'posted' ? 'text-gray-300 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-100'}`}><Edit2 size={15} /></button>
+                  <button onClick={canWrite && r.status !== 'posted' ? (e) => { e.stopPropagation(); r.id && handleDelete(r.id); } : undefined} disabled={isReadOnly || r.status === 'posted'} title={r.status === 'posted' ? 'Posted - cannot delete' : isReadOnly ? 'Read-only access' : 'Delete'} className={`p-2 rounded-lg transition-all ${isReadOnly || r.status === 'posted' ? 'text-gray-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-100'}`}><Trash2 size={15} /></button>
                 </div>
               </div>
             );
@@ -829,8 +829,8 @@ export default function RecipeCreation() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1">
-                      <button onClick={canWrite ? (e) => { e.stopPropagation(); navigate(`/recipe-creation/${r.id}`); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Edit'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-100'}`}><Edit2 size={14} /></button>
-                      <button onClick={canWrite ? (e) => { e.stopPropagation(); r.id && handleDelete(r.id); } : undefined} disabled={isReadOnly} title={isReadOnly ? 'Read-only access' : 'Delete'} className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}><Trash2 size={14} /></button>
+                      <button onClick={canWrite && r.status !== 'posted' ? (e) => { e.stopPropagation(); navigate(`/recipe-creation/${r.id}`); } : undefined} disabled={isReadOnly || r.status === 'posted'} title={r.status === 'posted' ? 'Posted - cannot edit' : isReadOnly ? 'Read-only access' : 'Edit'} className={`p-1.5 rounded-lg transition-all ${isReadOnly || r.status === 'posted' ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-100'}`}><Edit2 size={14} /></button>
+                      <button onClick={canWrite && r.status !== 'posted' ? (e) => { e.stopPropagation(); r.id && handleDelete(r.id); } : undefined} disabled={isReadOnly || r.status === 'posted'} title={r.status === 'posted' ? 'Posted - cannot delete' : isReadOnly ? 'Read-only access' : 'Delete'} className={`p-1.5 rounded-lg transition-all ${isReadOnly || r.status === 'posted' ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-100'}`}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -1179,7 +1179,7 @@ export default function RecipeCreation() {
               <div className="px-5 py-4 border-t border-gray-100 bg-gradient-to-r from-slate-50 to-violet-50/30 shrink-0 rounded-b-2xl">
                 <div className="flex items-center justify-between">
                   {selectedRecipe ? (
-                    <button onClick={() => selectedRecipe?.id && handleDelete(selectedRecipe.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95"><Trash2 size={13} /> Delete</button>
+                    <button onClick={selectedRecipe?.status !== 'posted' ? () => selectedRecipe?.id && handleDelete(selectedRecipe.id) : undefined} disabled={selectedRecipe?.status === 'posted'} className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-500 to-rose-500 rounded-lg shadow-sm shadow-red-200 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}><Trash2 size={13} /> Delete</button>
                   ) : <div />}
                   <div className="flex items-center gap-2">
                     <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all active:scale-95" onClick={() => setShowPanel(false)}><RotateCcw size={13} /> Cancel</button>

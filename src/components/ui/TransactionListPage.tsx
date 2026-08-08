@@ -52,6 +52,7 @@ interface TransactionListPageProps {
   searchPlaceholder?: string;
   rowActions?: (row: any) => React.ReactNode;
   formatRow?: (row: any, col: Column, index: number) => React.ReactNode;
+  isRowActionDisabled?: (row: any) => boolean;
 }
 
 export default function TransactionListPage({
@@ -74,6 +75,7 @@ export default function TransactionListPage({
   searchPlaceholder = 'Search...',
   rowActions,
   formatRow,
+  isRowActionDisabled,
 }: TransactionListPageProps) {
   const { canWrite, isReadOnly } = usePermission();
   const [data, setData] = useState<any[]>([]);
@@ -383,10 +385,10 @@ export default function TransactionListPage({
                         <div className="flex items-center gap-1">
                           {onEdit && (
                             <button
-                              onClick={canWrite ? () => onEdit(row) : undefined}
-                              disabled={isReadOnly}
-                              title={isReadOnly ? 'Read-only access' : 'Edit'}
-                              className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                              onClick={canWrite && !(isRowActionDisabled?.(row)) ? () => onEdit(row) : undefined}
+                              disabled={isReadOnly || !!isRowActionDisabled?.(row)}
+                              title={isRowActionDisabled?.(row) ? 'Posted - cannot edit' : isReadOnly ? 'Read-only access' : 'Edit'}
+                              className={`p-1.5 rounded-lg transition-all ${isReadOnly || isRowActionDisabled?.(row) ? 'text-gray-300 cursor-not-allowed' : 'text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}
                               aria-label="Edit"
                             >
                               <Edit2 size={14} />
@@ -394,10 +396,10 @@ export default function TransactionListPage({
                           )}
                           {onDelete && (
                             <button
-                              onClick={canWrite ? () => setDeleteConfirm({ open: true, id: row.id }) : undefined}
-                              disabled={isReadOnly}
-                              title={isReadOnly ? 'Read-only access' : 'Delete'}
-                              className={`p-1.5 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50'}`}
+                              onClick={canWrite && !(isRowActionDisabled?.(row)) ? () => setDeleteConfirm({ open: true, id: row.id }) : undefined}
+                              disabled={isReadOnly || !!isRowActionDisabled?.(row)}
+                              title={isRowActionDisabled?.(row) ? 'Posted - cannot delete' : isReadOnly ? 'Read-only access' : 'Delete'}
+                              className={`p-1.5 rounded-lg transition-all ${isReadOnly || isRowActionDisabled?.(row) ? 'text-gray-300 cursor-not-allowed' : 'text-rose-400 hover:text-rose-600 hover:bg-rose-50'}`}
                               aria-label="Delete"
                             >
                               <Trash2 size={14} />
