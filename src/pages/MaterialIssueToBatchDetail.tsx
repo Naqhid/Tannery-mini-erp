@@ -88,6 +88,7 @@ export default function MaterialIssueToBatchDetail() {
   const [saving, setSaving] = useState(false);
   const [isPosted, setIsPosted] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [searchItem, setSearchItem] = useState('');
 
   const fetchWarehouses = useCallback(async () => {
@@ -268,12 +269,12 @@ export default function MaterialIssueToBatchDetail() {
 
   const handlePost = async () => {
     if (!issue.id) return;
-    if (!confirm('Once posted, this material issue cannot be edited or deleted. Continue?')) return;
     setPosting(true);
     try {
       await api(`/material-issues/${issue.id}`, { method: 'PUT', body: JSON.stringify({ ...issue, status: 'Posted' }) });
       toast.success('Material issue posted successfully!');
       setIsPosted(true);
+      setShowPostConfirm(false);
     } catch (err) { toast.error('Failed to post: ' + (err as Error).message); }
     finally { setPosting(false); }
   };
@@ -505,7 +506,7 @@ export default function MaterialIssueToBatchDetail() {
           <RotateCcw size={14} /> Clear
         </button>
         <button
-          onClick={handlePost}
+          onClick={() => setShowPostConfirm(true)}
           disabled={isNew || isPosted || posting}
           className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -515,6 +516,38 @@ export default function MaterialIssueToBatchDetail() {
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>
+
+      {/* Post Confirmation Dialog */}
+      {showPostConfirm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80] flex items-center justify-center">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl mx-4 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg className="w-7 h-7 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Post</h3>
+              <p className="text-sm text-gray-600">Once posted, this material issue cannot be edited or deleted. Are you sure you want to continue?</p>
+            </div>
+            <div className="flex border-t border-gray-200">
+              <button
+                onClick={() => setShowPostConfirm(false)}
+                className="flex-1 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePost}
+                disabled={posting}
+                className="flex-1 py-3 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {posting ? 'Posting...' : 'Yes, Post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
