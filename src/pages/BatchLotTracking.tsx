@@ -49,6 +49,7 @@ export default function BatchLotTracking() {
 
   const handleBarcodeScan = (scannedValue: string) => {
     const trimmed = scannedValue.trim();
+    toast.info(`Scanned value: "${trimmed}"`);
     setBarcode(trimmed);
     setBatchNo(trimmed);
     setScannerOpen(false);
@@ -102,30 +103,36 @@ export default function BatchLotTracking() {
           if (res.data.batch_no) setBatchNo(res.data.batch_no);
           if (res.data.production_date) setProductionDate(res.data.production_date.split('T')[0]);
           if (res.data.current_stage) setStage(res.data.current_stage);
+          toast.success(`Batch ${res.data.batch_no} found`);
           return;
         }
-      } catch {
+      } catch (trackingErr: any) {
         // Fallback: search via getAll then fetch by ID for full details
-        const searchQuery = searchTerm || '';
-        const listRes = await api<{ success: boolean; data: Batch[] }>(`/batches?search=${encodeURIComponent(searchQuery)}&limit=1`);
-        if (listRes.data && listRes.data.length > 0) {
-          const found = listRes.data[0];
-          // Fetch full details with items
-          const detailRes = await api<{ success: boolean; data: Batch }>(`/batches/${found.id}`);
-          if (detailRes.data) {
-            setBatch(detailRes.data);
-            if (detailRes.data.batch_no) setBatchNo(detailRes.data.batch_no);
-            if (detailRes.data.production_date) setProductionDate(detailRes.data.production_date.split('T')[0]);
-            if (detailRes.data.current_stage) setStage(detailRes.data.current_stage);
-            return;
+        try {
+          const searchQuery = searchTerm || '';
+          const listRes = await api<{ success: boolean; data: Batch[] }>(`/batches?search=${encodeURIComponent(searchQuery)}&limit=1`);
+          if (listRes.data && listRes.data.length > 0) {
+            const found = listRes.data[0];
+            // Fetch full details with items
+            const detailRes = await api<{ success: boolean; data: Batch }>(`/batches/${found.id}`);
+            if (detailRes.data) {
+              setBatch(detailRes.data);
+              if (detailRes.data.batch_no) setBatchNo(detailRes.data.batch_no);
+              if (detailRes.data.production_date) setProductionDate(detailRes.data.production_date.split('T')[0]);
+              if (detailRes.data.current_stage) setStage(detailRes.data.current_stage);
+              toast.success(`Batch ${detailRes.data.batch_no} found`);
+              return;
+            }
           }
+        } catch (fallbackErr: any) {
+          toast.error(`Search failed: ${fallbackErr.message}`);
         }
       }
 
-      toast.error('Batch not found');
+      toast.error(`Batch not found for: "${searchTerm}"`);
       setBatch(null);
-    } catch {
-      toast.error('Batch not found');
+    } catch (err: any) {
+      toast.error(`Search error: ${err.message || 'Unknown error'}`);
       setBatch(null);
     } finally {
       setLoading(false);
@@ -146,28 +153,35 @@ export default function BatchLotTracking() {
           if (res.data.batch_no) setBatchNo(res.data.batch_no);
           if (res.data.production_date) setProductionDate(res.data.production_date.split('T')[0]);
           if (res.data.current_stage) setStage(res.data.current_stage);
+          toast.success(`Batch ${res.data.batch_no} found`);
           return;
         }
-      } catch {
+      } catch (trackingErr: any) {
+        toast.info(`Tracking endpoint: ${trackingErr.message || 'No result'}, trying fallback...`);
         // Fallback
-        const listRes = await api<{ success: boolean; data: Batch[] }>(`/batches?search=${encodeURIComponent(searchValue)}&limit=1`);
-        if (listRes.data && listRes.data.length > 0) {
-          const found = listRes.data[0];
-          const detailRes = await api<{ success: boolean; data: Batch }>(`/batches/${found.id}`);
-          if (detailRes.data) {
-            setBatch(detailRes.data);
-            if (detailRes.data.batch_no) setBatchNo(detailRes.data.batch_no);
-            if (detailRes.data.production_date) setProductionDate(detailRes.data.production_date.split('T')[0]);
-            if (detailRes.data.current_stage) setStage(detailRes.data.current_stage);
-            return;
+        try {
+          const listRes = await api<{ success: boolean; data: Batch[] }>(`/batches?search=${encodeURIComponent(searchValue)}&limit=1`);
+          if (listRes.data && listRes.data.length > 0) {
+            const found = listRes.data[0];
+            const detailRes = await api<{ success: boolean; data: Batch }>(`/batches/${found.id}`);
+            if (detailRes.data) {
+              setBatch(detailRes.data);
+              if (detailRes.data.batch_no) setBatchNo(detailRes.data.batch_no);
+              if (detailRes.data.production_date) setProductionDate(detailRes.data.production_date.split('T')[0]);
+              if (detailRes.data.current_stage) setStage(detailRes.data.current_stage);
+              toast.success(`Batch ${detailRes.data.batch_no} found (fallback)`);
+              return;
+            }
           }
+        } catch (fallbackErr: any) {
+          toast.error(`Fallback search failed: ${fallbackErr.message}`);
         }
       }
 
-      toast.error('Batch not found');
+      toast.error(`Batch not found for: "${searchValue}"`);
       setBatch(null);
-    } catch {
-      toast.error('Batch not found');
+    } catch (err: any) {
+      toast.error(`Search error: ${err.message || 'Unknown error'}`);
       setBatch(null);
     } finally {
       setLoading(false);
