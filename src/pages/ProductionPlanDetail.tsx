@@ -8,6 +8,8 @@ import { usePermission } from '../lib/usePermission';
 interface Customer { id: number; name: string; }
 interface SalesOrder { id: number; order_no: string; customer_id?: number; customer_name?: string; }
 interface ProcessStage { id: number; code: string; name: string; }
+interface Product { id: number; code: string; name: string; }
+interface Warehouse { id: number; code?: string; name: string; }
 
 interface PlanData {
   id?: number;
@@ -16,6 +18,8 @@ interface PlanData {
   sales_order_id: string;
   customer_id: string;
   customer_order_no: string;
+  product_id: string;
+  warehouse_id: string;
   article: string;
   color: string;
   finish: string;
@@ -44,6 +48,7 @@ interface StageItem {
 const emptyPlan: PlanData = {
   plan_no: '', plan_date: new Date().toISOString().split('T')[0],
   sales_order_id: '', customer_id: '', customer_order_no: '',
+  product_id: '', warehouse_id: '',
   article: '', color: '', finish: '',
   order_qty: '', planned_qty: '', batch_qty: '', status: 'Draft',
 };
@@ -65,20 +70,26 @@ export default function ProductionPlanDetail() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [processStages, setProcessStages] = useState<ProcessStage[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
-      const [cust, so, ps] = await Promise.all([
+      const [cust, so, ps, prod, wh] = await Promise.all([
         api<{ data: Customer[] }>('/customers?limit=500'),
         api<{ data: SalesOrder[] }>('/sales-orders?limit=500'),
         api<{ data: ProcessStage[] }>('/process-stages?limit=100'),
+        api<{ data: Product[] }>('/products/dropdown'),
+        api<{ data: Warehouse[] }>('/warehouses/dropdown'),
       ]);
       setCustomers(cust.data || []);
       setSalesOrders(so.data || []);
       const stageList = ps.data || [];
       setProcessStages(stageList);
+      setProducts(prod.data || []);
+      setWarehouses(wh.data || []);
       // If new and no stages, pre-populate with all process stages
       if (isNew && stageList.length > 0) {
         setStages(stageList.map((s, i) => ({
@@ -120,6 +131,8 @@ export default function ProductionPlanDetail() {
         sales_order_id: String(d.sales_order_id || ''),
         customer_id: String(d.customer_id || ''),
         customer_order_no: d.customer_order_no || '',
+        product_id: String(d.product_id || ''),
+        warehouse_id: String(d.warehouse_id || ''),
         article: d.article || '',
         color: d.color || '',
         finish: d.finish || '',
@@ -209,15 +222,49 @@ export default function ProductionPlanDetail() {
     }
   };
 
-  const handlePrintBatches = () => {
+  const handlePrintBatches = async () => {
+    if (!plan.plan_no) { toast.error('Please save the plan first'); return; }
+    
     const customerName = customers.find((c) => String(c.id) === plan.customer_id)?.name || '-';
     const batchNo = plan.plan_no ? plan.plan_no.replace('PLAN-', '') : '000001';
     const batchDate = plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
     const prodHours = ['08:00 to 09:00','09:00 to 10:00','10:00 to 11:00','11:00 to 12:00','12:00 to 13:00','13:00 to 14:00','14:00 to 15:00','15:00 to 16:00','16:00 to 17:00','17:00 to 18:00'];
 
+    const totalBatches = noOfBatches || 1;
+
+    // Create batch records in the database before printing
+    try {
+      for (let i = 1; i <= totalBatches; i++) {
+        const serialNo = `${batchNo}-${String(i).padStart(3, '0')}`;
+        await api('/batches', {
+          method: 'POST',
+          body: JSON.stringify({
+            batch_no: serialNo,
+            production_plan_id: plan.id || null,
+            sales_order_id: plan.sales_order_id ? Number(plan.sales_order_id) : null,
+            customer_id: plan.customer_id ? Number(plan.customer_id) : null,
+            article_name: plan.article || null,
+            production_date: plan.plan_date || null,
+            stage: stages[0]?.stage_name || 'Tanning',
+            current_stage: stages[0]?.stage_name || 'Tanning',
+            total_receipt_qty: batchQty,
+            total_output_qty: 0,
+            status: 'Draft',
+            items: [],
+          }),
+        });
+      }
+      toast.success(`${totalBatches} batch(es) created successfully`);
+    } catch (err: any) {
+      // If batch already exists (duplicate), continue with printing
+      if (!err.message?.includes('Duplicate')) {
+        toast.error('Failed to create batches: ' + (err as Error).message);
+        return;
+      }
+    }
+
     // Generate one card per batch
     const cards: string[] = [];
-    const totalBatches = noOfBatches || 1;
     for (let i = 1; i <= totalBatches; i++) {
       const serialNo = `${batchNo}-${String(i).padStart(3, '0')}`;
       cards.push(`
@@ -329,17 +376,14 @@ export default function ProductionPlanDetail() {
         ...plan,
         sales_order_id: plan.sales_order_id ? Number(plan.sales_order_id) : null,
         customer_id: plan.customer_id ? Number(plan.customer_id) : null,
-        product_id: null,
-        warehouse_id: null,
+        product_id: plan.product_id ? Number(plan.product_id) : null,
+        warehouse_id: plan.warehouse_id ? Number(plan.warehouse_id) : null,
         uom: 'Sq.Ft.',
         order_qty: orderQty,
         planned_qty: plannedQty,
         batch_qty: batchQty,
         no_of_batches: noOfBatches,
         balance_qty: balanceQty,
-        output_qty: 0,
-        output_percent: 0,
-        wip_qty: 0,
         items: [],
         stages: stages.map((s) => ({
           seq: s.seq,
@@ -401,6 +445,12 @@ export default function ProductionPlanDetail() {
               Clear
             </button>
             <button
+              onClick={() => navigate('/production-plan')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
+            >
+              <X size={13} /> Cancel
+            </button>
+            <button
               onClick={canWrite ? handleSave : undefined}
               disabled={saving || isReadOnly}
               title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
@@ -457,6 +507,56 @@ export default function ProductionPlanDetail() {
         </div>
 
         {/* Row 2 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
+            <select
+              value={plan.product_id}
+              onChange={(e) => update('product_id', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+            >
+              <option value="">Select Product</option>
+              {products.map((p) => (
+                <option key={p.id} value={String(p.id)}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Warehouse</label>
+            <select
+              value={plan.warehouse_id}
+              onChange={(e) => update('warehouse_id', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+            >
+              <option value="">Select Warehouse</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={String(w.id)}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Customer Order No.</label>
+            <input
+              type="text"
+              value={plan.customer_order_no}
+              onChange={(e) => update('customer_order_no', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="Customer PO No."
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Order Qty (Sq.Ft.)</label>
+            <input
+              type="number"
+              value={plan.order_qty}
+              onChange={(e) => update('order_qty', e.target.value)}
+              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+
+        {/* Row 3 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Article</label>
@@ -486,16 +586,6 @@ export default function ProductionPlanDetail() {
               onChange={(e) => update('finish', e.target.value)}
               className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
               placeholder="e.g. Full Chrome"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Order Qty (Sq.Ft.)</label>
-            <input
-              type="number"
-              value={plan.order_qty}
-              onChange={(e) => update('order_qty', e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-              placeholder="0.00"
             />
           </div>
         </div>

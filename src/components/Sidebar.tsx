@@ -56,7 +56,6 @@ export const menuItems: MenuItem[] = [
       { label: 'Customer Master', icon: <Users size={16} />, path: '/customer-master' },
       { label: 'Supplier Master', icon: <Truck size={16} />, path: '/supplier-master' },
       { label: 'Product Master', icon: <Box size={16} />, path: '/product-master' },
-      { label: 'Chemical / Material Master', icon: <FlaskConical size={16} />, path: '/chemical-master' },
       { label: 'Product Category', icon: <Layers size={16} />, path: '/product-category' },
       { label: 'Group Master', icon: <Layers size={16} />, path: '/group-master' },
       { label: 'Leather Type', icon: <Layers size={16} />, path: '/leather-type' },
