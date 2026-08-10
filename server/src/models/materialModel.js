@@ -13,7 +13,7 @@ export async function getAll({ search, type, category, status, page = 1, limit =
   if (category) { where += ' AND m.category = ?'; params.push(category); }
   if (status) { where += ' AND m.status = ?'; params.push(status); }
 
-  const allowedSortColumns = ['id', 'code', 'name', 'type', 'category', 'status', 'created_at'];
+  const allowedSortColumns = ['id', 'code', 'name', 'type', 'category', 'status', 'current_stock', 'last_purchase_price', 'standard_cost', 'created_at'];
   const column = allowedSortColumns.includes(sortBy) ? `m.${sortBy}` : 'm.id';
   const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
