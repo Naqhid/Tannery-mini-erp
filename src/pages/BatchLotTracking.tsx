@@ -39,6 +39,7 @@ export default function BatchLotTracking() {
 
   const [batch, setBatch] = useState<Batch | null>(null);
   const [loading, setLoading] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
 
   // Search filters
   const [barcode, setBarcode] = useState('');
@@ -48,15 +49,19 @@ export default function BatchLotTracking() {
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const handleBarcodeScan = (scannedValue: string) => {
-    const trimmed = scannedValue.trim();
-    toast.info(`Scanned value: "${trimmed}"`);
-    setBarcode(trimmed);
-    setBatchNo(trimmed);
-    setScannerOpen(false);
-    // Auto-search after scan
-    setTimeout(() => {
-      handleSearchWithValue(trimmed);
-    }, 100);
+    try {
+      const trimmed = scannedValue.trim();
+      toast.info(`Scanned value: "${trimmed}"`);
+      setBarcode(trimmed);
+      setBatchNo(trimmed);
+      setScannerOpen(false);
+      // Auto-search after scan
+      setTimeout(() => {
+        handleSearchWithValue(trimmed);
+      }, 300);
+    } catch (err: any) {
+      toast.error(`Scan handler error: ${err.message}`);
+    }
   };
 
   // Fetch batch by ID (for direct URL access)
@@ -143,21 +148,28 @@ export default function BatchLotTracking() {
     if (!searchValue) return;
     try {
       setLoading(true);
+      setBatch(null);
       const params = new URLSearchParams();
       params.append('barcode', searchValue);
 
       try {
         const res = await api<{ success: boolean; data: Batch }>(`/batches/tracking?${params.toString()}`);
         if (res.success && res.data) {
-          setBatch(res.data);
-          if (res.data.batch_no) setBatchNo(res.data.batch_no);
-          if (res.data.production_date) setProductionDate(res.data.production_date.split('T')[0]);
-          if (res.data.current_stage) setStage(res.data.current_stage);
-          toast.success(`Batch ${res.data.batch_no} found`);
+          const batchData = res.data;
+          // Ensure safe values
+          batchData.total_receipt_qty = Number(batchData.total_receipt_qty) || 0;
+          batchData.total_output_qty = Number(batchData.total_output_qty) || 0;
+          batchData.yield_percent = Number(batchData.yield_percent) || 0;
+          batchData.items = batchData.items || [];
+          setBatch(batchData);
+          if (batchData.batch_no) setBatchNo(batchData.batch_no);
+          if (batchData.production_date) setProductionDate(batchData.production_date.split('T')[0]);
+          if (batchData.current_stage) setStage(batchData.current_stage);
+          toast.success(`Batch ${batchData.batch_no} found`);
           return;
         }
       } catch (trackingErr: any) {
-        toast.info(`Tracking endpoint: ${trackingErr.message || 'No result'}, trying fallback...`);
+        toast.info(`Tracking: ${trackingErr.message || 'No result'}, trying fallback...`);
         // Fallback
         try {
           const listRes = await api<{ success: boolean; data: Batch[] }>(`/batches?search=${encodeURIComponent(searchValue)}&limit=1`);
@@ -165,16 +177,21 @@ export default function BatchLotTracking() {
             const found = listRes.data[0];
             const detailRes = await api<{ success: boolean; data: Batch }>(`/batches/${found.id}`);
             if (detailRes.data) {
-              setBatch(detailRes.data);
-              if (detailRes.data.batch_no) setBatchNo(detailRes.data.batch_no);
-              if (detailRes.data.production_date) setProductionDate(detailRes.data.production_date.split('T')[0]);
-              if (detailRes.data.current_stage) setStage(detailRes.data.current_stage);
-              toast.success(`Batch ${detailRes.data.batch_no} found (fallback)`);
+              const batchData = detailRes.data;
+              batchData.total_receipt_qty = Number(batchData.total_receipt_qty) || 0;
+              batchData.total_output_qty = Number(batchData.total_output_qty) || 0;
+              batchData.yield_percent = Number(batchData.yield_percent) || 0;
+              batchData.items = batchData.items || [];
+              setBatch(batchData);
+              if (batchData.batch_no) setBatchNo(batchData.batch_no);
+              if (batchData.production_date) setProductionDate(batchData.production_date.split('T')[0]);
+              if (batchData.current_stage) setStage(batchData.current_stage);
+              toast.success(`Batch ${batchData.batch_no} found (fallback)`);
               return;
             }
           }
         } catch (fallbackErr: any) {
-          toast.error(`Fallback search failed: ${fallbackErr.message}`);
+          toast.error(`Fallback failed: ${fallbackErr.message}`);
         }
       }
 
@@ -182,6 +199,7 @@ export default function BatchLotTracking() {
       setBatch(null);
     } catch (err: any) {
       toast.error(`Search error: ${err.message || 'Unknown error'}`);
+      setRenderError(`Search crashed: ${err.message}`);
       setBatch(null);
     } finally {
       setLoading(false);
@@ -200,14 +218,19 @@ export default function BatchLotTracking() {
     if (id) fetchBatch(id);
   }, [id, fetchBatch]);
 
-  const formatDate = (d: string | null) => {
-    if (!d) return '';
-    const date = new Date(d);
-    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const formatDate = (d: string | null | undefined) => {
+    if (!d) return '-';
+    try {
+      const date = new Date(d);
+      return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+      return '-';
+    }
   };
 
-  const formatQty = (val: number) => {
-    return val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatQty = (val: number | null | undefined) => {
+    const num = Number(val) || 0;
+    return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   // Export line items to CSV
@@ -234,6 +257,16 @@ export default function BatchLotTracking() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  if (renderError) {
+    return (
+      <div className="p-6 bg-red-50 border border-red-200 rounded-xl">
+        <h2 className="text-lg font-bold text-red-700 mb-2">Page Error</h2>
+        <p className="text-sm text-red-600">{renderError}</p>
+        <button onClick={() => { setRenderError(null); setBatch(null); }} className="mt-3 px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium">Reset Page</button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

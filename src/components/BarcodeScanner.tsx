@@ -77,7 +77,11 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
           devices[cameraIdx].id,
           scanConfig,
           (decodedText) => {
-            onScan(decodedText);
+            try {
+              onScan(decodedText);
+            } catch (e) {
+              console.error('onScan error:', e);
+            }
             stopScanner();
             onClose();
           },
@@ -91,7 +95,11 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
               { facingMode: 'environment' },
               scanConfig,
               (decodedText) => {
-                onScan(decodedText);
+                try {
+                  onScan(decodedText);
+                } catch (e) {
+                  console.error('onScan error:', e);
+                }
                 stopScanner();
                 onClose();
               },
@@ -139,7 +147,11 @@ export default function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScann
         cameras[nextIdx].id,
         scanConfig,
         (decodedText) => {
-          onScan(decodedText);
+          try {
+            onScan(decodedText);
+          } catch (e) {
+            console.error('onScan error:', e);
+          }
           stopScanner();
           onClose();
         },
