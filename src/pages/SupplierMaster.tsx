@@ -59,6 +59,7 @@ export default function SupplierMaster() {
       deleteMessage="Are you sure? This will remove the supplier record."
       searchPlaceholder="Search suppliers..."
       enableBulkDelete={true}
+      defaultFilters={{ status: 'Active' }}
     />
   );
 }

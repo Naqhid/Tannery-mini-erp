@@ -18,10 +18,7 @@ export async function getAll({ search, status, warehouse_id, page = 1, limit = 1
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
-    `SELECT mi.id, mi.issue_no, mi.issue_date, mi.department, mi.job_order_no,
-       mi.production_batch, mi.batch_qty, mi.batch_uom, mi.warehouse_id,
-       mi.costing_method, mi.issued_by, mi.total_material_cost, mi.grand_total,
-       mi.status, mi.created_at,
+    `SELECT mi.*,
        w.name AS warehouse_name, w.code AS warehouse_code
      FROM material_issues mi
      LEFT JOIN warehouses w ON mi.warehouse_id = w.id

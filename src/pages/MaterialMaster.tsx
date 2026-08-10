@@ -4,6 +4,8 @@ import { FlaskConical } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 
 const TYPE_COLORS: Record<string, string> = {
   'Wet-end': 'bg-blue-50 text-blue-700 border border-blue-200',
@@ -47,6 +49,86 @@ export default function MaterialMaster() {
     toast.success(res.message || 'Material deleted!');
   };
 
+  const fetchAllMaterials = async () => {
+    const res = await api<{ data: any[] }>('/materials?page=1&limit=99999');
+    return res.data || [];
+  };
+
+  const exportColumns = [
+    { key: 'code', header: 'Code' },
+    { key: 'name', header: 'Name' },
+    { key: 'type', header: 'Type' },
+    { key: 'uom', header: 'UOM' },
+    { key: 'primary_uom_id', header: 'Primary UOM ID' },
+    { key: 'secondary_uom_id', header: 'Secondary UOM ID' },
+    { key: 'currency', header: 'Currency' },
+    { key: 'category', header: 'Category' },
+    { key: 'chemical_group', header: 'Chemical Group' },
+    { key: 'group_id', header: 'Group ID' },
+    { key: 'appearance', header: 'Appearance' },
+    { key: 'color', header: 'Color' },
+    { key: 'ph_value', header: 'pH Value' },
+    { key: 'flash_point', header: 'Flash Point' },
+    { key: 'hsn_code', header: 'HSN Code' },
+    { key: 'cas_number', header: 'CAS Number' },
+    { key: 'shelf_life', header: 'Shelf Life' },
+    { key: 'storage_condition', header: 'Storage Condition' },
+    { key: 'hazardous', header: 'Hazardous' },
+    { key: 'default_warehouse', header: 'Default Warehouse' },
+    { key: 'opening_stock', header: 'Opening Stock' },
+    { key: 'opening_stock_uom', header: 'Opening Stock UOM' },
+    { key: 'current_stock', header: 'Current Stock' },
+    { key: 'reorder_level', header: 'Reorder Level' },
+    { key: 'maximum_level', header: 'Maximum Level' },
+    { key: 'standard_cost', header: 'Standard Cost' },
+    { key: 'last_purchase_price', header: 'Last Purchase Price' },
+    { key: 'preferred_supplier_id', header: 'Preferred Supplier ID' },
+    { key: 'preferred_supplier_name', header: 'Preferred Supplier' },
+    { key: 'lead_time', header: 'Lead Time' },
+    { key: 'description', header: 'Description' },
+    { key: 'application', header: 'Application' },
+    { key: 'remarks', header: 'Remarks' },
+    { key: 'attachment_path', header: 'Attachment Path' },
+    { key: 'status', header: 'Status' },
+    { key: 'created_by', header: 'Created By' },
+    { key: 'updated_by', header: 'Updated By' },
+    { key: 'created_at', header: 'Created At' },
+    { key: 'updated_at', header: 'Updated At' },
+  ];
+
+  const handlePreviewPDF = async () => {
+    try {
+      const data = await fetchAllMaterials();
+      const pdfColumns = ['Code', 'Name', 'Type', 'Category', 'UOM', 'Current Stock', 'Rate', 'Status'];
+      const rows = data.map((r: any) => [
+        r.code || '', r.name || '', r.type || '', r.category || '', r.uom || '',
+        String(r.current_stock ?? 0), r.last_purchase_price ? `₹${r.last_purchase_price}` : '—', r.status || '',
+      ]);
+      previewPDF({ title: 'Chemical / Material Master', columns: pdfColumns, rows, fileName: 'Materials_Master' });
+    } catch { toast.error('Failed to generate PDF preview'); }
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      const data = await fetchAllMaterials();
+      const pdfColumns = ['Code', 'Name', 'Type', 'Category', 'UOM', 'Current Stock', 'Rate', 'Status'];
+      const rows = data.map((r: any) => [
+        r.code || '', r.name || '', r.type || '', r.category || '', r.uom || '',
+        String(r.current_stock ?? 0), r.last_purchase_price ? `₹${r.last_purchase_price}` : '—', r.status || '',
+      ]);
+      downloadPDF({ title: 'Chemical / Material Master', columns: pdfColumns, rows, fileName: 'Materials_Master' });
+      toast.success('PDF downloaded!');
+    } catch { toast.error('Failed to download PDF'); }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const data = await fetchAllMaterials();
+      exportToExcel({ data, columns: exportColumns, fileName: 'Materials_Master' });
+      toast.success('Excel downloaded!');
+    } catch { toast.error('Failed to download Excel'); }
+  };
+
   return (
     <TransactionListPage
       title="Chemical / Material"
@@ -66,6 +148,8 @@ export default function MaterialMaster() {
       deleteMessage="Are you sure? This will remove the material record."
       searchPlaceholder="Search materials..."
       enableBulkDelete={true}
+      defaultFilters={{ status: 'Active' }}
+      exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />
   );
 }

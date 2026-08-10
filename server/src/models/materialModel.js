@@ -1,17 +1,18 @@
 import pool from '../config/db.js';
 
-export async function getAll({ search, type, category, status, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function getAll({ search, type, category, status, supplier, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
   const params = [];
 
   if (search) {
-    where += ' AND (m.name LIKE ? OR m.code LIKE ? OR m.chemical_group LIKE ?)';
+    where += ' AND (m.name LIKE ? OR m.code LIKE ? OR m.chemical_group LIKE ? OR s.name LIKE ?)';
     const term = `%${search}%`;
-    params.push(term, term, term);
+    params.push(term, term, term, term);
   }
   if (type) { where += ' AND m.type = ?'; params.push(type); }
   if (category) { where += ' AND m.category = ?'; params.push(category); }
   if (status) { where += ' AND m.status = ?'; params.push(status); }
+  if (supplier) { where += ' AND s.name LIKE ?'; params.push(`%${supplier}%`); }
 
   const allowedSortColumns = ['id', 'code', 'name', 'type', 'category', 'status', 'current_stock', 'last_purchase_price', 'standard_cost', 'created_at'];
   const column = allowedSortColumns.includes(sortBy) ? `m.${sortBy}` : 'm.id';
@@ -26,7 +27,9 @@ export async function getAll({ search, type, category, status, page = 1, limit =
     [...params, Number(limit), Number(offset)]
   );
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM materials m WHERE ${where}`,
+    `SELECT COUNT(*) AS total FROM materials m
+     LEFT JOIN suppliers s ON m.preferred_supplier_id = s.id
+     WHERE ${where}`,
     params
   );
   return { rows, total };

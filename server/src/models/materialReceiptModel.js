@@ -18,10 +18,7 @@ export async function getAll({ search, status, warehouse_id, page = 1, limit = 1
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
-    `SELECT mr.id, mr.receipt_no, mr.receipt_date, mr.receipt_type, mr.supplier_id,
-       mr.purchase_order_no, mr.challan_no, mr.lr_grn_no, mr.warehouse_id,
-       mr.freight, mr.loading_charges, mr.other_charges, mr.total_amount, mr.grand_total,
-       mr.status, mr.created_at,
+    `SELECT mr.*, 
        s.name AS supplier_name, s.code AS supplier_code,
        w.name AS warehouse_name, w.code AS warehouse_code
      FROM material_receipts mr

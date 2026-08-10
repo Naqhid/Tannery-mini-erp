@@ -66,6 +66,7 @@ export default function WarehouseMaster() {
       deleteMessage="Are you sure? This will remove the warehouse and all associated bins."
       searchPlaceholder="Search warehouses..."
       enableBulkDelete={true}
+      defaultFilters={{ status: 'Active' }}
     />
   );
 }

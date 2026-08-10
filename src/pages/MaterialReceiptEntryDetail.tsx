@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Save, X, ArrowLeft, Plus, Trash2, Truck, RotateCcw, Info, Minus } from 'lucide-react';
+import { Save, X, ArrowLeft, Plus, Trash2, Truck, RotateCcw, Info, Minus, Send } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import api from '../lib/api';
@@ -58,7 +58,7 @@ const emptyReceipt: ReceiptData = {
   receipt_no: '', receipt_date: new Date().toISOString().split('T')[0], receipt_type: 'Direct Purchase',
   supplier_id: '', purchase_order_no: '', po_date: '', challan_no: '', challan_date: '',
   lr_grn_no: '', lr_grn_date: '', transporter: '', gate_entry_no: '', warehouse_id: '',
-  freight: '', loading_charges: '', other_charges: '', gst_percent: '', remarks: '', status: 'Posted',
+  freight: '', loading_charges: '', other_charges: '', gst_percent: '', remarks: '', status: 'Draft',
 };
 
 const RECEIPT_TYPES = [
@@ -84,6 +84,8 @@ export default function MaterialReceiptEntryDetail() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [isPosted, setIsPosted] = useState(false);
+  const [posting, setPosting] = useState(false);
   const [searchItem, setSearchItem] = useState('');
 
   const fetchDropdowns = useCallback(async () => {
@@ -125,6 +127,7 @@ export default function MaterialReceiptEntryDetail() {
         other_charges: String(d.other_charges || ''),
         gst_percent: String(d.gst_percent || ''),
       });
+      setIsPosted(d.status === 'Posted' || d.status === 'posted');
       setItems((d.items || []).map((it: any) => ({
         _key: genKey(),
         material_id: String(it.material_id),
@@ -207,6 +210,7 @@ export default function MaterialReceiptEntryDetail() {
     try {
       const payload = {
         ...receipt,
+        status: isNew ? 'Draft' : receipt.status,
         supplier_id: receipt.supplier_id ? Number(receipt.supplier_id) : null,
         warehouse_id: Number(receipt.warehouse_id),
         freight, loading_charges: loadingCharges, other_charges: otherCharges,
@@ -236,7 +240,7 @@ export default function MaterialReceiptEntryDetail() {
       };
       if (isNew) {
         const res = await api('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
-        toast.success(res.message || 'Receipt created!');
+        toast.success(res.message || 'Receipt saved as Draft!');
       } else {
         const res = await api(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success(res.message || 'Receipt updated!');
@@ -244,6 +248,55 @@ export default function MaterialReceiptEntryDetail() {
       navigate('/material-receipt');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { setSaving(false); }
+  };
+
+  const handlePost = async () => {
+    if (!receipt.warehouse_id) { toast.error('Warehouse is required'); return; }
+    if (!receipt.receipt_date) { toast.error('Receipt date is required'); return; }
+    const validItems = items.filter((i) => i.material_id && (parseFloat(i.primary_uom_qty) > 0));
+    if (!validItems.length) { toast.error('At least one item with quantity is required'); return; }
+    setPosting(true);
+    try {
+      const payload = {
+        ...receipt,
+        status: 'Posted',
+        supplier_id: receipt.supplier_id ? Number(receipt.supplier_id) : null,
+        warehouse_id: Number(receipt.warehouse_id),
+        freight, loading_charges: loadingCharges, other_charges: otherCharges,
+        gst_percent: gstPercent,
+        cgst_amount: cgstAmount,
+        sgst_amount: sgstAmount,
+        total_gst_amount: totalGstAmount,
+        total_other_charges: totalOtherCharges,
+        total_amount: totalAmountInr, grand_total: grandTotal,
+        items: validItems.map((i) => ({
+          material_id: Number(i.material_id),
+          uom: i.uom,
+          primary_uom: i.primary_uom,
+          secondary_uom: i.secondary_uom,
+          order_qty: parseFloat(i.order_qty) || 0,
+          primary_uom_qty: parseFloat(i.primary_uom_qty) || 0,
+          secondary_uom_qty: parseFloat(i.secondary_uom_qty) || 0,
+          currency: i.currency,
+          exchange_rate: parseFloat(i.exchange_rate) || 1,
+          rate_fc: parseFloat(i.rate_fc) || 0,
+          rate_inr: i.rate_inr,
+          amount_fc: i.amount_fc,
+          amount_inr: i.amount_inr,
+          batch_no: null,
+          expiry_date: i.expiry_date || null,
+        })),
+      };
+      if (isNew) {
+        const res = await api('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Receipt posted!');
+      } else {
+        const res = await api(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Receipt posted!');
+      }
+      navigate('/material-receipt');
+    } catch (err) { toast.error('Failed to post: ' + (err as Error).message); }
+    finally { setPosting(false); }
   };
 
   if (loading) {
@@ -496,7 +549,10 @@ export default function MaterialReceiptEntryDetail() {
         <button onClick={handleClear} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
           <RotateCcw size={14} /> Clear
         </button>
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+        <button onClick={handlePost} disabled={posting || isPosted} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+          <Send size={14} /> {posting ? 'Posting...' : isPosted ? 'Posted' : 'Post'}
+        </button>
+        <button onClick={handleSave} disabled={saving || isPosted} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>

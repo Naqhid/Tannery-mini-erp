@@ -90,18 +90,19 @@ export default function BOMForm() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [activeTab, setActiveTab] = useState<'components' | 'attachments' | 'notes'>('components');
+  const [bomAttachments, setBomAttachments] = useState<{ id: number; file_name: string; file_path: string; file_type: string; file_size: number; uploaded_at: string }[]>([]);
 
   const dropdowns = useDropdowns(['products', 'leather-types', 'uom', 'thickness']);
 
   const fetchMaterials = useCallback(async () => {
     try {
-      const res = await api<{ data: any[] }>('/machines/dropdown');
-      const machines = (res.data || []).map((m: any) => ({
-        id: m.id, code: m.code, name: m.name, uom: m.uom_type || 'Per Hour', type: m.machine_type || 'Machine',
-        standard_cost: Number(m.rate_indian) || 0, last_purchase_price: Number(m.rate_indian) || 0,
-        preferred_supplier_id: m.supplier_id || null,
+      const res = await api<{ data: any[] }>('/materials/dropdown');
+      const mats = (res.data || []).map((m: any) => ({
+        id: m.id, code: m.code, name: m.name, uom: m.primary_uom_name || m.uom || 'Kg', type: m.type || m.category || 'Chemical',
+        standard_cost: Number(m.standard_cost) || 0, last_purchase_price: Number(m.last_purchase_price) || 0,
+        preferred_supplier_id: m.preferred_supplier_id || null,
       }));
-      setMaterials(machines);
+      setMaterials(mats);
     }
     catch { setMaterials([]); }
   }, []);
@@ -148,6 +149,7 @@ export default function BOMForm() {
         effective_from: item.effective_from || '',
         effective_to: item.effective_to || '',
       })));
+      setBomAttachments(detail.data.attachments || []);
     } catch { toast.error('Failed to load BOM'); navigate('/bom'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
@@ -173,9 +175,11 @@ export default function BOMForm() {
   const handleProductChange = (productId: string) => {
     const product = dropdowns['products']?.data.find((p: any) => p.id === Number(productId));
     if (product) {
+      const version = formData.version || 1;
+      const bomName = `${product.name}-V${version}`;
       setFormData(prev => ({
         ...prev, product_id: product.id,
-        name: prev.name || product.name,
+        name: bomName,
         leather_type: product.leather_type || prev.leather_type,
         leather_type_id: product.leather_type_id || prev.leather_type_id,
         thickness: product.thickness || prev.thickness,
@@ -244,17 +248,19 @@ export default function BOMForm() {
       if (item.id !== rowId) return item;
       const updated = { ...item, [field]: value };
       if (field === 'material_id') {
-        const machine = materials.find(m => m.id === Number(value));
-        if (machine) {
-          updated.material_code = machine.code;
-          updated.material_name = machine.name;
-          updated.type = machine.type;
-          updated.unit_cost = machine.last_purchase_price && machine.last_purchase_price > 0
-            ? machine.last_purchase_price
-            : (machine.standard_cost && machine.standard_cost > 0 ? machine.standard_cost : 0);
-          updated.supplier_id = machine.preferred_supplier_id || null;
-          updated.supplier_name = machine.preferred_supplier_id
-            ? suppliers.find(s => s.id === machine.preferred_supplier_id)?.name || ''
+        const material = materials.find(m => m.id === Number(value));
+        if (material) {
+          updated.material_code = material.code;
+          updated.material_name = material.name;
+          updated.type = material.type;
+          updated.uom = material.uom;
+          updated.unit_cost = material.last_purchase_price && material.last_purchase_price > 0
+            ? material.last_purchase_price
+            : (material.standard_cost && material.standard_cost > 0 ? material.standard_cost : 0);
+          updated.amount = (Number(updated.qty) || 0) * updated.unit_cost;
+          updated.supplier_id = material.preferred_supplier_id || null;
+          updated.supplier_name = material.preferred_supplier_id
+            ? suppliers.find(s => s.id === material.preferred_supplier_id)?.name || ''
             : '';
         }
       }
@@ -458,12 +464,12 @@ export default function BOMForm() {
                   <thead>
                     <tr className="bg-slate-50 border-b border-gray-200">
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[220px]">Product (Machine)</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[220px]">Material Name</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">Qty</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">UOM</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-24">Cost</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-24">Amount</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[150px]">Vendor</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[150px]">Supplier</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-32">Remarks</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-12"></th>
                     </tr>
@@ -487,14 +493,29 @@ export default function BOMForm() {
                             onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
                             className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400" />
                         </td>
-                        <td className="py-1.5 px-2 text-gray-600">Kg</td>
+                        <td className="py-1.5 px-2 text-gray-600">{item.uom || 'Kg'}</td>
                         <td className="py-1.5 px-2">
                           <input type="number" value={item.unit_cost || ''} onChange={(e) => updateRow(item.id, 'unit_cost', Number(e.target.value))}
                             onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
                             className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400" />
                         </td>
                         <td className="py-1.5 px-2 text-gray-900 font-medium">₹{(Number(item.amount) || 0).toFixed(2)}</td>
-                        <td className="py-1.5 px-2 text-blue-600 text-[11px]">{item.supplier_name || '-'}</td>
+                        <td className="py-1.5 px-2">
+                          <select
+                            value={String(item.supplier_id || '')}
+                            onChange={(e) => {
+                              const sup = suppliers.find(s => s.id === Number(e.target.value));
+                              updateRow(item.id, 'supplier_id', e.target.value ? Number(e.target.value) : null);
+                              if (sup) updateRow(item.id, 'supplier_name', sup.name);
+                              else updateRow(item.id, 'supplier_name', '');
+                            }}
+                            onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          >
+                            <option value="">Select...</option>
+                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </td>
                         <td className="py-1.5 px-2">
                           <input type="text" value={item.remarks || ''} onChange={(e) => updateRow(item.id, 'remarks', e.target.value)}
                             onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
@@ -512,9 +533,64 @@ export default function BOMForm() {
           )}
 
           {activeTab === 'attachments' && (
-            <div className="py-8 text-center text-gray-400 text-xs">
-              <Paperclip size={24} className="mx-auto mb-2 text-gray-300" />
-              <p>No attachments uploaded yet.</p>
+            <div>
+              {!isNew && formData.id && (
+                <div className="flex items-center justify-end mb-3">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all cursor-pointer">
+                    <Paperclip size={12} /> Upload File
+                    <input type="file" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !formData.id) return;
+                      const fd = new FormData();
+                      fd.append('file', file);
+                      try {
+                        const token = localStorage.getItem('tannery_token');
+                        const apiBase = import.meta.env.VITE_API_BASE || '/api';
+                        const res = await fetch(`${apiBase}/boms/${formData.id}/attachments`, {
+                          method: 'POST',
+                          headers: token ? { Authorization: `Bearer ${token}` } : {},
+                          body: fd,
+                        });
+                        if (!res.ok) throw new Error('Upload failed');
+                        toast.success('File uploaded!');
+                        const detail = await api<{ data: any }>(`/boms/${formData.id}`);
+                        setBomAttachments(detail.data.attachments || []);
+                      } catch (err) { toast.error('Upload failed: ' + (err as Error).message); }
+                      e.target.value = '';
+                    }} />
+                  </label>
+                </div>
+              )}
+              {isNew && <p className="text-xs text-amber-600 mb-3">Save the BOM first to upload attachments.</p>}
+              {bomAttachments.length === 0 ? (
+                <div className="py-8 text-center text-gray-400 text-xs">
+                  <Paperclip size={24} className="mx-auto mb-2 text-gray-300" />
+                  <p>No attachments uploaded yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {bomAttachments.map(att => (
+                    <div key={att.id} className="flex items-center justify-between p-2.5 border border-gray-100 rounded-lg hover:bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <Paperclip size={14} className="text-gray-400" />
+                        <span className="text-xs text-gray-700 font-medium">{att.file_name}</span>
+                        <span className="text-[10px] text-gray-400">{(att.file_size / 1024).toFixed(1)} KB</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400">{att.uploaded_at?.split('T')[0]}</span>
+                        <button onClick={async () => {
+                          if (!formData.id) return;
+                          try {
+                            await api(`/boms/${formData.id}/attachments/${att.id}`, { method: 'DELETE' });
+                            setBomAttachments(prev => prev.filter(a => a.id !== att.id));
+                            toast.success('Attachment removed');
+                          } catch { toast.error('Failed to remove'); }
+                        }} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

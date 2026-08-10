@@ -213,3 +213,25 @@ export async function getStats() {
   const [[active]] = await pool.query("SELECT COUNT(*) AS total FROM boms WHERE status='Active'");
   return { total: total.total, active: active.total };
 }
+
+// --- BOM Attachments ---
+export async function getAttachments(bomId) {
+  const [rows] = await pool.query(
+    'SELECT * FROM bom_attachments WHERE bom_id = ? ORDER BY uploaded_at DESC',
+    [bomId]
+  );
+  return rows;
+}
+
+export async function addAttachment(bomId, data, uploadedBy = null) {
+  const [result] = await pool.query(
+    'INSERT INTO bom_attachments (bom_id, file_name, file_path, file_type, file_size, uploaded_by) VALUES (?,?,?,?,?,?)',
+    [bomId, data.file_name, data.file_path, data.file_type || null, data.file_size || 0, uploadedBy]
+  );
+  return { id: result.insertId };
+}
+
+export async function removeAttachment(id) {
+  const [result] = await pool.query('DELETE FROM bom_attachments WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}

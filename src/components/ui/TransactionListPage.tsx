@@ -7,6 +7,7 @@ import {
 import ConfirmDialog from './ConfirmDialog';
 import EmptyState from './EmptyState';
 import SkeletonLoader from './SkeletonLoader';
+import ExportMenu from './ExportMenu';
 import { useDebounce } from '../../lib/useDebounce';
 import { usePermission } from '../../lib/usePermission';
 import api from '../../lib/api';
@@ -32,6 +33,12 @@ interface StatCard {
   iconColor?: string;
 }
 
+interface ExportActions {
+  onPreview: () => void;
+  onDownload: () => void;
+  onExcel?: () => void;
+}
+
 interface TransactionListPageProps {
   title: string;
   subtitle: string;
@@ -41,6 +48,7 @@ interface TransactionListPageProps {
   columns: Column[];
   statCards?: StatCard[];
   filterOptions?: FilterOption[];
+  defaultFilters?: Record<string, string>;
   addButtonLabel?: string;
   onAdd?: () => void;
   onRowClick?: (row: any) => void;
@@ -53,6 +61,7 @@ interface TransactionListPageProps {
   rowActions?: (row: any) => React.ReactNode;
   formatRow?: (row: any, col: Column, index: number) => React.ReactNode;
   isRowActionDisabled?: (row: any) => boolean;
+  exportActions?: ExportActions;
 }
 
 export default function TransactionListPage({
@@ -76,6 +85,8 @@ export default function TransactionListPage({
   rowActions,
   formatRow,
   isRowActionDisabled,
+  exportActions,
+  defaultFilters = {},
 }: TransactionListPageProps) {
   const { canWrite, isReadOnly } = usePermission();
   const [data, setData] = useState<any[]>([]);
@@ -91,7 +102,7 @@ export default function TransactionListPage({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; bulk?: boolean }>({ open: false, id: null });
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(defaultFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -219,6 +230,13 @@ export default function TransactionListPage({
           <button onClick={handleRefresh} className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all" aria-label="Refresh">
             <RefreshCw size={16} />
           </button>
+          {exportActions && (
+            <ExportMenu
+              onPreview={exportActions.onPreview}
+              onDownload={exportActions.onDownload}
+              onExcel={exportActions.onExcel}
+            />
+          )}
           {onAdd && (
             <button
               onClick={canWrite ? onAdd : undefined}

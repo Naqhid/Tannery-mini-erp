@@ -14,8 +14,13 @@ export async function getOne(req, res, next) {
   try {
     const bom = await model.getById(req.params.id);
     if (!bom) return res.status(404).json({ error: 'BOM not found' });
-    const [items, versions] = await Promise.all([model.getItems(req.params.id), model.getVersions(req.params.id)]);
-    res.json({ data: { ...bom, items, versions } });
+    const [items, versions] = await Promise.all([
+      model.getItems(req.params.id),
+      model.getVersions(req.params.id),
+    ]);
+    let attachments = [];
+    try { attachments = await model.getAttachments(req.params.id); } catch {}
+    res.json({ data: { ...bom, items, versions, attachments } });
   } catch (err) { next(err); }
 }
 
@@ -105,5 +110,36 @@ export async function removeItem(req, res, next) {
     const ok = await model.removeItem(req.params.itemId);
     if (!ok) return res.status(404).json({ error: 'BOM item not found' });
     res.json({ data: { id: req.params.itemId, deleted: true }, message: 'Item deleted successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- BOM Attachments ---
+export async function listAttachments(req, res, next) {
+  try {
+    const rows = await model.getAttachments(req.params.id);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+export async function addAttachment(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const uploadedBy = req.user?.id || null;
+    const data = {
+      file_name: req.file.originalname,
+      file_path: `/uploads/boms/${req.file.filename}`,
+      file_type: req.file.mimetype,
+      file_size: req.file.size,
+    };
+    const result = await model.addAttachment(req.params.id, data, uploadedBy);
+    res.status(201).json({ data: { id: result.id, ...data }, message: 'Attachment uploaded!' });
+  } catch (err) { next(err); }
+}
+
+export async function removeAttachment(req, res, next) {
+  try {
+    const ok = await model.removeAttachment(req.params.attachmentId);
+    if (!ok) return res.status(404).json({ error: 'Attachment not found' });
+    res.json({ data: { id: req.params.attachmentId, deleted: true }, message: 'Attachment removed!' });
   } catch (err) { next(err); }
 }

@@ -59,6 +59,7 @@ export default function CustomerMaster() {
       deleteMessage="Are you sure? This will remove the customer record."
       searchPlaceholder="Search customers..."
       enableBulkDelete={true}
+      defaultFilters={{ status: 'Active' }}
     />
   );
 }

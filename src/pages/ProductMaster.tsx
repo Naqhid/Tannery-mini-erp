@@ -57,6 +57,7 @@ export default function ProductMaster() {
       deleteMessage="Are you sure? This will remove the product record."
       searchPlaceholder="Search products..."
       enableBulkDelete={true}
+      defaultFilters={{ status: 'Active' }}
     />
   );
 }

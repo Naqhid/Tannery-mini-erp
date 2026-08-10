@@ -487,7 +487,7 @@ export default function BOM() {
     { key: 'qty', header: 'Qty', width: '80px', render: (row: BOMItemRow) => <span>{row.qty.toFixed(3)}</span> },
     { key: 'unit_cost', header: 'Unit Cost', width: '90px', render: (row: BOMItemRow) => <span>{row.unit_cost.toFixed(2)}</span> },
     { key: 'amount', header: 'Amount', width: '85px', render: (row: BOMItemRow) => <span>{row.amount.toFixed(2)}</span> },
-    { key: 'supplier_name', header: 'Vendor', width: '120px', render: (row: BOMItemRow) => <span className="text-xs text-blue-600">{row.supplier_name || '-'}</span> },
+    { key: 'supplier_name', header: 'Supplier', width: '120px', render: (row: BOMItemRow) => <span className="text-xs text-blue-600">{row.supplier_name || '-'}</span> },
     { key: 'remarks', header: 'Remarks', width: '110px' },
     { key: 'actions', header: 'Action', width: '60px', render: (row: BOMItemRow) => (
       <div className="flex items-center gap-1">
@@ -870,9 +870,9 @@ export default function BOM() {
                 onChange={(e) => setItemForm(prev => ({ ...prev, material_id: e.target.value }))}
               />
               <Select
-                label="Vendor (Supplier)"
+                label="Supplier"
                 options={[
-                  { value: '', label: 'Select vendor (optional)' },
+                  { value: '', label: 'Select supplier (optional)' },
                   ...suppliers.map(s => ({ value: String(s.id), label: s.name })),
                 ]}
                 value={itemForm.supplier_id}

@@ -24,7 +24,6 @@ import {
   LogOut,
   Building2,
   Warehouse,
-  PackageOpen,
   ArrowLeftRight,
   Receipt,
   Plus,
@@ -91,7 +90,6 @@ export const menuItems: MenuItem[] = [
     ],
   },
   { label: 'Inventory', icon: <Package size={20} />, children: [
-      { label: 'Stock Opening Entry', icon: <PackageOpen size={16} />, path: '/stock-opening-entry' },
       { label: 'Material Receipt Entry', icon: <Truck size={16} />, path: '/material-receipt' },
       { label: 'Physical Stock Entry', icon: <ClipboardList size={16} />, path: '/physical-stock-entry' },
       { label: 'Stock Transfer Entry', icon: <ArrowLeftRight size={16} />, path: '/stock-transfer' },

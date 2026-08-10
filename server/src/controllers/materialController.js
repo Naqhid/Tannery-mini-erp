@@ -16,10 +16,10 @@ export const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } })
 
 export async function list(req, res, next) {
   try {
-    const { search, type, category, status, sortBy, sortOrder } = req.query;
+    const { search, type, category, status, supplier, sortBy, sortOrder } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const { rows, total } = await model.getAll({ search, type, category, status, page, limit, sortBy, sortOrder });
+    const { rows, total } = await model.getAll({ search, type, category, status, supplier, page, limit, sortBy, sortOrder });
     const totalPages = Math.ceil(total / limit);
     res.json({ data: rows, total, page, limit, totalPages });
   } catch (err) { next(err); }
