@@ -48,12 +48,13 @@ export default function BatchLotTracking() {
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const handleBarcodeScan = (scannedValue: string) => {
-    setBarcode(scannedValue);
-    setBatchNo(scannedValue);
+    const trimmed = scannedValue.trim();
+    setBarcode(trimmed);
+    setBatchNo(trimmed);
     setScannerOpen(false);
     // Auto-search after scan
     setTimeout(() => {
-      handleSearchWithValue(scannedValue);
+      handleSearchWithValue(trimmed);
     }, 100);
   };
 
@@ -316,6 +317,39 @@ export default function BatchLotTracking() {
         </div>
       </div>
 
+      {/* Batch Summary Header */}
+      {batch && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Batch Details</h2>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+              batch.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+              batch.status === 'In-Process' ? 'bg-amber-100 text-amber-700' :
+              batch.status === 'Cancelled' ? 'bg-red-100 text-red-600' :
+              'bg-blue-100 text-blue-700'
+            }`}>{batch.status}</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-gray-500">Batch No.</p>
+              <p className="text-sm font-bold text-gray-900">{batch.batch_no}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Article</p>
+              <p className="text-sm font-bold text-gray-900">{(batch as any).article_name || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Order No.</p>
+              <p className="text-sm font-bold text-gray-900">{(batch as any).order_no || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Production Date</p>
+              <p className="text-sm font-bold text-gray-900">{formatDate(batch.production_date)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Summary Stats Cards */}
       {batch && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -372,7 +406,7 @@ export default function BatchLotTracking() {
             </div>
             <div>
               <p className="text-xs text-gray-500">Yield %</p>
-              <p className="text-sm font-bold text-emerald-600">{batch.yield_percent.toFixed(2)} %</p>
+              <p className="text-sm font-bold text-emerald-600">{(batch.yield_percent || 0).toFixed(2)} %</p>
             </div>
           </div>
         </div>
@@ -454,7 +488,7 @@ export default function BatchLotTracking() {
                 </div>
                 <div className="px-4 py-2 bg-green-50 border border-green-200 rounded-lg text-center">
                   <p className="text-xs text-green-600">Yield %</p>
-                  <span className="text-sm font-bold text-green-700">{batch.yield_percent.toFixed(2)} %</span>
+                  <span className="text-sm font-bold text-green-700">{(batch.yield_percent || 0).toFixed(2)} %</span>
                 </div>
               </div>
             </div>
