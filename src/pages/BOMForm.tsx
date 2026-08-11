@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
@@ -226,12 +226,20 @@ export default function BOMForm() {
   };
 
   // --- Inline Grid ---
+  const gridRef = useRef<HTMLDivElement>(null);
+
   const addRow = () => {
     setItems(prev => [...prev, {
       id: Date.now(), material_id: 0, material_code: '', material_name: '',
       type: '', uom: 'Kg', qty: 0, unit_cost: 0, amount: 0, scrap_percent: 0,
       effective_from: '', effective_to: '', remarks: '', supplier_id: null, supplier_name: '',
     }]);
+    setTimeout(() => {
+      const rows = gridRef.current?.querySelectorAll('tbody tr');
+      if (rows && rows.length > 0) {
+        rows[rows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 50);
   };
 
   const removeRow = (rowId: number) => {
@@ -450,18 +458,15 @@ export default function BOMForm() {
         <div className="p-5">
           {activeTab === 'components' && (
             <div>
-              {/* Add Row Button */}
-              <div className="flex items-center justify-between mb-3">
-                <button onClick={addRow} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
-                  <Plus size={12} /> Add Row
-                </button>
+              {/* Total */}
+              <div className="flex items-center justify-end mb-3">
                 <div className="text-xs text-gray-500 font-medium">
                   Total: <span className="text-gray-900">₹{totalAmount.toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Inline Editable Grid */}
-              <div className="border border-gray-200 rounded-lg">
+              <div ref={gridRef} className="border border-gray-200 rounded-lg">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-gray-200">
@@ -530,6 +535,13 @@ export default function BOMForm() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Sticky Add Row Button */}
+              <div className="sticky bottom-0 pt-3 pb-1 bg-white">
+                <button onClick={addRow} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
+                  <Plus size={12} /> Add Row
+                </button>
               </div>
             </div>
           )}
