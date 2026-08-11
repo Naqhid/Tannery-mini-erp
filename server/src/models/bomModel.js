@@ -120,14 +120,12 @@ export async function update(id, data, updatedBy = null) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    // Auto-increment version on each update
-    const [[current]] = await conn.query('SELECT version FROM boms WHERE id=?', [id]);
-    const newVersion = (current?.version || 0) + 1;
+    // Version does NOT auto-increment on edit - only changes via Import BOM process
     const [result] = await conn.query(
-      `UPDATE boms SET code=?, name=?, product_id=?, customer_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, version=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
+      `UPDATE boms SET code=?, name=?, product_id=?, customer_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
       [data.code, data.name, data.product_id, data.customer_id || null, data.recipe_id, data.leather_type,
        data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
-       data.status, data.description, newVersion,
+       data.status, data.description,
        data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
        updatedBy, id]
     );
@@ -259,4 +257,94 @@ export async function addAttachment(bomId, data, uploadedBy = null) {
 export async function removeAttachment(id) {
   const [result] = await pool.query('DELETE FROM bom_attachments WHERE id = ?', [id]);
   return result.affectedRows > 0;
+}
+
+
+// --- BOM Import (creates new version) ---
+export async function importBom(sourceBomId, createdBy = null) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Get source BOM
+    const [[source]] = await conn.query('SELECT * FROM boms WHERE id = ?', [sourceBomId]);
+    if (!source) throw new Error('Source BOM not found');
+
+    // Get source items
+    const [sourceItems] = await conn.query('SELECT * FROM bom_items WHERE bom_id = ? ORDER BY id', [sourceBomId]);
+
+    // Determine next version for this Product + BOM_Type
+    const [[maxVer]] = await conn.query(
+      'SELECT MAX(version) AS max_version FROM boms WHERE product_id = ? AND process_type = ?',
+      [source.product_id, source.process_type]
+    );
+    const nextVersion = (maxVer?.max_version || 0) + 1;
+
+    // Generate new code
+    let customerName = null;
+    if (source.customer_id) {
+      const [[cust]] = await conn.query('SELECT name FROM customers WHERE id = ?', [source.customer_id]);
+      customerName = cust?.name || null;
+    }
+    const code = await getNextCode(customerName);
+
+    // Create new BOM with incremented version
+    const [result] = await conn.query(
+      `INSERT INTO boms (code, name, product_id, customer_id, recipe_id, leather_type, process_type, thickness, uom, valid_from, valid_to, status, description, version, leather_type_id, uom_id, thickness_id, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [code, source.name, source.product_id, source.customer_id, source.recipe_id, source.leather_type,
+       source.process_type, source.thickness, source.uom, source.valid_from, source.valid_to,
+       'Draft', source.description, nextVersion,
+       source.leather_type_id, source.uom_id, source.thickness_id, createdBy]
+    );
+    const newBomId = result.insertId;
+
+    // Copy all items from source
+    for (const item of sourceItems) {
+      await conn.query(
+        `INSERT INTO bom_items (bom_id, material_id, machine_id, type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [newBomId, item.material_id, item.machine_id, item.type, item.uom, item.qty,
+         item.unit_cost, item.amount, item.scrap_percent, item.effective_from, item.effective_to,
+         item.remarks, item.supplier_id, createdBy]
+      );
+    }
+
+    // Create initial revision for the new BOM
+    await createRevisionSnapshot(conn, newBomId, createdBy, `Imported from BOM ${source.code} (Version ${source.version})`);
+
+    await conn.commit();
+    return { id: newBomId, code, version: nextVersion };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
+}
+
+// --- Get BOMs by product (for filtering) ---
+export async function getByProduct(productId) {
+  const [rows] = await pool.query(
+    `SELECT b.id, b.code, b.name, b.process_type, b.version, b.status, b.product_id,
+       p.name AS product_name
+     FROM boms b
+     LEFT JOIN products p ON b.product_id = p.id
+     WHERE b.product_id = ?
+     ORDER BY b.process_type, b.version DESC`,
+    [productId]
+  );
+  return rows;
+}
+
+// --- Get latest BOM by product ---
+export async function getLatestByProduct(productId) {
+  const [rows] = await pool.query(
+    `SELECT b.*, p.name AS product_name
+     FROM boms b
+     LEFT JOIN products p ON b.product_id = p.id
+     WHERE b.product_id = ? AND b.status = 'Active'
+     ORDER BY b.version DESC
+     LIMIT 1`,
+    [productId]
+  );
+  return rows[0] || null;
 }

@@ -76,6 +76,8 @@ import PhysicalStockEntry from './pages/PhysicalStockEntry';
 import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
 import DatabaseBackups from './pages/DatabaseBackups';
 import DataTemplates from './pages/DataTemplates';
+import StandardCosting from './pages/StandardCosting';
+import StandardCostingForm from './pages/StandardCostingForm';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -162,6 +164,9 @@ function App() {
             <Route path="recipe-creation/new" element={<RecipeCreationForm />} />
             <Route path="recipe-creation/:id" element={<RecipeCreationForm />} />
             <Route path="cost-breakdown" element={<PlaceholderPage />} />
+            <Route path="standard-costing" element={<StandardCosting />} />
+            <Route path="standard-costing/new" element={<StandardCostingForm />} />
+            <Route path="standard-costing/:id" element={<StandardCostingForm />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
             <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
             <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />

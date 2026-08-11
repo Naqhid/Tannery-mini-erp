@@ -422,11 +422,8 @@ export default function BOM() {
     if (!productId) { setImportList([]); return; }
     setImportLoading(true);
     try {
-      const params = new URLSearchParams({ search: '', limit: '20' });
-      const res = await api<{ data: BOM[] }>(`/boms?${params.toString()}`);
-      // Filter BOMs that belong to the selected product
-      const filtered = (res.data || []).filter((b: any) => String(b.product_id) === productId);
-      setImportList(filtered);
+      const res = await api<{ data: BOM[] }>(`/boms/by-product/${productId}`);
+      setImportList(res.data || []);
     } catch {
       setImportList([]);
     } finally {
@@ -436,25 +433,17 @@ export default function BOM() {
 
   const handleImportBOM = async (sourceBOM: BOM) => {
     try {
-      const detail = await api<{ data: BOM & { items: BOMItemRow[] } }>(`/boms/${sourceBOM.id}`);
-      const sourceItems = detail.data.items || [];
-      setFormData({
-        ...emptyBOM,
-        name: `Copy of ${sourceBOM.name}`,
-        product_id: sourceBOM.product_id || null,
-        leather_type: sourceBOM.leather_type || '',
-        leather_type_id: sourceBOM.leather_type_id || null,
-        thickness: sourceBOM.thickness || '',
-        thickness_id: sourceBOM.thickness_id || null,
-        uom: sourceBOM.uom || '',
-        uom_id: sourceBOM.uom_id || null,
-        process_type: sourceBOM.process_type || 'finishing',
-        description: sourceBOM.description || '',
+      // Use the server-side import endpoint to create new version
+      const res = await api<{ data: { id: number; code: string; version: number } }>('/boms/import', {
+        method: 'POST',
+        body: JSON.stringify({ source_bom_id: sourceBOM.id }),
       });
-      setItems(sourceItems.map(item => ({ ...item, id: Date.now() + Math.random() })));
       setShowImportModal(false);
-      setShowPanel(true);
-      toast.success(`Imported from "${sourceBOM.name}" — update and save as new BOM`, { position: 'top-right', autoClose: 4000 });
+      toast.success(`BOM imported successfully! New version ${String(res.data.version).padStart(2, '0')} created with code ${res.data.code}`, { position: 'top-right', autoClose: 4000 });
+      fetchBOMs();
+      fetchStats();
+      // Navigate to the new BOM
+      navigate(`/bom/${res.data.id}`);
     } catch (err) {
       toast.error('Failed to import BOM: ' + (err as Error).message, { position: 'top-right', autoClose: 3000 });
     }
@@ -599,6 +588,7 @@ export default function BOM() {
               <tr className="bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-blue-100/50">
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('code')}><span className="inline-flex items-center gap-1">Code <SortIcon field="code" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-700 uppercase tracking-wider cursor-pointer group select-none" onClick={() => handleSort('name')}><span className="inline-flex items-center gap-1">BOM Name <SortIcon field="name" /></span></th>
+                <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Version</th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Product</th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-700 uppercase tracking-wider hidden lg:table-cell cursor-pointer group select-none" onClick={() => handleSort('leather_type')}><span className="inline-flex items-center gap-1">Leather Type <SortIcon field="leather_type" /></span></th>
                 <th className="text-left py-3 px-4 text-[11px] font-semibold text-blue-600 uppercase tracking-wider hidden lg:table-cell">Thickness</th>
@@ -626,6 +616,9 @@ export default function BOM() {
                       </div>
                       <span className="font-medium text-gray-900">{b.name}</span>
                     </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">{String(b.version || 1).padStart(2, '0')}</span>
                   </td>
                   <td className="py-3 px-4">
                     <span className="text-blue-700 font-medium text-xs">{b.product_name || '-'}</span>
@@ -905,76 +898,45 @@ export default function BOM() {
               <button onClick={() => setShowImportModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
-              <p className="text-xs text-gray-500">Select an existing BOM by Product or BOM name to use as a template for a new BOM.</p>
-              <div className="flex gap-2">
-                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-                  <button onClick={() => { setImportType('product'); setImportList([]); }} className={`px-3 py-1.5 font-medium transition-colors ${importType === 'product' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>By Product</button>
-                  <button onClick={() => { setImportType('bom'); setImportList([]); }} className={`px-3 py-1.5 font-medium transition-colors ${importType === 'bom' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>By BOM Name</button>
-                </div>
+              <p className="text-xs text-gray-500">Select a Product, then choose the BOM to import as a new version.</p>
+
+              {/* Product Dropdown */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Product *</label>
+                <select
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                  onChange={(e) => handleImportByProduct(e.target.value)}
+                  defaultValue=""
+                >
+                  <option value="">-- Select a product --</option>
+                  {(dropdowns['products']?.options || []).map((opt: any) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
 
-              {importType === 'product' ? (
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Select Product</label>
-                  <select
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-                    onChange={(e) => handleImportByProduct(e.target.value)}
-                    defaultValue=""
-                  >
-                    <option value="">-- Select a product --</option>
-                    {(dropdowns['products']?.options || []).map((opt: any) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search by BOM name or code..."
-                      value={importSearch}
-                      onChange={(e) => setImportSearch(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleImportSearch()}
-                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    />
-                  </div>
-                  <button onClick={handleImportSearch} className="px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">Search</button>
-                </div>
-              )}
+              {/* BOM Name Dropdown */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">BOM Name *</label>
+                <select
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  disabled={importList.length === 0}
+                  onChange={(e) => {
+                    const selected = importList.find(b => String(b.id) === e.target.value);
+                    if (selected) handleImportBOM(selected);
+                  }}
+                  defaultValue=""
+                >
+                  <option value="">{importLoading ? 'Loading...' : importList.length === 0 ? 'Select a product first' : '-- Select a BOM --'}</option>
+                  {importList.map(b => (
+                    <option key={b.id} value={b.id}>{b.code} - {b.name} (V{String(b.version || 1).padStart(2, '0')})</option>
+                  ))}
+                </select>
+              </div>
 
-              <div className="min-h-[120px] max-h-[240px] overflow-y-auto border border-gray-100 rounded-lg">
-                {importLoading ? (
-                  <div className="flex items-center justify-center py-10 text-xs text-gray-400">Searching...</div>
-                ) : importList.length === 0 ? (
-                  <div className="flex items-center justify-center py-10 text-xs text-gray-400">
-                    {importType === 'product' ? 'Select a product above to find associated BOMs.' : (importSearch ? 'No BOMs found. Try a different search.' : 'Enter a search term above to find BOMs.')}
-                  </div>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Code</th>
-                        <th className="text-left py-2 px-3 font-semibold text-gray-600">BOM Name</th>
-                        <th className="text-left py-2 px-3 font-semibold text-gray-600">Product</th>
-                        <th className="py-2 px-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {importList.map(b => (
-                        <tr key={b.id} className="hover:bg-blue-50/50">
-                          <td className="py-2 px-3 font-mono text-blue-600">{b.code}</td>
-                          <td className="py-2 px-3 font-medium text-gray-800">{b.name}</td>
-                          <td className="py-2 px-3 text-gray-500">{b.product_name || '-'}</td>
-                          <td className="py-2 px-3">
-                            <button onClick={() => handleImportBOM(b)} className="px-2 py-1 text-[11px] font-medium text-white bg-blue-600 rounded hover:bg-blue-700">Import</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+              {/* Import Button */}
+              <div className="flex justify-end pt-2">
+                <button onClick={() => setShowImportModal(false)} className="px-3 py-2 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 mr-2">Cancel</button>
               </div>
             </div>
           </div>

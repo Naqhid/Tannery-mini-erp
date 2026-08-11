@@ -61,13 +61,9 @@ interface BOM {
 }
 
 const BOM_TYPES = [
-  'Wet End Chemicals',
-  'Wet End Machinery',
-  'Finishing Chemicals',
-  'Finishing Machinery',
+  'Wet End',
+  'Finishing',
   'Packing',
-  'Freight',
-  'Overheads',
 ];
 
 const emptyBOM: BOM = {

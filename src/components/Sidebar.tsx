@@ -75,6 +75,7 @@ export const menuItems: MenuItem[] = [
     children: [
       { label: 'BOM (Bill of Materials)', icon: <Layers size={16} />, path: '/bom' },
       { label: 'Recipe Creation', icon: <PenTool size={16} />, path: '/recipe-creation' },
+      { label: 'Costing', icon: <FileText size={16} />, path: '/standard-costing' },
       { label: 'Cost Breakdown', icon: <FileText size={16} />, path: '/cost-breakdown' },
       { label: 'BOM Revision', icon: <GitBranch size={16} />, path: '/bom-revision' },
       { label: 'Material Requirement', icon: <ListChecks size={16} />, path: '/material-requirement' },

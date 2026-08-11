@@ -42,6 +42,7 @@ import priceApprovalRoutes from './priceApprovalRoutes.js';
 import physicalStockEntryRoutes from './physicalStockEntryRoutes.js';
 import backupRoutes from './backupRoutes.js';
 import exportRoutes from './exportRoutes.js';
+import standardCostRoutes from './standardCostRoutes.js';
 
 const router = Router();
 
@@ -112,6 +113,9 @@ router.use('/backups', backupRoutes);
 
 // Excel Export routes
 router.use('/export', exportRoutes);
+
+// Standard Costing routes
+router.use('/standard-costs', standardCostRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);

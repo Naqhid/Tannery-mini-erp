@@ -115,6 +115,39 @@ export async function removeItem(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// --- BOM Import ---
+export async function importBom(req, res, next) {
+  try {
+    const sourceBomId = req.body.source_bom_id;
+    if (!sourceBomId) return res.status(400).json({ error: 'source_bom_id is required' });
+    const createdBy = req.user?.id || null;
+    const result = await model.importBom(sourceBomId, createdBy);
+    res.status(201).json({ data: result, message: 'BOM imported successfully! New version created.' });
+  } catch (err) { next(err); }
+}
+
+// --- Get BOMs by Product ---
+export async function listByProduct(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    const rows = await model.getByProduct(productId);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+// --- Get Latest BOM by Product ---
+export async function getLatestByProduct(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    const bom = await model.getLatestByProduct(productId);
+    if (!bom) return res.status(404).json({ error: 'No active BOM found for this product' });
+    const items = await model.getItems(bom.id);
+    res.json({ data: { ...bom, items } });
+  } catch (err) { next(err); }
+}
+
 // --- BOM Attachments ---
 export async function listAttachments(req, res, next) {
   try {
