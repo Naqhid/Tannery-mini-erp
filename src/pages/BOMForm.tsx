@@ -164,11 +164,13 @@ export default function BOMForm() {
   const handleCustomerChange = async (customerId: string) => {
     const customer = customers.find(c => c.id === Number(customerId));
     setFormData(prev => ({ ...prev, customer_id: customer ? customer.id : null, customer_name: customer?.name || '' }));
-    if (customer && isNew) {
+    if (customer) {
       try {
         const res = await api<{ data: { code: string } }>(`/boms/generate-code/${encodeURIComponent(customer.name)}`);
         setFormData(prev => ({ ...prev, code: res.data.code }));
       } catch { /* code will be generated on save */ }
+    } else {
+      setFormData(prev => ({ ...prev, code: '' }));
     }
   };
 

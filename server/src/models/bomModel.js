@@ -40,13 +40,16 @@ export async function getById(id) {
   const [rows] = await pool.query(
     `SELECT b.*, p.name AS product_name, p.code AS product_code,
       cust.name AS customer_name,
-      lt.name AS leather_type_name, u.name AS uom_name, th.name AS thickness_name
+      lt.name AS leather_type_name, u.name AS uom_name, th.name AS thickness_name,
+      c.name AS color_name, ft.name AS finish_type_name
     FROM boms b
     LEFT JOIN products p ON b.product_id = p.id
     LEFT JOIN customers cust ON b.customer_id = cust.id
     LEFT JOIN leather_types lt ON b.leather_type_id = lt.id
     LEFT JOIN uom u ON b.uom_id = u.id
     LEFT JOIN thickness th ON b.thickness_id = th.id
+    LEFT JOIN colors c ON p.color_id = c.id
+    LEFT JOIN finish_types ft ON p.finish_type_id = ft.id
     WHERE b.id = ?`,
     [id]
   );
@@ -59,36 +62,58 @@ export async function getByCode(code) {
 }
 
 export async function getNextCode(customerName = null) {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yy = String(now.getFullYear()).slice(-2);
+  const monthYear = `${mm}${yy}`;
+
   if (customerName) {
     const prefix = customerName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+    if (prefix.length < 3) {
+      throw new Error('Customer name must have at least 3 alphabetic characters for BOM code prefix');
+    }
+    const baseCode = `${prefix}${monthYear}`;
+    // Find the latest sequence for this prefix+MMYY
     const [[row]] = await pool.query(
-      "SELECT code FROM boms WHERE code LIKE ? ORDER BY code DESC LIMIT 1",
-      [`${prefix}%`]
+      "SELECT code FROM boms WHERE code LIKE ? ORDER BY LENGTH(code) DESC, code DESC LIMIT 1",
+      [`${baseCode}%`]
     );
-    if (!row) return `${prefix}0001`;
-    const numPart = row.code.substring(prefix.length);
-    const num = parseInt(numPart, 10) + 1;
-    return `${prefix}${String(num).padStart(4, '0')}`;
+    if (!row) return `${baseCode}01`;
+    const seqPart = row.code.substring(baseCode.length);
+    const seq = (parseInt(seqPart, 10) || 0) + 1;
+    return `${baseCode}${String(seq).padStart(2, '0')}`;
   }
+  // Fallback if no customer name
   const [[row]] = await pool.query("SELECT code FROM boms ORDER BY id DESC LIMIT 1");
-  if (!row) return 'BOM-00001';
-  const num = parseInt(row.code.split('-')[1], 10) + 1;
-  return `BOM-${String(num).padStart(5, '0')}`;
+  if (!row) return `BOM${monthYear}01`;
+  return `BOM${monthYear}01`;
 }
 
 export async function create(data, createdBy = null) {
-  const code = data.code || await getNextCode(data.customer_name || null);
-  const [result] = await pool.query(
-    `INSERT INTO boms (code, name, product_id, customer_id, recipe_id, leather_type, process_type, thickness, uom, valid_from, valid_to, status, description, version, leather_type_id, uom_id, thickness_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [code, data.name, data.product_id, data.customer_id || null, data.recipe_id, data.leather_type,
-     data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
-     data.status || 'Draft', data.description, data.version || 1,
-     data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
-     createdBy]
-  );
-  await createRevision(result.insertId, createdBy, 'Initial BOM created');
-  return { id: result.insertId, code };
+  let code = data.code || await getNextCode(data.customer_name || null);
+  let attempts = 0;
+  while (attempts < 5) {
+    try {
+      const [result] = await pool.query(
+        `INSERT INTO boms (code, name, product_id, customer_id, recipe_id, leather_type, process_type, thickness, uom, valid_from, valid_to, status, description, version, leather_type_id, uom_id, thickness_id, created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [code, data.name, data.product_id, data.customer_id || null, data.recipe_id, data.leather_type,
+         data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
+         data.status || 'Draft', data.description, data.version || 1,
+         data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
+         createdBy]
+      );
+      await createRevision(result.insertId, createdBy, 'Initial BOM created');
+      return { id: result.insertId, code };
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY' && attempts < 4) {
+        attempts++;
+        code = await getNextCode(data.customer_name || null);
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
 export async function update(id, data, updatedBy = null) {

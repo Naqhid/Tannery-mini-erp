@@ -74,6 +74,8 @@ export async function generateCode(req, res, next) {
   try {
     const customerName = req.params.customerName;
     if (!customerName) return res.status(400).json({ error: 'Customer name is required' });
+    const prefix = customerName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+    if (prefix.length < 3) return res.status(400).json({ error: 'Customer name must have at least 3 alphabetic characters for BOM code prefix' });
     const code = await model.getNextCode(customerName);
     res.json({ data: { code } });
   } catch (err) { next(err); }

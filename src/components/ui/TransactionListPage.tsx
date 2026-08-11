@@ -313,11 +313,11 @@ export default function TransactionListPage({
               <div className="relative">
                 <button onClick={() => setShowFilters(!showFilters)} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all" aria-label="Toggle filters">
                   <Filter size={14} /> Filters
-                  {activeFilterCount > 0 && <span className="ml-1 w-5 h-5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[10px] font-bold">{activeFilterCount}</span>}
+                  {activeFilterCount > 0 && !activeFilters.status && <span className="ml-1 w-5 h-5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[10px] font-bold">{activeFilterCount}</span>}
                 </button>
                 {showFilters && (
                   <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-30 p-3 space-y-2">
-                    {filterOptions.map(f => (
+                    {filterOptions.filter(f => f.key !== 'status').map(f => (
                       <div key={f.key}>
                         <label className="text-[11px] font-medium text-gray-600">{f.label}</label>
                         <select value={activeFilters[f.key] || ''} onChange={(e) => applyFilter(f.key, e.target.value)} className="w-full mt-0.5 px-2 py-1.5 text-xs border border-gray-200 rounded-lg">
@@ -331,6 +331,25 @@ export default function TransactionListPage({
                 )}
               </div>
             )}
+
+            {/* Active/Inactive checkbox */}
+            {filterOptions.some(f => f.key === 'status') && (
+              <label className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={activeFilters.status === 'Active'}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      applyFilter('status', 'Active');
+                    } else {
+                      removeFilter('status');
+                    }
+                  }}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Active Only
+              </label>
+            )}
           </div>
           <p className="text-xs text-gray-500 font-medium">
             Total: <span className="font-bold text-gray-700">{totalRecords}</span>
@@ -338,9 +357,9 @@ export default function TransactionListPage({
         </div>
 
         {/* Filter Chips */}
-        {activeFilterCount > 0 && (
+        {Object.entries(activeFilters).filter(([k, v]) => v && k !== 'status').length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-gray-100 bg-blue-50/30">
-            {Object.entries(activeFilters).filter(([, v]) => v).map(([key, value]) => (
+            {Object.entries(activeFilters).filter(([k, v]) => v && k !== 'status').map(([key, value]) => (
               <span key={key} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-white border border-blue-200 rounded-full text-blue-700">
                 {key}: {value}
                 <button onClick={() => removeFilter(key)} className="ml-0.5 p-0.5 rounded-full hover:bg-blue-100"><X size={10} /></button>

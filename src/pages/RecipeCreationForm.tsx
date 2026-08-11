@@ -139,7 +139,7 @@ export default function RecipeCreationForm() {
 
   const dropdowns = useDropdowns(['products', 'leather-types', 'uom', 'thickness', 'colors', 'finish-types', 'process-stages', 'machines']);
 
-  const [bomList, setBomList] = useState<{ id: number; code: string; name: string; product_id: number | null; product_name: string; leather_type: string; process_type: string; thickness: string; uom: string; version: number }[]>([]);
+  const [bomList, setBomList] = useState<{ id: number; code: string; name: string; product_id: number | null; product_name: string; leather_type: string; leather_type_name: string; process_type: string; thickness: string; thickness_name: string; uom: string; uom_name: string; version: number }[]>([]);
 
   const fetchBomList = useCallback(async () => {
     try {
@@ -147,8 +147,11 @@ export default function RecipeCreationForm() {
       setBomList((res.data || []).map((b: any) => ({
         id: b.id, code: b.code, name: b.name, product_id: b.product_id,
         product_name: b.product_name || '', leather_type: b.leather_type || '',
+        leather_type_name: b.leather_type_name || b.leather_type || '',
         process_type: b.process_type || '', thickness: b.thickness || '',
-        uom: b.uom || '', version: b.version || 1,
+        thickness_name: b.thickness_name || b.thickness || '',
+        uom: b.uom || '', uom_name: b.uom_name || b.uom || '',
+        version: b.version || 1,
       })));
     } catch { setBomList([]); }
   }, []);
@@ -211,15 +214,25 @@ export default function RecipeCreationForm() {
         ...prev,
         product_id: bom.id,
         name: prev.name || bom.name,
-        leather_type: bom.leather_type || prev.leather_type,
-        thickness: bom.thickness || prev.thickness,
+        leather_type: bom.leather_type_name || bom.leather_type || prev.leather_type,
+        thickness: bom.thickness_name || bom.thickness || prev.thickness,
         process_type: bom.process_type || prev.process_type,
-        uom: bom.uom || prev.uom,
+        uom: bom.uom_name || bom.uom || prev.uom,
       }));
       // Load BOM items as recipe items
       try {
         const res = await api<{ data: any }>(`/boms/${bom.id}`);
-        const bomItems = res.data?.items || [];
+        const bomData = res.data;
+        // Also populate from the detail response which has more complete data
+        setFormData(prev => ({
+          ...prev,
+          leather_type: bomData.leather_type_name || bom.leather_type_name || prev.leather_type,
+          thickness: bomData.thickness_name || bom.thickness_name || prev.thickness,
+          uom: bomData.uom_name || bom.uom_name || prev.uom,
+          finish_type: bomData.finish_type_name || prev.finish_type,
+          color: bomData.color_name || prev.color,
+        }));
+        const bomItems = bomData?.items || [];
         if (bomItems.length > 0) {
           const items: RecipeItem[] = bomItems.map((item: any) => ({
             id: Date.now() + Math.random(),
