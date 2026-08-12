@@ -120,12 +120,16 @@ export async function update(id, data, updatedBy = null) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // Get existing BOM to preserve code if not provided
+    const [[existing]] = await conn.query('SELECT code FROM boms WHERE id=?', [id]);
+    if (!existing) { await conn.rollback(); return false; }
+    const code = data.code || existing.code;
     // Version does NOT auto-increment on edit - only changes via Import BOM process
     const [result] = await conn.query(
       `UPDATE boms SET code=?, name=?, product_id=?, customer_id=?, recipe_id=?, leather_type=?, process_type=?, thickness=?, uom=?, valid_from=?, valid_to=?, status=?, description=?, leather_type_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
-      [data.code, data.name, data.product_id, data.customer_id || null, data.recipe_id, data.leather_type,
-       data.process_type, data.thickness, data.uom, data.valid_from, data.valid_to,
-       data.status, data.description,
+      [code, data.name, data.product_id, data.customer_id || null, data.recipe_id || null, data.leather_type || null,
+       data.process_type || null, data.thickness || null, data.uom || null, data.valid_from || null, data.valid_to || null,
+       data.status || 'Active', data.description || null,
        data.leather_type_id || null, data.uom_id || null, data.thickness_id || null,
        updatedBy, id]
     );

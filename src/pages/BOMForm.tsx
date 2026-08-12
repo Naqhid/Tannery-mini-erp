@@ -462,8 +462,77 @@ export default function BOMForm() {
               </div>
 
               {/* Inline Editable Grid */}
-              <div ref={gridRef} className="border border-gray-200 rounded-lg">
-                <table className="w-full text-xs">
+              {/* Mobile: Card Layout */}
+              <div className="md:hidden space-y-3">
+                {items.length === 0 ? (
+                  <div className="py-8 text-center text-gray-400 text-xs border border-gray-200 rounded-lg">No products added. Click "Add Row" to start.</div>
+                ) : items.map((item, idx) => (
+                  <div key={item.id} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-gray-400">#{idx + 1}</span>
+                      <button onClick={() => removeRow(item.id)} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={13} /></button>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-gray-500">Material</label>
+                      <SearchableSelect
+                        options={materials.map(m => ({ value: String(m.id), label: `${m.code} - ${m.name}` }))}
+                        value={String(item.material_id || '')}
+                        onChange={(val) => updateRow(item.id, 'material_id', Number(val))}
+                        placeholder="Select material..."
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[10px] font-medium text-gray-500">Qty</label>
+                        <input type="number" value={item.qty || ''} onChange={(e) => updateRow(item.id, 'qty', Number(e.target.value))}
+                          onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
+                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-400" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-gray-500">UOM</label>
+                        <div className="px-2 py-1.5 text-xs border border-gray-100 rounded-md bg-gray-50 text-gray-600">{item.uom || 'Kg'}</div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-gray-500">Cost</label>
+                        <input type="number" value={item.unit_cost || ''} onChange={(e) => updateRow(item.id, 'unit_cost', Number(e.target.value))}
+                          onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
+                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-400" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-medium text-gray-500">Amount</label>
+                        <div className="px-2 py-1.5 text-xs font-medium text-gray-900 border border-gray-100 rounded-md bg-gray-50">₹{(Number(item.amount) || 0).toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-gray-500">Supplier</label>
+                        <select value={String(item.supplier_id || '')}
+                          onChange={(e) => {
+                            const sup = suppliers.find(s => s.id === Number(e.target.value));
+                            updateRow(item.id, 'supplier_id', e.target.value ? Number(e.target.value) : null);
+                            if (sup) updateRow(item.id, 'supplier_name', sup.name);
+                            else updateRow(item.id, 'supplier_name', '');
+                          }}
+                          onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
+                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-400">
+                          <option value="">Select...</option>
+                          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-gray-500">Remarks</label>
+                      <input type="text" value={item.remarks || ''} onChange={(e) => updateRow(item.id, 'remarks', e.target.value)}
+                        onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-400" placeholder="..." />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop: Table Layout */}
+              <div ref={gridRef} className="hidden md:block border border-gray-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-xs min-w-[800px]">
                   <thead>
                     <tr className="bg-slate-50 border-b border-gray-200">
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
