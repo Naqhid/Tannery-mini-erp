@@ -215,7 +215,7 @@ export default function GeneralCostForm() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-[1200px] mx-auto">
+      <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 rounded w-48" />
           <div className="h-44 bg-gray-100 rounded-xl" />
@@ -230,44 +230,35 @@ export default function GeneralCostForm() {
     : 'bg-amber-50 text-amber-700 border-amber-200';
 
   return (
-    <div className="p-6 max-w-[1200px] mx-auto">
+    <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/general-cost')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200">
+          <button onClick={() => navigate('/general-cost')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200 shrink-0">
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">General Cost</h1>
-            <p className="text-sm text-gray-500">Capture general cost components per Pc for the selected order.</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">General Cost</h1>
+            <p className="text-xs md:text-sm text-gray-500">Capture general cost components per Pc for the selected order.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
-          >
-            <Printer size={14} /> Print
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 text-xs md:text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+            <Printer size={14} /> <span className="hidden sm:inline">Print</span>
           </button>
           <div className="relative">
-            <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
-            >
-              <Download size={14} /> Export <ChevronDown size={12} />
+            <button onClick={() => setShowExportMenu(!showExportMenu)} className="flex items-center gap-1.5 px-3 py-2 text-xs md:text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+              <Download size={14} /> <span className="hidden sm:inline">Export</span> <ChevronDown size={12} />
             </button>
             {showExportMenu && (
               <div className="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
-                <button onClick={() => { setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">Export as PDF</button>
-                <button onClick={() => { setShowExportMenu(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">Export as Excel</button>
+                <button onClick={() => setShowExportMenu(false)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">Export as PDF</button>
+                <button onClick={() => setShowExportMenu(false)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">Export as Excel</button>
               </div>
             )}
           </div>
           {!isPosted && canWrite && !isNew && (
-            <button
-              onClick={() => setShowPostConfirm(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20"
-            >
+            <button onClick={() => setShowPostConfirm(true)} className="flex items-center gap-1.5 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20">
               <Send size={14} /> Post
             </button>
           )}
@@ -275,73 +266,73 @@ export default function GeneralCostForm() {
       </div>
 
       {/* Header Info Card */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-5 shadow-sm">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-4 mb-5 pb-5 border-b border-gray-100">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 md:p-5 mb-5 shadow-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 md:gap-x-6 gap-y-3 md:gap-y-4 mb-4 pb-4 border-b border-gray-100">
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Production Date</label>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Production Date</label>
             {isPosted ? (
-              <span className="text-sm font-medium text-gray-900">{formatDate(formData.production_date)}</span>
+              <span className="text-xs md:text-sm font-medium text-gray-900">{formatDate(formData.production_date)}</span>
             ) : (
               <input
                 type="date"
                 value={formData.production_date}
                 onChange={e => setFormData(prev => ({ ...prev, production_date: e.target.value }))}
-                className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
+                className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
               />
             )}
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Transaction No.</label>
-            <p className="text-sm font-bold text-gray-900 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">{formData.transaction_no || 'Auto-generated'}</p>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Transaction No.</label>
+            <p className="text-xs md:text-sm font-bold text-gray-900 bg-gray-50 px-2 py-1.5 rounded-lg border border-gray-100 truncate">{formData.transaction_no || 'Auto'}</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Customer</label>
-            <p className="text-sm font-medium text-gray-900">{formData.customer_name || '—'}</p>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Customer</label>
+            <p className="text-xs md:text-sm font-medium text-gray-900 truncate">{formData.customer_name || '—'}</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Order No.</label>
-            <p className="text-sm font-mono font-medium text-blue-700">{formData.order_no || '—'}</p>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Order No.</label>
+            <p className="text-xs md:text-sm font-mono font-medium text-blue-700 truncate">{formData.order_no || '—'}</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Article</label>
-            <p className="text-sm text-gray-900">{formData.article || '—'}</p>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Article</label>
+            <p className="text-xs md:text-sm text-gray-900 truncate">{formData.article || '—'}</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Color</label>
-            <p className="text-sm text-gray-900">{formData.color || '—'}</p>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Color</label>
+            <p className="text-xs md:text-sm text-gray-900">{formData.color || '—'}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 md:gap-x-6 gap-y-3 md:gap-y-4">
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Order Qty (Pcs)</label>
-            <p className="text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Order Qty (Pcs)</label>
+            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Completed Qty (Pcs)</label>
-            <p className="text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.completed_qty)}</p>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Completed Qty</label>
+            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.completed_qty)}</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Balance Qty (Pcs)</label>
-            <p className={`text-base font-bold tabular-nums ${formData.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Balance Qty</label>
+            <p className={`text-sm md:text-base font-bold tabular-nums ${formData.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
               {new Intl.NumberFormat('en-IN').format(formData.balance_qty)}
             </p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Status</label>
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusColor}`}>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Status</label>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] md:text-[11px] font-semibold border ${statusColor}`}>
               {formData.plan_status || '—'}
             </span>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>
             {isPosted ? (
-              <p className="text-sm font-medium text-gray-900">{formData.process_stage}</p>
+              <p className="text-xs md:text-sm font-medium text-gray-900">{formData.process_stage}</p>
             ) : (
               <select
                 value={formData.process_stage}
                 onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))}
-                className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
+                className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
               >
                 <option value="All">All</option>
                 <option value="Wet End">Wet End</option>
@@ -354,18 +345,19 @@ export default function GeneralCostForm() {
         </div>
       </div>
 
-      {/* Cost Components Table */}
+      {/* Cost Components */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-gray-50/50">
-          <h2 className="text-base font-bold text-gray-900">Cost Components (Per Pc)</h2>
+        <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/50">
+          <h2 className="text-sm md:text-base font-bold text-gray-900">Cost Components (Per Pc)</h2>
           {!isPosted && canWrite && (
-            <button onClick={addLine} className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20">
+            <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20">
               <Plus size={14} /> Add Line
             </button>
           )}
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop Table (hidden on mobile) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -397,80 +389,39 @@ export default function GeneralCostForm() {
                       {isPosted ? (
                         <span className="text-sm font-medium text-gray-900">{item.cost_category}</span>
                       ) : (
-                        <input
-                          type="text"
-                          value={item.cost_category}
-                          onChange={e => updateLine(idx, 'cost_category', e.target.value)}
-                          placeholder="e.g. BOM Cost (Materials)"
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        />
+                        <input type="text" value={item.cost_category} onChange={e => updateLine(idx, 'cost_category', e.target.value)} placeholder="e.g. BOM Cost (Materials)"
+                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white" />
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {isPosted ? (
-                        <span className="text-sm text-gray-700">{item.uom}</span>
-                      ) : (
-                        <select
-                          value={item.uom}
-                          onChange={e => updateLine(idx, 'uom', e.target.value)}
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        >
-                          <option value="Sq.Ft.">Sq.Ft.</option>
-                          <option value="Per Order">Per Order</option>
-                          <option value="Per Piece">Per Piece</option>
-                          <option value="Per Kg">Per Kg</option>
-                          <option value="Per Lot">Per Lot</option>
+                      {isPosted ? <span className="text-sm text-gray-700">{item.uom}</span> : (
+                        <select value={item.uom} onChange={e => updateLine(idx, 'uom', e.target.value)}
+                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                          <option value="Sq.Ft.">Sq.Ft.</option><option value="Per Order">Per Order</option><option value="Per Piece">Per Piece</option><option value="Per Kg">Per Kg</option><option value="Per Lot">Per Lot</option>
                         </select>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {isPosted ? (
-                        <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span>
-                      ) : (
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={item.amount || ''}
-                          onChange={e => updateLine(idx, 'amount', Number(e.target.value))}
-                          placeholder="0.00"
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums"
-                        />
+                      {isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span> : (
+                        <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} placeholder="0.00"
+                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {isPosted ? (
-                        <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.cost_per_piece)}</span>
-                      ) : (
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={item.cost_per_piece || ''}
-                          onChange={e => updateLine(idx, 'cost_per_piece', Number(e.target.value))}
-                          placeholder="0.00"
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums"
-                        />
+                      {isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.cost_per_piece)}</span> : (
+                        <input type="number" step="0.01" value={item.cost_per_piece || ''} onChange={e => updateLine(idx, 'cost_per_piece', Number(e.target.value))} placeholder="0.00"
+                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {isPosted ? (
-                        <span className="text-sm text-gray-600">{item.remarks || '—'}</span>
-                      ) : (
-                        <input
-                          type="text"
-                          value={item.remarks}
-                          onChange={e => updateLine(idx, 'remarks', e.target.value)}
-                          placeholder="Optional"
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        />
+                      {isPosted ? <span className="text-sm text-gray-600">{item.remarks || '—'}</span> : (
+                        <input type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} placeholder="Optional"
+                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white" />
                       )}
                     </td>
                     {!isPosted && canWrite && (
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => removeLine(idx)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
-                          title="Remove line"
-                        >
+                        <button onClick={() => removeLine(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200" title="Remove line">
                           <Trash2 size={15} />
                         </button>
                       </td>
@@ -482,55 +433,123 @@ export default function GeneralCostForm() {
           </table>
         </div>
 
+        {/* Mobile Card View for Cost Items */}
+        <div className="md:hidden">
+          {formData.items.length === 0 ? (
+            <div className="px-4 py-10 text-center text-gray-400">
+              <Plus size={28} className="mx-auto mb-2 opacity-40" />
+              <p className="text-sm font-medium">No cost components added</p>
+              <p className="text-xs mt-0.5">Tap "+ Add Line" to start.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {formData.items.map((item, idx) => (
+                <div key={idx} className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-xs font-bold text-gray-400 bg-gray-100 w-6 h-6 rounded-full flex items-center justify-center">{idx + 1}</span>
+                    {!isPosted && canWrite && (
+                      <button onClick={() => removeLine(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost Category</label>
+                      {isPosted ? (
+                        <p className="text-sm font-medium text-gray-900">{item.cost_category}</p>
+                      ) : (
+                        <input type="text" value={item.cost_category} onChange={e => updateLine(idx, 'cost_category', e.target.value)} placeholder="e.g. BOM Cost (Materials)"
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" />
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">UOM</label>
+                        {isPosted ? <p className="text-sm text-gray-700">{item.uom}</p> : (
+                          <select value={item.uom} onChange={e => updateLine(idx, 'uom', e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="Sq.Ft.">Sq.Ft.</option><option value="Per Order">Per Order</option><option value="Per Piece">Per Piece</option><option value="Per Kg">Per Kg</option><option value="Per Lot">Per Lot</option>
+                          </select>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Amount (INR)</label>
+                        {isPosted ? <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.amount)}</p> : (
+                          <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} placeholder="0.00"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / Piece (INR)</label>
+                        {isPosted ? <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.cost_per_piece)}</p> : (
+                          <input type="number" step="0.01" value={item.cost_per_piece || ''} onChange={e => updateLine(idx, 'cost_per_piece', Number(e.target.value))} placeholder="0.00"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Remarks</label>
+                        {isPosted ? <p className="text-sm text-gray-600">{item.remarks || '—'}</p> : (
+                          <input type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} placeholder="Optional"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Cost Summary */}
         {formData.items.length > 0 && (
-          <div className="border-t-2 border-gray-200 bg-gradient-to-r from-gray-50 to-white px-5 py-5">
-            <h3 className="text-sm font-bold text-gray-900 mb-4">Cost Summary</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white border border-gray-200 rounded-lg p-3.5">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Amount (INR)</p>
-                <p className="text-xl font-bold text-gray-900 tabular-nums">{formatCurrency(formData.total_amount)}</p>
+          <div className="border-t-2 border-gray-200 bg-gradient-to-r from-gray-50 to-white px-4 md:px-5 py-4 md:py-5">
+            <h3 className="text-sm font-bold text-gray-900 mb-3 md:mb-4">Cost Summary</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-3">
+                <p className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Amount (INR)</p>
+                <p className="text-base md:text-xl font-bold text-gray-900 tabular-nums">{formatCurrency(formData.total_amount)}</p>
               </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-3.5">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Cost / Piece (INR)</p>
-                <p className="text-xl font-bold text-gray-900 tabular-nums">{formatCurrency(formData.total_cost_per_piece)}</p>
+              <div className="bg-white border border-gray-200 rounded-lg p-3">
+                <p className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Cost / Piece (INR)</p>
+                <p className="text-base md:text-xl font-bold text-gray-900 tabular-nums">{formatCurrency(formData.total_cost_per_piece)}</p>
               </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-3.5">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Order Qty (Pcs)</p>
-                <p className="text-xl font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p>
+              <div className="bg-white border border-gray-200 rounded-lg p-3">
+                <p className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Order Qty (Pcs)</p>
+                <p className="text-base md:text-xl font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p>
               </div>
-              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3.5">
-                <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider mb-1">Cost / Piece After Adjustments (INR)</p>
-                <p className="text-2xl font-bold text-emerald-700 tabular-nums">{formatCurrency(formData.cost_after_adjustments)}</p>
+              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3">
+                <p className="text-[10px] md:text-[11px] font-semibold text-emerald-600 uppercase tracking-wider mb-1">After Adjustments (INR)</p>
+                <p className="text-lg md:text-2xl font-bold text-emerald-700 tabular-nums">{formatCurrency(formData.cost_after_adjustments)}</p>
               </div>
             </div>
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50/50 text-[11px] text-gray-400">
-          <p>Note: All costs are standard rates. Actual cost may vary based on production performance.</p>
-          <div className="flex gap-6">
-            {formData.created_by_name && <span>Created By: <span className="text-gray-600 font-medium">{formData.created_by_name}</span></span>}
-            {formData.created_at && <span>Created On: <span className="text-gray-600 font-medium">{formatDateTime(formData.created_at)}</span></span>}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-5 py-3 border-t border-gray-200 bg-gray-50/50 text-[10px] md:text-[11px] text-gray-400 gap-1">
+          <p>Note: All costs are standard rates. Actual cost may vary.</p>
+          <div className="flex gap-4">
+            {formData.created_by_name && <span>By: <span className="text-gray-600 font-medium">{formData.created_by_name}</span></span>}
+            {formData.created_at && <span>On: <span className="text-gray-600 font-medium">{formatDateTime(formData.created_at)}</span></span>}
           </div>
         </div>
       </div>
 
       {/* Action Buttons */}
       <div className="flex items-center justify-between mt-5">
-        <button
-          onClick={() => navigate('/general-cost')}
-          className="px-4 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
+        <button onClick={() => navigate('/general-cost')} className="px-4 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
           Cancel
         </button>
         {!isPosted && canWrite && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-600/20 transition-all"
-          >
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-2 px-5 md:px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-600/20 transition-all">
             <Save size={15} />
             {saving ? 'Saving...' : 'Save & Return'}
           </button>

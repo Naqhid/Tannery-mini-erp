@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, ArrowUp, ArrowDown, ChevronsUpDown,
-  FileText,
+  FileText, ChevronRight as ChevronRightIcon,
 } from 'lucide-react';
 import SkeletonLoader from '../components/ui/SkeletonLoader';
 import EmptyState from '../components/ui/EmptyState';
@@ -104,21 +104,21 @@ export default function GeneralCost() {
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-600/20">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0">
             <FileText size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">General Cost</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Summary of general cost (standard cost) for all orders.</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">General Cost</h1>
+            <p className="text-xs md:text-sm text-gray-500 mt-0.5">Summary of general cost (standard cost) for all orders.</p>
           </div>
         </div>
         <button
           onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm self-start sm:self-auto"
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh
@@ -126,14 +126,14 @@ export default function GeneralCost() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-4">
+      <div className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 mb-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-600">Process Stage</label>
+            <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Process Stage</label>
             <select
               value={processStage}
               onChange={e => setProcessStage(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[140px]"
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[130px]"
             >
               <option value="All">All</option>
               <option value="Pending">Pending</option>
@@ -155,21 +155,21 @@ export default function GeneralCost() {
 
           <div className="flex-1" />
 
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search customer, order no, article..."
+              placeholder="Search customer, order no..."
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-72 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
+              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-64 md:w-72 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
             />
           </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+      {/* Desktop Table (hidden on mobile) */}
+      <div className="hidden md:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
         {loading ? (
           <div className="p-6"><SkeletonLoader rows={8} /></div>
         ) : rows.length === 0 ? (
@@ -179,46 +179,24 @@ export default function GeneralCost() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th
-                    onClick={() => handleSort('customer_name')}
-                    className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none"
-                  >
+                  <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
                   </th>
-                  <th
-                    onClick={() => handleSort('order_no')}
-                    className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none"
-                  >
+                  <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
                   </th>
-                  <th
-                    onClick={() => handleSort('article')}
-                    className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none"
-                  >
+                  <th onClick={() => handleSort('article')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
                   </th>
-                  <th
-                    onClick={() => handleSort('color')}
-                    className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none"
-                  >
+                  <th onClick={() => handleSort('color')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
-                  <th
-                    onClick={() => handleSort('order_qty')}
-                    className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none"
-                  >
-                    <span className="inline-flex items-center gap-1 justify-end">Order Qty<br/>(Pcs) <SortIcon field="order_qty" /></span>
+                  <th onClick={() => handleSort('order_qty')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                    <span className="inline-flex items-center gap-1 justify-end">Order Qty (Pcs) <SortIcon field="order_qty" /></span>
                   </th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Completed Qty<br/>(Pcs)
-                  </th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Balance Qty<br/>(Pcs)
-                  </th>
-                  <th
-                    onClick={() => handleSort('status')}
-                    className="group px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none"
-                  >
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Completed Qty (Pcs)</th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance Qty (Pcs)</th>
+                  <th onClick={() => handleSort('status')} className="group px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span>
                   </th>
                 </tr>
@@ -253,7 +231,7 @@ export default function GeneralCost() {
           </div>
         )}
 
-        {/* Pagination */}
+        {/* Desktop Pagination */}
         {!loading && totalRecords > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50">
             <p className="text-xs text-gray-500">
@@ -271,13 +249,9 @@ export default function GeneralCost() {
                 const page = startPage + i;
                 if (page > totalPages) return null;
                 return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
+                  <button key={page} onClick={() => setCurrentPage(page)}
                     className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${page === currentPage ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-gray-200 text-gray-700'}`}
-                  >
-                    {page}
-                  </button>
+                  >{page}</button>
                 );
               })}
               <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
@@ -286,9 +260,7 @@ export default function GeneralCost() {
               <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 <ChevronsRight size={14} />
               </button>
-              <select
-                value={pageSize}
-                onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+              <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
                 className="ml-3 px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white cursor-pointer"
               >
                 <option value={10}>10 / page</option>
@@ -297,6 +269,91 @@ export default function GeneralCost() {
               </select>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Mobile Card View (visible on mobile only) */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="space-y-3">
+            {[1,2,3,4].map(i => (
+              <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-3" />
+                <div className="h-3 bg-gray-100 rounded w-1/2 mb-2" />
+                <div className="h-3 bg-gray-100 rounded w-2/3" />
+              </div>
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState title="No orders found" description="No production plans match your current filters." />
+        ) : (
+          <>
+            {rows.map(row => (
+              <div
+                key={row.id}
+                onClick={() => handleRowClick(row)}
+                className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm active:bg-blue-50 transition-colors cursor-pointer"
+              >
+                {/* Top: Customer + Status */}
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
+                    <p className="text-xs text-blue-700 font-mono mt-0.5">{row.order_no || row.plan_no || '—'}</p>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                    {row.status}
+                  </span>
+                </div>
+
+                {/* Middle: Article + Color */}
+                <div className="flex items-center gap-3 mb-3 text-xs text-gray-600">
+                  <span className="truncate">{row.article || '—'}</span>
+                  {row.color && (
+                    <>
+                      <span className="text-gray-300">•</span>
+                      <span>{row.color}</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Bottom: Qty info */}
+                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
+                    <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p>
+                    <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.completed_qty)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
+                    <p className={`text-sm font-bold tabular-nums ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+                      {formatNumber(row.balance_qty)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Mobile Pagination */}
+            {totalRecords > 0 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-gray-500">
+                  {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30">
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="text-xs font-medium text-gray-700 px-2">{currentPage} / {totalPages}</span>
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30">
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
