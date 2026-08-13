@@ -78,6 +78,8 @@ import DatabaseBackups from './pages/DatabaseBackups';
 import DataTemplates from './pages/DataTemplates';
 import StandardCosting from './pages/StandardCosting';
 import StandardCostingForm from './pages/StandardCostingForm';
+import GeneralCost from './pages/GeneralCost';
+import GeneralCostForm from './pages/GeneralCostForm';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -167,6 +169,9 @@ function App() {
             <Route path="standard-costing" element={<StandardCosting />} />
             <Route path="standard-costing/new" element={<StandardCostingForm />} />
             <Route path="standard-costing/:id" element={<StandardCostingForm />} />
+            <Route path="general-cost" element={<GeneralCost />} />
+            <Route path="general-cost/new" element={<GeneralCostForm />} />
+            <Route path="general-cost/:id" element={<GeneralCostForm />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
             <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
             <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />

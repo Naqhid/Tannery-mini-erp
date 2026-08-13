@@ -43,6 +43,7 @@ import physicalStockEntryRoutes from './physicalStockEntryRoutes.js';
 import backupRoutes from './backupRoutes.js';
 import exportRoutes from './exportRoutes.js';
 import standardCostRoutes from './standardCostRoutes.js';
+import generalCostRoutes from './generalCostRoutes.js';
 
 const router = Router();
 
@@ -116,6 +117,9 @@ router.use('/export', exportRoutes);
 
 // Standard Costing routes
 router.use('/standard-costs', standardCostRoutes);
+
+// General Cost routes
+router.use('/general-costs', generalCostRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);
