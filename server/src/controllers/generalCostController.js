@@ -2,9 +2,9 @@ import * as model from '../models/generalCostModel.js';
 
 export async function listOrders(req, res, next) {
   try {
-    const { search, status, process_stage, show_completed, sortBy, sortOrder } = req.query;
+    const { search, status, process_stage, show_completed, has_entry, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const { rows, total } = await model.getOrders({ search, status, process_stage, show_completed, page, limit, sortBy, sortOrder });
+    const { rows, total } = await model.getOrders({ search, status, process_stage, show_completed, has_entry, page, limit, sortBy, sortOrder });
     const totalPages = Math.ceil(total / limit);
     res.json({ data: rows, total, page, limit, totalPages });
   } catch (err) { next(err); }

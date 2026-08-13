@@ -66,6 +66,7 @@ export default function MachineCost() {
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) { params.set('sortBy', sortBy); params.set('sortOrder', sortOrder); }
+      if (activeTab === 'transaction') params.set('has_entry', 'true');
       const res = await api<{ data: OrderRow[]; total: number; totalPages: number }>(`/machine-costs?${params.toString()}`);
       setRows(res.data || []);
       setTotalRecords(res.total || 0);
@@ -75,10 +76,10 @@ export default function MachineCost() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, processStage, showCompleted, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, processStage, showCompleted, currentPage, pageSize, sortBy, sortOrder, activeTab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, processStage, showCompleted, sortBy, sortOrder]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, processStage, showCompleted, sortBy, sortOrder, activeTab]);
 
   const handleRowClick = (row: OrderRow) => {
     if (row.machine_cost_id) {

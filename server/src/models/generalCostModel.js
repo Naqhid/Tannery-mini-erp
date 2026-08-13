@@ -4,7 +4,7 @@ import pool from '../config/db.js';
  * Get all production plans for the General Cost list view.
  * Shows order-level info with completion status.
  */
-export async function getOrders({ search, status, process_stage, show_completed, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function getOrders({ search, status, process_stage, show_completed, has_entry, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
   let where = 'pp.deleted_at IS NULL';
 
@@ -23,6 +23,9 @@ export async function getOrders({ search, status, process_stage, show_completed,
   if (process_stage && process_stage !== 'All') {
     where += ' AND pp.status = ?';
     params.push(process_stage);
+  }
+  if (has_entry === 'true') {
+    where += ' AND gch.id IS NOT NULL';
   }
 
   const allowedSort = ['id', 'customer_name', 'order_no', 'article', 'color', 'order_qty', 'status', 'created_at'];
@@ -52,6 +55,7 @@ export async function getOrders({ search, status, process_stage, show_completed,
      FROM production_plans pp
      LEFT JOIN customers c ON pp.customer_id = c.id
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     LEFT JOIN general_cost_headers gch ON gch.production_plan_id = pp.id
      WHERE ${where}`,
     params
   );

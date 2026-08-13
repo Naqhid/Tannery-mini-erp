@@ -12,7 +12,7 @@ interface MachineCostData {
   id?: number; transaction_no: string; production_plan_id: number; production_date: string; process_stage: string;
   total_amount: number; total_cost_per_piece: number; cost_after_adjustments: number; status: string; remarks: string;
   customer_name: string; order_no: string; article: string; color: string; order_qty: number; completed_qty: number;
-  balance_qty: number; plan_status: string; uom: string; created_by_name: string; created_at: string; items: CostItem[];
+  production_qty: number; balance_qty: number; plan_status: string; uom: string; created_by_name: string; created_at: string; items: CostItem[];
 }
 
 export default function MachineCostForm() {
@@ -27,7 +27,7 @@ export default function MachineCostForm() {
     transaction_no: '', production_plan_id: 0, production_date: new Date().toISOString().split('T')[0],
     process_stage: 'All', total_amount: 0, total_cost_per_piece: 0, cost_after_adjustments: 0,
     status: 'Pending', remarks: '', customer_name: '', order_no: '', article: '', color: '',
-    order_qty: 0, completed_qty: 0, balance_qty: 0, plan_status: '', uom: 'Pcs',
+    order_qty: 0, completed_qty: 0, production_qty: 0, balance_qty: 0, plan_status: '', uom: 'Pcs',
     created_by_name: '', created_at: '', items: [],
   });
 
@@ -84,7 +84,7 @@ export default function MachineCostForm() {
     try {
       const payload = { production_plan_id: formData.production_plan_id, production_date: formData.production_date,
         process_stage: formData.process_stage, cost_after_adjustments: formData.cost_after_adjustments,
-        order_qty: formData.order_qty, remarks: formData.remarks,
+        order_qty: formData.order_qty, production_qty: formData.production_qty, remarks: formData.remarks,
         items: formData.items.map(i => ({ machine_name: i.machine_name, uom: i.uom, amount: i.amount, cost_per_piece: i.cost_per_piece, remarks: i.remarks })),
       };
       if (isNew) {
@@ -143,9 +143,20 @@ export default function MachineCostForm() {
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Article</label><p className="text-xs md:text-sm text-gray-900 truncate">{formData.article || '—'}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Color</label><p className="text-xs md:text-sm text-gray-900">{formData.color || '—'}</p></div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 md:gap-x-6 gap-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 md:gap-x-6 gap-y-3">
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Order Qty (Pcs)</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Completed Qty</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.completed_qty)}</p></div>
+          <div>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Production Qty (Pcs)</label>
+            {isPosted ? (
+              <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.production_qty || 0)}</p>
+            ) : (
+              <input type="number" value={formData.production_qty || ''} onChange={e => {
+                const prodQty = Number(e.target.value) || 0;
+                setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, prev.order_qty - (prev.completed_qty + prodQty)) }));
+              }} placeholder="0" className="w-full px-2 py-1.5 text-xs md:text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 tabular-nums font-semibold" />
+            )}
+          </div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Balance Qty</label><p className={`text-sm md:text-base font-bold tabular-nums ${formData.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{new Intl.NumberFormat('en-IN').format(formData.balance_qty)}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Status</label><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] md:text-[11px] font-semibold border ${statusColor}`}>{formData.plan_status || '—'}</span></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>{isPosted ? <p className="text-xs md:text-sm font-medium text-gray-900">{formData.process_stage}</p> : <select value={formData.process_stage} onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))} className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"><option value="All">All</option><option value="Wet End">Wet End</option><option value="Crust">Crust</option><option value="Finishing">Finishing</option><option value="Packing">Packing</option></select>}</div>

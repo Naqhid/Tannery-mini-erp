@@ -1,6 +1,6 @@
 import pool from '../config/db.js';
 
-export async function getOrders({ search, status, process_stage, show_completed, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function getOrders({ search, status, process_stage, show_completed, has_entry, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
   let where = 'pp.deleted_at IS NULL';
 
@@ -20,6 +20,9 @@ export async function getOrders({ search, status, process_stage, show_completed,
     where += ' AND pp.status = ?';
     params.push(process_stage);
   }
+  if (has_entry === 'true') {
+    where += ' AND mch.id IS NOT NULL';
+  }
 
   const allowedSort = ['id', 'customer_name', 'order_no', 'article', 'color', 'order_qty', 'status', 'created_at'];
   const col = allowedSort.includes(sortBy) ? (sortBy === 'customer_name' ? 'c.name' : sortBy === 'order_no' ? 'so.order_no' : `pp.${sortBy}`) : 'pp.id';
@@ -27,8 +30,9 @@ export async function getOrders({ search, status, process_stage, show_completed,
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
-    `SELECT pp.id, pp.plan_no, pp.order_qty, pp.output_qty AS completed_qty,
-       GREATEST(0, pp.order_qty - pp.output_qty) AS balance_qty,
+    `SELECT pp.id, pp.plan_no, pp.order_qty,
+       COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = pp.id), 0) AS completed_qty,
+       GREATEST(0, pp.order_qty - COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = pp.id), 0)) AS balance_qty,
        pp.article, pp.color, pp.status, pp.uom,
        c.name AS customer_name,
        so.order_no AS order_no,
@@ -48,6 +52,7 @@ export async function getOrders({ search, status, process_stage, show_completed,
      FROM production_plans pp
      LEFT JOIN customers c ON pp.customer_id = c.id
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     LEFT JOIN machine_cost_headers mch ON mch.production_plan_id = pp.id
      WHERE ${where}`,
     params
   );
@@ -58,8 +63,9 @@ export async function getOrders({ search, status, process_stage, show_completed,
 export async function getById(id) {
   const [[header]] = await pool.query(
     `SELECT mch.*,
-       pp.plan_no, pp.order_qty, pp.output_qty AS completed_qty,
-       GREATEST(0, pp.order_qty - pp.output_qty) AS balance_qty,
+       pp.plan_no, pp.order_qty,
+       COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = mch.production_plan_id), 0) AS completed_qty,
+       GREATEST(0, pp.order_qty - COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = mch.production_plan_id), 0)) AS balance_qty,
        pp.article, pp.color, pp.status AS plan_status, pp.uom,
        c.name AS customer_name,
        so.order_no AS order_no,
@@ -111,13 +117,14 @@ export async function create(data, userId = null) {
 
     const [result] = await conn.query(
       `INSERT INTO machine_cost_headers
-       (transaction_no, production_plan_id, production_date, process_stage, total_amount, total_cost_per_piece, cost_after_adjustments, status, remarks, created_by, updated_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+       (transaction_no, production_plan_id, production_date, process_stage, production_qty, total_amount, total_cost_per_piece, cost_after_adjustments, status, remarks, created_by, updated_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         transactionNo,
         data.production_plan_id,
         data.production_date || new Date().toISOString().split('T')[0],
         data.process_stage || 'All',
+        data.production_qty || 0,
         totalAmount,
         totalCostPerPiece,
         data.cost_after_adjustments || totalCostPerPiece,
@@ -161,9 +168,9 @@ export async function update(id, data, userId = null) {
 
     await conn.query(
       `UPDATE machine_cost_headers SET
-         process_stage=?, total_amount=?, total_cost_per_piece=?, cost_after_adjustments=?, remarks=?, updated_by=?
+         process_stage=?, production_qty=?, total_amount=?, total_cost_per_piece=?, cost_after_adjustments=?, remarks=?, updated_by=?
        WHERE id=?`,
-      [data.process_stage || 'All', totalAmount, totalCostPerPiece, data.cost_after_adjustments || totalCostPerPiece, data.remarks || null, userId, id]
+      [data.process_stage || 'All', data.production_qty || 0, totalAmount, totalCostPerPiece, data.cost_after_adjustments || totalCostPerPiece, data.remarks || null, userId, id]
     );
 
     await conn.query('DELETE FROM machine_cost_items WHERE machine_cost_id = ?', [id]);

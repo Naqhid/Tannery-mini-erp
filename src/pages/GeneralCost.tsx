@@ -49,6 +49,7 @@ export default function GeneralCost() {
   const [showCompleted, setShowCompleted] = useState(true);
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -65,6 +66,7 @@ export default function GeneralCost() {
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) { params.set('sortBy', sortBy); params.set('sortOrder', sortOrder); }
+      if (activeTab === 'transaction') params.set('has_entry', 'true');
       const res = await api<{ data: OrderRow[]; total: number; totalPages: number }>(`/general-costs?${params.toString()}`);
       setRows(res.data || []);
       setTotalRecords(res.total || 0);
@@ -74,10 +76,10 @@ export default function GeneralCost() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, processStage, showCompleted, currentPage, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, processStage, showCompleted, currentPage, pageSize, sortBy, sortOrder, activeTab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, processStage, showCompleted, sortBy, sortOrder]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, processStage, showCompleted, sortBy, sortOrder, activeTab]);
 
   const handleRowClick = (row: OrderRow) => {
     if (row.general_cost_id) {
@@ -152,6 +154,12 @@ export default function GeneralCost() {
             />
             <span className="text-sm text-gray-700">Show Completed orders</span>
           </label>
+
+          {/* Tabs */}
+          <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+            <button onClick={() => setActiveTab('order')} className={`px-4 py-2 text-xs font-medium transition-colors ${activeTab === 'order' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Order Status</button>
+            <button onClick={() => setActiveTab('transaction')} className={`px-4 py-2 text-xs font-medium transition-colors ${activeTab === 'transaction' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Transaction</button>
+          </div>
 
           <div className="flex-1" />
 
