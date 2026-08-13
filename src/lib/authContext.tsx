@@ -34,6 +34,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+  let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const resetInactivityTimer = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      // Auto-logout on inactivity
+      const storedToken = localStorage.getItem(TOKEN_KEY);
+      if (storedToken) {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setToken(null);
+        setUser(null);
+        window.location.href = '/login';
+      }
+    }, INACTIVITY_TIMEOUT);
+  };
+
+  // Track user activity
+  useEffect(() => {
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    const handleActivity = () => resetInactivityTimer();
+    events.forEach(e => window.addEventListener(e, handleActivity));
+    resetInactivityTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handleActivity));
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+    };
+  }, []);
+
   useEffect(() => {
     // Check for existing token on mount
     const storedToken = localStorage.getItem(TOKEN_KEY);

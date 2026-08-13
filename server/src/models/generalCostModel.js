@@ -161,12 +161,13 @@ export async function create(data, userId = null) {
 
     const [result] = await conn.query(
       `INSERT INTO general_cost_headers
-       (transaction_no, production_plan_id, production_date, process_stage, total_amount, total_cost_per_piece, cost_after_adjustments, status, remarks, created_by, updated_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+       (transaction_no, production_plan_id, production_date, production_qty, process_stage, total_amount, total_cost_per_piece, cost_after_adjustments, status, remarks, created_by, updated_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         transactionNo,
         data.production_plan_id,
         data.production_date || new Date().toISOString().split('T')[0],
+        data.production_qty || 0,
         data.process_stage || 'All',
         totalAmount,
         totalCostPerPiece,
@@ -216,10 +217,11 @@ export async function update(id, data, userId = null) {
 
     await conn.query(
       `UPDATE general_cost_headers SET
-         process_stage=?, total_amount=?, total_cost_per_piece=?, cost_after_adjustments=?, remarks=?, updated_by=?
+         process_stage=?, production_qty=?, total_amount=?, total_cost_per_piece=?, cost_after_adjustments=?, remarks=?, updated_by=?
        WHERE id=?`,
       [
         data.process_stage || 'All',
+        data.production_qty || 0,
         totalAmount, totalCostPerPiece,
         data.cost_after_adjustments || totalCostPerPiece,
         data.remarks || null,

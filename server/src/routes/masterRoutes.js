@@ -62,6 +62,35 @@ export const processStageRoutes = createMasterRoutes(ctrl.processStageController
 
 // Group Master routes
 export const groupMasterRoutes = createMasterRoutes(ctrl.groupMasterController);
+
+// Override group master list to include category_name
+const originalGroupList = groupMasterRoutes.stack.find(r => r.route?.path === '/' && r.route?.methods?.get);
+groupMasterRoutes.get('/with-category', validatePagination, async (req, res, next) => {
+  try {
+    const { search, status, sortBy, sortOrder } = req.query;
+    const { page, limit } = req;
+    let where = 'g.deleted_at IS NULL';
+    const params = [];
+    if (search) {
+      where += ' AND (g.name LIKE ? OR g.code LIKE ? OR g.hsn_code LIKE ? OR pc.name LIKE ?)';
+      const t = `%${search}%`;
+      params.push(t, t, t, t);
+    }
+    if (status) { where += ' AND g.status = ?'; params.push(status); }
+    const col = ['id', 'code', 'name', 'status', 'created_at'].includes(sortBy) ? `g.${sortBy}` : 'g.id';
+    const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const offset = (page - 1) * limit;
+    const [rows] = await pool.query(
+      `SELECT g.*, pc.name AS category_name FROM group_master g LEFT JOIN product_categories pc ON g.category_id = pc.id WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM group_master g LEFT JOIN product_categories pc ON g.category_id = pc.id WHERE ${where}`, params
+    );
+    res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (err) { next(err); }
+});
+
 // Add a filtered dropdown endpoint for group master (filter by category_id)
 groupMasterRoutes.get('/dropdown/by-category/:categoryId', async (req, res, next) => {
   try {

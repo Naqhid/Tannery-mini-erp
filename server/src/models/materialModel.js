@@ -20,15 +20,17 @@ export async function getAll({ search, type, category, status, supplier, page = 
 
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT m.*, s.name AS preferred_supplier_name
+    `SELECT m.*, s.name AS preferred_supplier_name, g.name AS group_name
      FROM materials m
      LEFT JOIN suppliers s ON m.preferred_supplier_id = s.id
+     LEFT JOIN group_master g ON m.group_id = g.id
      WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
   );
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM materials m
      LEFT JOIN suppliers s ON m.preferred_supplier_id = s.id
+     LEFT JOIN group_master g ON m.group_id = g.id
      WHERE ${where}`,
     params
   );

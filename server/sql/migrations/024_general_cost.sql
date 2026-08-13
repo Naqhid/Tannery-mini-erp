@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS general_cost_headers (
   transaction_no VARCHAR(50) NOT NULL,
   production_plan_id INT NOT NULL,
   production_date DATE NOT NULL,
+  production_qty DECIMAL(15,2) NOT NULL DEFAULT 0,
   process_stage VARCHAR(100) NULL DEFAULT 'All',
   total_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
   total_cost_per_piece DECIMAL(15,4) NOT NULL DEFAULT 0,

@@ -9,6 +9,7 @@ import api from '../lib/api';
 interface CostItem {
   id?: number;
   cost_category: string;
+  cost_category_id: number;
   uom: string;
   amount: number;
   cost_per_piece: number;
@@ -31,6 +32,8 @@ interface GeneralCostData {
   article: string;
   color: string;
   order_qty: number;
+  planned_qty: number;
+  production_qty: number;
   completed_qty: number;
   balance_qty: number;
   plan_status: string;
@@ -38,6 +41,13 @@ interface GeneralCostData {
   created_by_name: string;
   created_at: string;
   items: CostItem[];
+}
+
+interface CostComponentOption {
+  id: number;
+  name: string;
+  uom: string;
+  primary_uom_name: string;
 }
 
 export default function GeneralCostForm() {
@@ -63,6 +73,8 @@ export default function GeneralCostForm() {
     article: '',
     color: '',
     order_qty: 0,
+    planned_qty: 0,
+    production_qty: 0,
     completed_qty: 0,
     balance_qty: 0,
     plan_status: '',
@@ -76,7 +88,15 @@ export default function GeneralCostForm() {
   const [saving, setSaving] = useState(false);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [costComponents, setCostComponents] = useState<CostComponentOption[]>([]);
   const isPosted = formData.status === 'Posted';
+
+  // Fetch cost component options (materials with category = 'Cost Component')
+  useEffect(() => {
+    api<{ data: any[] }>('/materials?limit=500&category=Cost Component')
+      .then(res => setCostComponents((res.data || []).map((m: any) => ({ id: m.id, name: m.name, uom: m.uom || '', primary_uom_name: m.primary_uom_name || m.uom || '' }))))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -100,6 +120,7 @@ export default function GeneralCostForm() {
             article: plan.article || '',
             color: plan.color || '',
             order_qty: plan.order_qty || 0,
+            planned_qty: plan.planned_qty || 0,
             completed_qty: plan.output_qty || 0,
             balance_qty: Math.max(0, (plan.order_qty || 0) - (plan.output_qty || 0)),
             plan_status: plan.status || '',
@@ -128,7 +149,7 @@ export default function GeneralCostForm() {
   }, []);
 
   const addLine = () => {
-    const newItem: CostItem = { cost_category: '', uom: 'Sq.Ft.', amount: 0, cost_per_piece: 0, remarks: '' };
+    const newItem: CostItem = { cost_category: '', cost_category_id: 0, uom: 'Sq.Ft.', amount: 0, cost_per_piece: 0, remarks: '' };
     recalculate([...formData.items, newItem]);
   };
 
@@ -139,10 +160,22 @@ export default function GeneralCostForm() {
   const updateLine = (index: number, field: keyof CostItem, value: string | number) => {
     const items = [...formData.items];
     items[index] = { ...items[index], [field]: value };
-    if (field === 'amount') {
-      const orderQty = formData.order_qty || 1;
-      items[index].cost_per_piece = Number((Number(value) / orderQty).toFixed(2));
+
+    // When cost_category_id changes, auto-populate name and UOM
+    if (field === 'cost_category_id') {
+      const comp = costComponents.find(c => c.id === Number(value));
+      if (comp) {
+        items[index].cost_category = comp.name;
+        items[index].uom = comp.primary_uom_name || comp.uom || 'Sq.Ft.';
+      }
     }
+
+    // cost_per_piece = amount / production_qty
+    if (field === 'amount') {
+      const divideBy = formData.production_qty || formData.planned_qty || 1;
+      items[index].cost_per_piece = Number((Number(value) / divideBy).toFixed(2));
+    }
+
     recalculate(items);
   };
 
@@ -164,6 +197,8 @@ export default function GeneralCostForm() {
         process_stage: formData.process_stage,
         cost_after_adjustments: formData.cost_after_adjustments,
         order_qty: formData.order_qty,
+        planned_qty: formData.planned_qty,
+        production_qty: formData.production_qty,
         remarks: formData.remarks,
         items: formData.items.map(i => ({
           cost_category: i.cost_category,
@@ -305,8 +340,25 @@ export default function GeneralCostForm() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 md:gap-x-6 gap-y-3 md:gap-y-4">
           <div>
-            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Order Qty (Pcs)</label>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Customer Order Qty (Sq.Ft.)</label>
             <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p>
+          </div>
+          <div>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Planned Qty (Pcs)</label>
+            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.planned_qty)}</p>
+          </div>
+          <div>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Production Qty</label>
+            {isPosted ? (
+              <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.production_qty || 0)}</p>
+            ) : (
+              <input type="number" value={formData.production_qty || ''} onChange={e => {
+                const prodQty = Number(e.target.value) || 0;
+                const plannedQty = formData.planned_qty || formData.order_qty;
+                if (prodQty > plannedQty) { toast.error('Production qty cannot exceed planned qty'); return; }
+                setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, prev.order_qty - (prev.completed_qty + prodQty)) }));
+              }} placeholder="0" className="w-full px-2 py-1.5 text-xs md:text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 tabular-nums font-semibold" />
+            )}
           </div>
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Completed Qty</label>
@@ -317,30 +369,6 @@ export default function GeneralCostForm() {
             <p className={`text-sm md:text-base font-bold tabular-nums ${formData.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
               {new Intl.NumberFormat('en-IN').format(formData.balance_qty)}
             </p>
-          </div>
-          <div>
-            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Status</label>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] md:text-[11px] font-semibold border ${statusColor}`}>
-              {formData.plan_status || '—'}
-            </span>
-          </div>
-          <div>
-            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>
-            {isPosted ? (
-              <p className="text-xs md:text-sm font-medium text-gray-900">{formData.process_stage}</p>
-            ) : (
-              <select
-                value={formData.process_stage}
-                onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))}
-                className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
-              >
-                <option value="All">All</option>
-                <option value="Wet End">Wet End</option>
-                <option value="Crust">Crust</option>
-                <option value="Finishing">Finishing</option>
-                <option value="Packing">Packing</option>
-              </select>
-            )}
           </div>
         </div>
       </div>
@@ -389,17 +417,15 @@ export default function GeneralCostForm() {
                       {isPosted ? (
                         <span className="text-sm font-medium text-gray-900">{item.cost_category}</span>
                       ) : (
-                        <input type="text" value={item.cost_category} onChange={e => updateLine(idx, 'cost_category', e.target.value)} placeholder="e.g. BOM Cost (Materials)"
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white" />
+                        <select value={item.cost_category_id || ''} onChange={e => updateLine(idx, 'cost_category_id', Number(e.target.value))}
+                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                          <option value="">Select Cost Component</option>
+                          {costComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {isPosted ? <span className="text-sm text-gray-700">{item.uom}</span> : (
-                        <select value={item.uom} onChange={e => updateLine(idx, 'uom', e.target.value)}
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
-                          <option value="Sq.Ft.">Sq.Ft.</option><option value="Per Order">Per Order</option><option value="Per Piece">Per Piece</option><option value="Per Kg">Per Kg</option><option value="Per Lot">Per Lot</option>
-                        </select>
-                      )}
+                      <span className="text-sm text-gray-700">{item.uom || '—'}</span>
                     </td>
                     <td className="px-4 py-3">
                       {isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span> : (
@@ -460,20 +486,18 @@ export default function GeneralCostForm() {
                       {isPosted ? (
                         <p className="text-sm font-medium text-gray-900">{item.cost_category}</p>
                       ) : (
-                        <input type="text" value={item.cost_category} onChange={e => updateLine(idx, 'cost_category', e.target.value)} placeholder="e.g. BOM Cost (Materials)"
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" />
+                        <select value={item.cost_category_id || ''} onChange={e => updateLine(idx, 'cost_category_id', Number(e.target.value))}
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                          <option value="">Select Cost Component</option>
+                          {costComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
                       )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">UOM</label>
-                        {isPosted ? <p className="text-sm text-gray-700">{item.uom}</p> : (
-                          <select value={item.uom} onChange={e => updateLine(idx, 'uom', e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
-                            <option value="Sq.Ft.">Sq.Ft.</option><option value="Per Order">Per Order</option><option value="Per Piece">Per Piece</option><option value="Per Kg">Per Kg</option><option value="Per Lot">Per Lot</option>
-                          </select>
-                        )}
+                        <p className="text-sm text-gray-700">{item.uom || '—'}</p>
                       </div>
                       <div>
                         <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Amount (INR)</label>

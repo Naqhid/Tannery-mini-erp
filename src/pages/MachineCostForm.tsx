@@ -73,7 +73,10 @@ export default function MachineCostForm() {
   const updateLine = (index: number, field: keyof CostItem, value: string | number) => {
     const items = [...formData.items];
     items[index] = { ...items[index], [field]: value };
-    if (field === 'amount') items[index].cost_per_piece = Number((Number(value) / (formData.order_qty || 1)).toFixed(2));
+    if (field === 'amount') {
+      const divideBy = formData.production_qty || formData.order_qty || 1;
+      items[index].cost_per_piece = Number((Number(value) / divideBy).toFixed(2));
+    }
     recalculate(items);
   };
 
@@ -153,6 +156,8 @@ export default function MachineCostForm() {
             ) : (
               <input type="number" value={formData.production_qty || ''} onChange={e => {
                 const prodQty = Number(e.target.value) || 0;
+                const maxQty = formData.order_qty || 9999999;
+                if (prodQty > maxQty) { toast.error('Production qty cannot exceed order qty'); return; }
                 setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, prev.order_qty - (prev.completed_qty + prodQty)) }));
               }} placeholder="0" className="w-full px-2 py-1.5 text-xs md:text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 tabular-nums font-semibold" />
             )}
