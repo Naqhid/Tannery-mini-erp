@@ -311,8 +311,8 @@ export default function ProductionPlan() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
@@ -375,6 +375,50 @@ export default function ProductionPlan() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-4 space-y-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
+            </div>
+          ) : data.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm text-gray-500">No production plans found</p>
+            </div>
+          ) : (
+            data.map((row, i) => (
+              <div key={row.id} onClick={() => navigate(`/production-plan/${row.id}`)} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
+                    <p className="text-xs text-blue-700 font-mono mt-0.5">{row.sales_order_no || '—'}</p>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>{row.status}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-600 mb-2.5">
+                  <span className="truncate">{row.article || '—'}</span>
+                  {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
+                  {row.finish && <><span className="text-gray-300">•</span><span>{row.finish}</span></>}
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
+                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.order_qty)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Planned</p>
+                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.planned_qty)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
+                    <p className="text-xs font-bold text-amber-700 tabular-nums">{formatQty(row.balance_qty)}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}

@@ -44,6 +44,7 @@ import backupRoutes from './backupRoutes.js';
 import exportRoutes from './exportRoutes.js';
 import standardCostRoutes from './standardCostRoutes.js';
 import generalCostRoutes from './generalCostRoutes.js';
+import machineCostRoutes from './machineCostRoutes.js';
 
 const router = Router();
 
@@ -120,6 +121,9 @@ router.use('/standard-costs', standardCostRoutes);
 
 // General Cost routes
 router.use('/general-costs', generalCostRoutes);
+
+// Machine Cost routes
+router.use('/machine-costs', machineCostRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);

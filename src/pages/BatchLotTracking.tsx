@@ -479,7 +479,8 @@ export default function BatchLotTracking() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -516,6 +517,40 @@ export default function BatchLotTracking() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {batch.items && batch.items.length > 0 ? (
+              batch.items.map((item, index) => (
+                <div key={item.id} className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{item.customer_name || '-'}</p>
+                      <p className="text-xs text-blue-700 font-mono mt-0.5">{item.order_no || '-'}</p>
+                    </div>
+                    <span className="text-xs text-gray-500 font-medium shrink-0 ml-2">#{index + 1}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-600 mb-2.5">
+                    <span className="truncate">{item.article_name || item.article_code || '-'}</span>
+                    {item.color && <><span className="text-gray-300">•</span><span>{item.color}</span></>}
+                    {item.finish && <><span className="text-gray-300">•</span><span>{item.finish}</span></>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Receipt Qty</p>
+                      <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(item.receipt_qty)} SQ.FT.</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Output Qty</p>
+                      <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(item.output_qty)} SQ.FT.</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-8 text-center text-gray-400">No line items found</div>
+            )}
           </div>
 
           {/* Footer Totals */}

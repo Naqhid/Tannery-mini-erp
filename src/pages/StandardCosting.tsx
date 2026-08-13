@@ -154,8 +154,8 @@ export default function StandardCosting() {
           </button>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-indigo-50/40 border-b border-indigo-100/50">
@@ -193,6 +193,41 @@ export default function StandardCosting() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-4 space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          ) : sheets.length === 0 ? (
+            <div className="py-12 text-center"><p className="text-sm text-gray-500">No cost sheets found</p></div>
+          ) : (
+            sheets.map(s => (
+              <div key={s.id} onClick={() => navigate(`/standard-costing/${s.id}`)} className="p-4 active:bg-indigo-50 transition-colors cursor-pointer">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-mono font-semibold text-indigo-600">{s.cost_sheet_no}</p>
+                    <p className="text-xs text-gray-700 mt-0.5">{s.product_name || '—'}</p>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ml-2 ${statusBadge(s.status)}`}>{s.status}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Version</p>
+                    <p className="text-xs font-bold text-gray-900">{String(s.cost_sheet_version).padStart(2, '0')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Standard Cost</p>
+                    <p className="text-xs font-bold text-gray-900">{s.currency || 'INR'} {Number(s.standard_cost).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">BOM</p>
+                    <p className="text-xs text-gray-700 truncate">{s.bom_name || s.bom_code || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}

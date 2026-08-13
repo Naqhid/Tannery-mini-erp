@@ -74,6 +74,7 @@ export const menuItems: MenuItem[] = [
     icon: <ClipboardList size={20} />,
     children: [
       { label: 'General Cost', icon: <FileText size={16} />, path: '/general-cost' },
+      { label: 'Machine Cost', icon: <Factory size={16} />, path: '/machine-cost' },
       { label: 'Standard Cost', icon: <FileText size={16} />, path: '/standard-costing' },
       { label: 'BOM Revision', icon: <GitBranch size={16} />, path: '/bom-revision' },
       { label: 'Material Requirement', icon: <ListChecks size={16} />, path: '/material-requirement' },

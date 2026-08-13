@@ -369,8 +369,8 @@ export default function TransactionListPage({
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table ref={tableRef} className="w-full text-sm" onKeyDown={handleTableKeyDown} tabIndex={0} aria-label={`${title} table`}>
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-200">
@@ -450,6 +450,54 @@ export default function TransactionListPage({
               </tbody>
             )}
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-6"><SkeletonLoader rows={4} /></div>
+          ) : data.length === 0 ? (
+            <EmptyState title={`No ${title.toLowerCase()} found`} message="Try adjusting your search or filters" actionLabel={onAdd ? addButtonLabel : undefined} onAction={onAdd} />
+          ) : (
+            data.map((row, i) => (
+              <div
+                key={row.id || i}
+                onClick={() => onRowClick ? onRowClick(row) : onEdit?.(row)}
+                className="p-4 active:bg-blue-50 transition-colors cursor-pointer"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    {columns[0]?.render ? (
+                      <div className="text-sm font-semibold text-gray-900 truncate">{columns[0].render(row, i)}</div>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-900 truncate">{row[columns[0]?.key] || '—'}</p>
+                    )}
+                    {columns[1] && (
+                      <div className="text-xs text-gray-500 mt-0.5">{columns[1].render ? columns[1].render(row, i) : (row[columns[1]?.key] || '—')}</div>
+                    )}
+                  </div>
+                  {/* Show last column (usually status) as badge */}
+                  {columns[columns.length - 1] && (
+                    <div className="shrink-0 ml-2">
+                      {columns[columns.length - 1].render ? columns[columns.length - 1].render(row, i) : (
+                        <span className="text-xs text-gray-600">{row[columns[columns.length - 1].key] || '—'}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2">
+                  {columns.slice(2, -1).map(col => (
+                    <div key={col.key}>
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">{col.header}</p>
+                      <div className="text-xs text-gray-700 font-medium truncate">
+                        {col.render ? col.render(row, i) : (row[col.key] || '—')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}
