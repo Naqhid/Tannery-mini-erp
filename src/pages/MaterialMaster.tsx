@@ -25,7 +25,7 @@ export default function MaterialMaster() {
     { key: 'code', header: 'Code', sortable: true, render: (row: any) => <span className="font-mono text-xs text-blue-700">{row.code}</span> },
     { key: 'name', header: 'Name', sortable: true, render: (row: any) => <span className="font-medium text-gray-900">{row.name}</span> },
     { key: 'uom', header: 'UOM', sortable: true },
-    { key: 'category', header: 'Category', sortable: true, render: (row: any) => <span className="text-gray-700">{row.category || '—'}</span> },
+    { key: 'category', header: 'Category', sortable: true, render: (row: any) => <span className="text-gray-700">{row.category_name || row.category || '—'}</span> },
     { key: 'group_name', header: 'Group', sortable: false, render: (row: any) => <span className="text-gray-700">{row.group_name || '—'}</span> },
     { key: 'type', header: 'Type', sortable: true, render: (row: any) => <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${TYPE_COLORS[row.type] || 'bg-gray-100 text-gray-600'}`}>{row.type}</span> },
     { key: 'status', header: 'Status', sortable: true, render: (row: any) => <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${row.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}><span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Active' ? 'bg-emerald-500' : 'bg-red-400'}`} />{row.status}</span> },

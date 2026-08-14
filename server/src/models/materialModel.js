@@ -5,12 +5,16 @@ export async function getAll({ search, type, category, status, supplier, page = 
   const params = [];
 
   if (search) {
-    where += ' AND (m.name LIKE ? OR m.code LIKE ? OR m.chemical_group LIKE ? OR s.name LIKE ?)';
+    where += ' AND (m.name LIKE ? OR m.code LIKE ? OR m.chemical_group LIKE ? OR s.name LIKE ? OR pc.name LIKE ?)';
     const term = `%${search}%`;
-    params.push(term, term, term, term);
+    params.push(term, term, term, term, term);
   }
   if (type) { where += ' AND m.type = ?'; params.push(type); }
-  if (category) { where += ' AND m.category = ?'; params.push(category); }
+  if (category) {
+    // Support filtering by category name or ID
+    where += ' AND (m.category = ? OR pc.name = ?)';
+    params.push(category, category);
+  }
   if (status) { where += ' AND m.status = ?'; params.push(status); }
   if (supplier) { where += ' AND s.name LIKE ?'; params.push(`%${supplier}%`); }
 
@@ -20,10 +24,11 @@ export async function getAll({ search, type, category, status, supplier, page = 
 
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT m.*, s.name AS preferred_supplier_name, g.name AS group_name
+    `SELECT m.*, s.name AS preferred_supplier_name, g.name AS group_name, pc.name AS category_name
      FROM materials m
      LEFT JOIN suppliers s ON m.preferred_supplier_id = s.id
      LEFT JOIN group_master g ON m.group_id = g.id
+     LEFT JOIN product_categories pc ON m.category = pc.id OR m.category = pc.name
      WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
   );
@@ -31,6 +36,7 @@ export async function getAll({ search, type, category, status, supplier, page = 
     `SELECT COUNT(*) AS total FROM materials m
      LEFT JOIN suppliers s ON m.preferred_supplier_id = s.id
      LEFT JOIN group_master g ON m.group_id = g.id
+     LEFT JOIN product_categories pc ON m.category = pc.id OR m.category = pc.name
      WHERE ${where}`,
     params
   );
