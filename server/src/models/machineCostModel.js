@@ -17,7 +17,7 @@ export async function getOrders({ search, status, process_stage, show_completed,
     where += " AND pp.status != 'Completed'";
   }
   if (process_stage && process_stage !== 'All') {
-    where += ' AND pp.status = ?';
+    where += ' AND pst.process_stage_name = ?';
     params.push(process_stage);
   }
   if (has_entry === 'true') {
@@ -31,8 +31,8 @@ export async function getOrders({ search, status, process_stage, show_completed,
 
   const [rows] = await pool.query(
     `SELECT pp.id, pp.plan_no, pp.order_qty,
-       COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = pp.id), 0) AS completed_qty,
-       GREATEST(0, pp.order_qty - COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = pp.id), 0)) AS balance_qty,
+       COALESCE(pst_agg.total_output, 0) AS completed_qty,
+       GREATEST(0, pp.order_qty - COALESCE(pst_agg.total_output, 0)) AS balance_qty,
        pp.article, pp.color, pp.status, pp.uom,
        c.name AS customer_name,
        so.order_no AS order_no,
@@ -41,18 +41,30 @@ export async function getOrders({ search, status, process_stage, show_completed,
      LEFT JOIN customers c ON pp.customer_id = c.id
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
      LEFT JOIN machine_cost_headers mch ON mch.production_plan_id = pp.id
+     LEFT JOIN production_status_transactions pst ON pst.production_plan_id = pp.id AND pst.deleted_at IS NULL
+     LEFT JOIN (
+       SELECT production_plan_id,
+         SUM(output_qty) AS total_output
+       FROM production_status_transactions
+       WHERE deleted_at IS NULL
+       ${process_stage && process_stage !== 'All' ? 'AND process_stage_name = ?' : ''}
+       GROUP BY production_plan_id
+     ) pst_agg ON pst_agg.production_plan_id = pp.id
      WHERE ${where}
+     GROUP BY pp.id, pp.plan_no, pp.order_qty, pp.article, pp.color, pp.status, pp.uom,
+       c.name, so.order_no, mch.id, mch.transaction_no, mch.status, pst_agg.total_output
      ORDER BY ${col} ${ord}
      LIMIT ? OFFSET ?`,
-    [...params, Number(limit), Number(offset)]
+    [...(process_stage && process_stage !== 'All' ? [process_stage] : []), ...params, Number(limit), Number(offset)]
   );
 
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total
+    `SELECT COUNT(DISTINCT pp.id) AS total
      FROM production_plans pp
      LEFT JOIN customers c ON pp.customer_id = c.id
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
      LEFT JOIN machine_cost_headers mch ON mch.production_plan_id = pp.id
+     LEFT JOIN production_status_transactions pst ON pst.production_plan_id = pp.id AND pst.deleted_at IS NULL
      WHERE ${where}`,
     params
   );

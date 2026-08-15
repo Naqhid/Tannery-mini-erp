@@ -138,10 +138,9 @@ export default function GeneralCost() {
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[130px]"
             >
               <option value="All">All</option>
-              <option value="Pending">Pending</option>
-              <option value="Planned">Planned</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
+              <option value="Wet End">Wet End</option>
+              <option value="Finishing">Finishing</option>
+              <option value="Packing">Packing</option>
             </select>
           </div>
 
