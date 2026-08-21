@@ -175,7 +175,7 @@ export default function StandardCosting() {
         {loading ? (
           <div className="p-6"><SkeletonLoader rows={8} /></div>
         ) : rows.length === 0 ? (
-          <EmptyState title="No data found" description="No orders match your current filters." />
+          <EmptyState title="No data found" description="Add a new record to get started" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -185,7 +185,7 @@ export default function StandardCosting() {
                     <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
                   </th>
                   <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
+                    <span className="inline-flex items-center gap-1">Order No <SortIcon field="order_no" /></span>
                   </th>
                   <th onClick={() => handleSort('article')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
@@ -212,7 +212,7 @@ export default function StandardCosting() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {rows.map((row, idx) => (
-                  <tr key={row.id} className={`transition-colors hover:bg-indigo-50/60 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => navigate(`/standard-costing/${row.id}`)}>
+                  <tr key={row.id} className={`transition-colors hover:bg-indigo-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-indigo-700 font-mono font-medium">{row.order_no || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
@@ -278,12 +278,11 @@ export default function StandardCosting() {
             ))}
           </div>
         ) : rows.length === 0 ? (
-          <EmptyState title="No data found" description="No orders match your current filters." />
+          <EmptyState title="No data found" description="Add a new record to get started" />
         ) : (
           <>
             {rows.map(row => (
-              <div key={row.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm cursor-pointer active:bg-indigo-50" onClick={() => navigate(`/standard-costing/${row.id}`)}>
-                {/* Top: Customer + Order */}
+              <div key={row.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
@@ -294,13 +293,11 @@ export default function StandardCosting() {
                   </span>
                 </div>
 
-                {/* Article + Color */}
                 <div className="flex items-center gap-3 mb-3 text-xs text-gray-600">
                   <span className="truncate">{row.article || '—'}</span>
                   {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
                 </div>
 
-                {/* Qty and cost info */}
                 <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
                   <div className="text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-medium">Order Sqft</p>

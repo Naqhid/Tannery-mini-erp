@@ -1,98 +1,101 @@
 import pool from '../config/db.js';
 
 /**
- * Get Costing Report data - aggregates material, machine, and general costs per order.
+ * Get Costing Report data - sources from production_status_orders.
  * Columns: Customer, Order-No, Article, Color, Order-qty Sqft, Completed qty Sq.ft,
  *          Cost per Sqft, Selling Price per Sqft, Variance per sq.ft
+ * 
+ * Cost data is pulled from general_cost_headers + machine_cost_headers + bom material
+ * linked via production_plans (joined by sales_order_id -> sales_orders.order_no = o.order_no).
+ * Selling price comes from sales_order_items.
  */
 export async function getReport({ search, customer, article, color, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
-  let where = 'pp.deleted_at IS NULL';
+  let where = 'o.deleted_at IS NULL';
 
   if (search) {
-    where += ' AND (c.name LIKE ? OR so.order_no LIKE ? OR pp.article LIKE ? OR pp.color LIKE ?)';
+    where += ' AND (o.customer_name LIKE ? OR o.order_no LIKE ? OR o.article LIKE ? OR o.color LIKE ?)';
     const t = `%${search}%`;
     params.push(t, t, t, t);
   }
   if (customer) {
-    where += ' AND c.name LIKE ?';
-    params.push(`%${customer}%`);
+    where += ' AND o.customer_name = ?';
+    params.push(customer);
   }
   if (article) {
-    where += ' AND pp.article LIKE ?';
-    params.push(`%${article}%`);
+    where += ' AND o.article = ?';
+    params.push(article);
   }
   if (color) {
-    where += ' AND pp.color LIKE ?';
-    params.push(`%${color}%`);
+    where += ' AND o.color = ?';
+    params.push(color);
   }
 
   const allowedSort = ['customer_name', 'order_no', 'article', 'color', 'order_qty_sqft', 'completed_qty_sqft', 'cost_per_sqft', 'selling_price_per_sqft', 'variance_per_sqft'];
-  let orderClause = 'pp.id DESC';
+  let orderClause = 'o.id DESC';
   if (allowedSort.includes(sortBy)) {
     const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-    if (sortBy === 'customer_name') orderClause = `c.name ${ord}`;
-    else if (sortBy === 'order_no') orderClause = `so.order_no ${ord}`;
-    else orderClause = `${sortBy} ${ord}`;
+    if (sortBy === 'customer_name') orderClause = `o.customer_name ${ord}`;
+    else if (sortBy === 'order_no') orderClause = `o.order_no ${ord}`;
+    else if (sortBy === 'article') orderClause = `o.article ${ord}`;
+    else if (sortBy === 'color') orderClause = `o.color ${ord}`;
+    else if (sortBy === 'order_qty_sqft') orderClause = `o.issued_qty ${ord}`;
+    else if (sortBy === 'completed_qty_sqft') orderClause = `o.completed_qty ${ord}`;
+    else orderClause = `o.id ${ord}`;
   }
 
   const offset = (page - 1) * limit;
 
+  // Main query: pull from production_status_orders
+  // Link to sales_orders via order_no to get selling price and production_plan costs
   const [rows] = await pool.query(
     `SELECT 
-       pp.id,
-       c.name AS customer_name,
-       so.order_no,
-       pp.article,
-       pp.color,
-       pp.order_qty AS order_qty_sqft,
-       COALESCE(pst_agg.total_output_sqft, 0) AS completed_qty_sqft,
-       COALESCE(gc_agg.total_general_cost, 0) AS total_general_cost,
-       COALESCE(mc_agg.total_machine_cost, 0) AS total_machine_cost,
-       COALESCE(bom_agg.total_material_cost, 0) AS total_material_cost,
+       o.id,
+       o.customer_name,
+       o.order_no,
+       o.article,
+       o.color,
+       o.issued_qty AS order_qty_sqft,
+       o.completed_qty AS completed_qty_sqft,
+       COALESCE(cost_agg.total_general_cost, 0) AS total_general_cost,
+       COALESCE(cost_agg.total_machine_cost, 0) AS total_machine_cost,
+       COALESCE(cost_agg.total_material_cost, 0) AS total_material_cost,
        CASE 
-         WHEN COALESCE(pst_agg.total_output_sqft, 0) > 0 
-         THEN (COALESCE(gc_agg.total_general_cost, 0) + COALESCE(mc_agg.total_machine_cost, 0) + COALESCE(bom_agg.total_material_cost, 0)) / pst_agg.total_output_sqft
+         WHEN o.completed_qty > 0 
+         THEN (COALESCE(cost_agg.total_general_cost, 0) + COALESCE(cost_agg.total_machine_cost, 0) + COALESCE(cost_agg.total_material_cost, 0)) / o.completed_qty
          ELSE 0 
        END AS cost_per_sqft,
-       COALESCE(soi_agg.avg_unit_price, 0) AS selling_price_per_sqft,
+       COALESCE(so_agg.selling_price, 0) AS selling_price_per_sqft,
        CASE 
-         WHEN COALESCE(pst_agg.total_output_sqft, 0) > 0 
-         THEN ((COALESCE(gc_agg.total_general_cost, 0) + COALESCE(mc_agg.total_machine_cost, 0) + COALESCE(bom_agg.total_material_cost, 0)) / pst_agg.total_output_sqft) - COALESCE(soi_agg.avg_unit_price, 0)
+         WHEN o.completed_qty > 0 
+         THEN ((COALESCE(cost_agg.total_general_cost, 0) + COALESCE(cost_agg.total_machine_cost, 0) + COALESCE(cost_agg.total_material_cost, 0)) / o.completed_qty) - COALESCE(so_agg.selling_price, 0)
          ELSE 0 
        END AS variance_per_sqft
-     FROM production_plans pp
-     LEFT JOIN customers c ON pp.customer_id = c.id
-     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     FROM production_status_orders o
      LEFT JOIN (
-       SELECT production_plan_id, SUM(output_qty) AS total_output_sqft
-       FROM production_status_transactions
-       WHERE deleted_at IS NULL
-       GROUP BY production_plan_id
-     ) pst_agg ON pst_agg.production_plan_id = pp.id
+       SELECT 
+         so.order_no,
+         SUM(COALESCE(gc_sub.gc_total, 0)) AS total_general_cost,
+         SUM(COALESCE(mc_sub.mc_total, 0)) AS total_machine_cost,
+         0 AS total_material_cost
+       FROM sales_orders so
+       JOIN production_plans pp ON pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+       LEFT JOIN (
+         SELECT production_plan_id, SUM(total_amount) AS gc_total
+         FROM general_cost_headers GROUP BY production_plan_id
+       ) gc_sub ON gc_sub.production_plan_id = pp.id
+       LEFT JOIN (
+         SELECT production_plan_id, SUM(total_amount) AS mc_total
+         FROM machine_cost_headers GROUP BY production_plan_id
+       ) mc_sub ON mc_sub.production_plan_id = pp.id
+       GROUP BY so.order_no
+     ) cost_agg ON cost_agg.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
      LEFT JOIN (
-       SELECT gch.production_plan_id, SUM(gch.total_amount) AS total_general_cost
-       FROM general_cost_headers gch
-       GROUP BY gch.production_plan_id
-     ) gc_agg ON gc_agg.production_plan_id = pp.id
-     LEFT JOIN (
-       SELECT mch.production_plan_id, SUM(mch.total_amount) AS total_machine_cost
-       FROM machine_cost_headers mch
-       GROUP BY mch.production_plan_id
-     ) mc_agg ON mc_agg.production_plan_id = pp.id
-     LEFT JOIN (
-       SELECT pp2.id AS production_plan_id, 
-         COALESCE(SUM(bi.qty * (1 + COALESCE(bi.scrap_percent, 0) / 100) * COALESCE(bi.unit_cost, 0)), 0) AS total_material_cost
-       FROM production_plans pp2
-       LEFT JOIN boms b ON pp2.bom_id = b.id
-       LEFT JOIN bom_items bi ON bi.bom_id = b.id
-       GROUP BY pp2.id
-     ) bom_agg ON bom_agg.production_plan_id = pp.id
-     LEFT JOIN (
-       SELECT soi.sales_order_id, AVG(soi.unit_price) AS avg_unit_price
-       FROM sales_order_items soi
-       GROUP BY soi.sales_order_id
-     ) soi_agg ON soi_agg.sales_order_id = pp.sales_order_id
+       SELECT so.order_no, AVG(soi.unit_price) AS selling_price
+       FROM sales_orders so
+       JOIN sales_order_items soi ON soi.sales_order_id = so.id
+       GROUP BY so.order_no
+     ) so_agg ON so_agg.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
      WHERE ${where}
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
@@ -101,9 +104,7 @@ export async function getReport({ search, customer, article, color, page = 1, li
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total
-     FROM production_plans pp
-     LEFT JOIN customers c ON pp.customer_id = c.id
-     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     FROM production_status_orders o
      WHERE ${where}`,
     params
   );
@@ -116,18 +117,17 @@ export async function getReport({ search, customer, article, color, page = 1, li
  */
 export async function getFilterOptions() {
   const [customers] = await pool.query(
-    `SELECT DISTINCT c.name FROM production_plans pp
-     JOIN customers c ON pp.customer_id = c.id
-     WHERE pp.deleted_at IS NULL AND c.name IS NOT NULL
-     ORDER BY c.name`
+    `SELECT DISTINCT customer_name AS name FROM production_status_orders
+     WHERE deleted_at IS NULL AND customer_name IS NOT NULL AND customer_name != ''
+     ORDER BY customer_name`
   );
   const [articles] = await pool.query(
-    `SELECT DISTINCT article FROM production_plans
+    `SELECT DISTINCT article FROM production_status_orders
      WHERE deleted_at IS NULL AND article IS NOT NULL AND article != ''
      ORDER BY article`
   );
   const [colors] = await pool.query(
-    `SELECT DISTINCT color FROM production_plans
+    `SELECT DISTINCT color FROM production_status_orders
      WHERE deleted_at IS NULL AND color IS NOT NULL AND color != ''
      ORDER BY color`
   );
