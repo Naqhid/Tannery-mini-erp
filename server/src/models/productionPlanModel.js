@@ -99,14 +99,13 @@ export async function getById(id) {
 }
 
 export async function getNextNo() {
-  const year = new Date().getFullYear();
   const [[row]] = await pool.query(
-    `SELECT plan_no FROM production_plans WHERE plan_no LIKE ? ORDER BY id DESC LIMIT 1`,
-    [`PLAN-${year}-%`]
+    `SELECT plan_no FROM production_plans WHERE plan_no LIKE 'PRP-%' ORDER BY id DESC LIMIT 1`
   );
-  if (!row) return `PLAN-${year}-00001`;
-  const num = parseInt(row.plan_no.split('-')[2], 10) + 1;
-  return `PLAN-${year}-${String(num).padStart(5, '0')}`;
+  if (!row) return `PRP-000001`;
+  const numPart = row.plan_no.replace('PRP-', '');
+  const num = parseInt(numPart, 10) + 1;
+  return `PRP-${String(num).padStart(6, '0')}`;
 }
 
 export async function getStats() {
@@ -148,10 +147,11 @@ export async function create(data, items = [], stages = [], createdBy = null) {
       `INSERT INTO production_plans (
         plan_no, plan_date, sales_order_id, customer_id, product_id, warehouse_id, uom,
         article, color, finish, customer_order_no,
-        order_qty, planned_qty, batch_qty, no_of_batches, balance_qty,
+        order_qty, expected_yield, planner, completed_qty, sales_order_qty,
+        planned_qty, batch_qty, no_of_batches, balance_qty,
         output_qty, output_percent, wip_qty,
         planned_start_date, planned_end_date, priority, remarks, status, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         plan_no,
         data.plan_date || new Date().toISOString().split('T')[0],
@@ -159,12 +159,16 @@ export async function create(data, items = [], stages = [], createdBy = null) {
         data.customer_id || null,
         data.product_id || null,
         data.warehouse_id || null,
-        data.uom || null,
+        data.uom || 'Pcs',
         data.article || null,
         data.color || null,
         data.finish || null,
         data.customer_order_no || null,
         parseFloat(data.order_qty) || 0,
+        parseFloat(data.expected_yield) || 92,
+        data.planner || null,
+        parseFloat(data.completed_qty) || 0,
+        parseFloat(data.sales_order_qty) || 0,
         parseFloat(data.planned_qty) || 0,
         parseFloat(data.batch_qty) || 0,
         noOfBatches,
@@ -197,8 +201,8 @@ export async function create(data, items = [], stages = [], createdBy = null) {
     // Insert stages
     for (const stage of stages) {
       await conn.query(
-        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, issue_input_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           planId,
           parseInt(stage.seq) || 1,
@@ -206,6 +210,7 @@ export async function create(data, items = [], stages = [], createdBy = null) {
           stage.stage_name || null,
           parseFloat(stage.capacity) || 0,
           parseFloat(stage.planned_qty) || 0,
+          parseFloat(stage.issue_input_qty) || 0,
           parseFloat(stage.planned_percent) || 100,
           parseFloat(stage.receipt_qty) || 0,
           parseFloat(stage.rejection_qty) || 0,
@@ -239,16 +244,22 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
       `UPDATE production_plans SET
         plan_date=?, sales_order_id=?, customer_id=?, product_id=?, warehouse_id=?, uom=?,
         article=?, color=?, finish=?, customer_order_no=?,
-        order_qty=?, planned_qty=?, batch_qty=?, no_of_batches=?, balance_qty=?,
+        order_qty=?, expected_yield=?, planner=?, completed_qty=?, sales_order_qty=?,
+        planned_qty=?, batch_qty=?, no_of_batches=?, balance_qty=?,
         output_qty=?, output_percent=?, wip_qty=?,
         planned_start_date=?, planned_end_date=?, priority=?, remarks=?, status=?,
         updated_by=?, updated_at=NOW()
       WHERE id=? AND deleted_at IS NULL`,
       [
         data.plan_date, data.sales_order_id || null, data.customer_id || null,
-        data.product_id || null, data.warehouse_id || null, data.uom || null,
+        data.product_id || null, data.warehouse_id || null, data.uom || 'Pcs',
         data.article || null, data.color || null, data.finish || null, data.customer_order_no || null,
-        parseFloat(data.order_qty) || 0, parseFloat(data.planned_qty) || 0,
+        parseFloat(data.order_qty) || 0,
+        parseFloat(data.expected_yield) || 92,
+        data.planner || null,
+        parseFloat(data.completed_qty) || 0,
+        parseFloat(data.sales_order_qty) || 0,
+        parseFloat(data.planned_qty) || 0,
         parseFloat(data.batch_qty) || 0, noOfBatches, balanceQty,
         parseFloat(data.output_qty) || 0, outputPercent, wipQty,
         data.planned_start_date || null, data.planned_end_date || null,
@@ -275,8 +286,8 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
     await conn.query(`DELETE FROM production_plan_stages WHERE plan_id = ?`, [id]);
     for (const stage of stages) {
       await conn.query(
-        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, issue_input_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           parseInt(stage.seq) || 1,
@@ -284,6 +295,7 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
           stage.stage_name || null,
           parseFloat(stage.capacity) || 0,
           parseFloat(stage.planned_qty) || 0,
+          parseFloat(stage.issue_input_qty) || 0,
           parseFloat(stage.planned_percent) || 100,
           parseFloat(stage.receipt_qty) || 0,
           parseFloat(stage.rejection_qty) || 0,

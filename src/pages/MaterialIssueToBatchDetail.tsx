@@ -1,13 +1,15 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Plus, Trash2, Factory, RotateCcw, Info, Minus, Send } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; allow_negative_stock: number; }
 interface StockItem { material_id: number; material_name: string; material_code: string; uom: string; current_qty: number; avg_unit_cost: number; }
+interface MaterialOption { id: number; name: string; code: string; primary_uom?: string; primary_uom_name?: string; uom?: string; }
 interface Item {
   _key: string;
   material_id: string;
@@ -28,12 +30,15 @@ interface IssueData {
   department: string;
   job_order_no: string;
   production_batch: string;
+  article: string;
+  color: string;
   product_id: string;
   batch_qty: string;
   batch_uom: string;
   batch_description: string;
   warehouse_id: string;
   required_date: string;
+  planned_date: string;
   issued_by: string;
   loading_unloading: string;
   other_charges: string;
@@ -47,8 +52,8 @@ const emptyItem: Item = { _key: '', material_id: '', material_code: '', material
 
 const emptyIssue: IssueData = {
   issue_no: '', issue_date: new Date().toISOString().split('T')[0], department: '', job_order_no: '',
-  production_batch: '', product_id: '', batch_qty: '', batch_uom: '', batch_description: '',
-  warehouse_id: '', required_date: '', issued_by: '', loading_unloading: '', other_charges: '',
+  production_batch: '', article: '', color: '', product_id: '', batch_qty: '', batch_uom: '', batch_description: '',
+  warehouse_id: '', required_date: '', planned_date: '', issued_by: '', loading_unloading: '', other_charges: '',
   remarks: '', status: 'Posted',
 };
 
@@ -83,6 +88,7 @@ export default function MaterialIssueToBatchDetail() {
   const [items, setItems] = useState<Item[]>([{ ...emptyItem, _key: genKey() }]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stockList, setStockList] = useState<StockItem[]>([]);
+  const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [batchOptions, setBatchOptions] = useState<BatchOption[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -107,6 +113,11 @@ export default function MaterialIssueToBatchDetail() {
     catch { setStockList([]); }
   }, []);
 
+  const fetchMaterials = useCallback(async () => {
+    try { const res = await api<{ data: MaterialOption[] }>('/materials/dropdown'); setMaterials(res.data || []); }
+    catch { setMaterials([]); }
+  }, []);
+
   const fetchIssue = useCallback(async () => {
     if (isNew) {
       try { const res = await api<{ data: { issue_no: string } }>('/material-issues/next-no'); setIssue((p) => ({ ...p, issue_no: res.data.issue_no })); } catch {}
@@ -120,6 +131,9 @@ export default function MaterialIssueToBatchDetail() {
         ...emptyIssue, ...d,
         issue_date: d.issue_date?.split('T')[0] || '',
         required_date: d.required_date?.split('T')[0] || '',
+        planned_date: d.planned_date?.split('T')[0] || d.required_date?.split('T')[0] || '',
+        article: d.article || d.batch_description || '',
+        color: d.color || '',
         warehouse_id: String(d.warehouse_id || ''),
         batch_qty: String(d.batch_qty || ''),
         loading_unloading: String(d.loading_unloading || ''),
@@ -138,7 +152,7 @@ export default function MaterialIssueToBatchDetail() {
     finally { setLoading(false); }
   }, [id, isNew, fetchStock]);
 
-  useEffect(() => { fetchWarehouses(); fetchBatches(); fetchIssue(); }, [fetchWarehouses, fetchBatches, fetchIssue]);
+  useEffect(() => { fetchWarehouses(); fetchBatches(); fetchMaterials(); fetchIssue(); }, [fetchWarehouses, fetchBatches, fetchMaterials, fetchIssue]);
   useEffect(() => { if (issue.warehouse_id) fetchStock(issue.warehouse_id); }, [issue.warehouse_id, fetchStock]);
 
   const update = (key: string, value: any) => setIssue((p) => ({ ...p, [key]: value }));
@@ -154,6 +168,7 @@ export default function MaterialIssueToBatchDetail() {
         batch_qty: String(batch.batch_qty || ''),
         batch_uom: batch.batch_uom || '',
         batch_description: batch.article_name || '',
+        article: batch.article_name || '',
       }));
       // Auto-load BOM items if product exists
       if (batch.product_id) {
@@ -208,14 +223,37 @@ export default function MaterialIssueToBatchDetail() {
     }
   };
 
+  const handleMaterialChange = async (key: string, materialId: string) => {
+    const material = materials.find((m) => String(m.id) === materialId);
+    setItems((prev) => prev.map((it) => it._key !== key ? it : ({
+      ...it,
+      material_id: materialId,
+      material_code: material?.code || '',
+      material_name: material?.name || '',
+      uom: material?.primary_uom_name || material?.primary_uom || material?.uom || '',
+      unit_cost: '', amount: 0,
+    })));
+    if (!materialId || !issue.warehouse_id) return;
+    try {
+      const info = await api<{ data: { available_qty: number; avg_rate: number } }>(`/material-issues/item-info/${materialId}?warehouse_id=${issue.warehouse_id}&date=${issue.issue_date}`);
+      setItems((prev) => prev.map((it) => it._key !== key ? it : ({ ...it, unit_cost: String(info.data.avg_rate || 0), amount: Number(((parseFloat(it.issue_qty) || 0) * (info.data.avg_rate || 0)).toFixed(2)) })));
+    } catch { toast.error('Unable to fetch current average rate'); }
+  };
+
+  const importPreviousIssue = async () => {
+    if (!issue.article) { toast.error('Select or enter an article first'); return; }
+    try {
+      const res = await api<{ data: any }>(`/material-issues/previous-issue?article=${encodeURIComponent(issue.article)}${id && !isNew ? `&exclude_id=${id}` : ''}`);
+      const imported = (res.data.items || []).map((it: any) => ({ _key: genKey(), material_id: String(it.material_id), material_code: it.material_code || '', material_name: it.material_name || '', uom: it.uom || '', required_qty: String(it.required_qty || ''), issue_qty: String(it.issue_qty || ''), unit_cost: String(it.unit_cost || ''), amount: Number(it.amount || 0), remarks: it.remarks || '' }));
+      setItems(imported.length ? imported : [{ ...emptyItem, _key: genKey() }]);
+      toast.success('Previous issue details imported');
+    } catch (err) { toast.error((err as Error).message || 'No previous issue found for this article'); }
+  };
+
   const updateItem = (key: string, field: string, value: any) => {
     setItems((prev) => prev.map((it) => {
       if (it._key !== key) return it;
       const updated = { ...it, [field]: value };
-      if (field === 'material_id') {
-        const stock = stockList.find((s) => String(s.material_id) === value);
-        if (stock) { updated.uom = stock.uom; updated.unit_cost = String(stock.avg_unit_cost); updated.material_code = stock.material_code; updated.material_name = stock.material_name; }
-      }
       if (field === 'issue_qty' || field === 'unit_cost' || field === 'material_id') {
         const qty = parseFloat(updated.issue_qty) || 0;
         const cost = parseFloat(updated.unit_cost) || 0;
@@ -305,7 +343,7 @@ export default function MaterialIssueToBatchDetail() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Issue Details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Row 1: Issue No | To Department/Process* | Job Order No. | Issued By* */}
+          {/* Row 1: Issue No | Department */}
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">Issue No.</label>
             <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
@@ -313,9 +351,8 @@ export default function MaterialIssueToBatchDetail() {
             </div>
           </div>
           <Select label="To Department / Process" required options={DEPARTMENTS} value={issue.department} onChange={(e) => update('department', e.target.value)} />
-          <Select label="Job Order No." options={[{ value: '', label: 'Select' }, { value: 'JO-2024-0185', label: 'JO-2024-0185' }]} value={issue.job_order_no} onChange={(e) => update('job_order_no', e.target.value)} />
-          <Select label="Issued By" required options={ISSUED_BY} value={issue.issued_by} onChange={(e) => update('issued_by', e.target.value)} />
-          {/* Row 2: Issue Date* | Production Batch* | Batch Qty + UOM | Product */}
+
+          {/* Row 2: Issue Date | Production Batch | Batch Qty + UOM | Article + Color */}
           <Input label="Issue Date" type="date" required value={issue.issue_date} onChange={(e) => update('issue_date', e.target.value)} />
           <Select label="Production Batch" required options={[{ value: '', label: 'Select batch' }, ...batchOptions.map(b => ({ value: String(b.id), label: b.batch_no }))]} value={batchOptions.find(b => b.batch_no === issue.production_batch)?.id ? String(batchOptions.find(b => b.batch_no === issue.production_batch)!.id) : ''} onChange={(e) => handleBatchChange(e.target.value)} />
           <div className="flex gap-2">
@@ -328,20 +365,11 @@ export default function MaterialIssueToBatchDetail() {
               <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[34px] flex items-center">{issue.batch_uom || '-'}</div>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
-            <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[34px] flex items-center">
-              {batchOptions.find(b => b.batch_no === issue.production_batch)?.product_name || <span className="text-gray-400 italic">Auto-filled from batch</span>}
-            </div>
-          </div>
-          {/* Row 3: Warehouse/Store* | Required Date | Batch Description (spans 2) */}
+          <Input label="Article" value={issue.article} onChange={(e) => update('article', e.target.value)} />
+          <Input label="Color" value={issue.color} onChange={(e) => update('color', e.target.value)} />
+          {/* Row 3: Warehouse/Store | Planned Date */}
           <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={issue.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} />
-          <Input label="Required Date" type="date" value={issue.required_date} onChange={(e) => update('required_date', e.target.value)} />
-          <div className="lg:col-span-2">
-            <label className="block text-xs font-medium text-gray-900 mb-1">Batch Description</label>
-            <textarea rows={2} value={issue.batch_description} onChange={(e) => update('batch_description', e.target.value)} placeholder="Men's Formal Shoes - Black&#10;Size: 40"
-              className="w-full px-2.5 py-2 text-xs text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none" />
-          </div>
+          <Input label="Planned Date" type="date" value={issue.planned_date} onChange={(e) => update('planned_date', e.target.value)} />
           {/* Row 4: Remarks (spans full or partial) */}
           <div className="lg:col-span-2">
             <Input label="Remarks" value={issue.remarks} onChange={(e) => update('remarks', e.target.value)} placeholder="Material issued for production." />
@@ -353,7 +381,7 @@ export default function MaterialIssueToBatchDetail() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/30">
           <div className="flex items-center gap-4">
-            <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2>
+            <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2><button type="button" onClick={importPreviousIssue} className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">Import from Previous Issue</button>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Add Item</span>
               <div className="relative">
@@ -378,13 +406,13 @@ export default function MaterialIssueToBatchDetail() {
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code <span className="text-rose-500">*</span></th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name <span className="text-rose-500">*</span></th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">UOM</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Required Qty</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Issue Qty <span className="text-rose-500">*</span></th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Unit Cost (â‚¹)</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (â‚¹)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Unit Cost (₹)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (₹)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Remarks</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
               </tr>
@@ -394,21 +422,15 @@ export default function MaterialIssueToBatchDetail() {
                 <tr key={item._key} className="hover:bg-blue-50/30 transition-all">
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-2.5 px-3">
-                    <select value={item.material_id} onChange={(e) => updateItem(item._key, 'material_id', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[100px]">
-                      <option value="">Select</option>
-                      {stockList.map((s) => <option key={s.material_id} value={String(s.material_id)}>{s.material_code}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={materials.map((m) => ({ value: String(m.id), label: `${m.code} - ${m.name}` }))}
+                      value={item.material_id}
+                      onChange={(val) => handleMaterialChange(item._key, val)}
+                      placeholder="Search item..."
+                    />
                   </td>
-                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_name || '-'}</td>
-                  <td className="py-2.5 px-3">
-                    <select value={item.uom} onChange={(e) => updateItem(item._key, 'uom', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[60px]">
-                      <option value="">{item.uom || '-'}</option>
-                      <option value="Kg">Kg</option><option value="Ltr">Ltr</option><option value="Mtr">Mtr</option>
-                      <option value="Nos">Nos</option><option value="Sq.Ft.">Sq.Ft.</option><option value="Cone">Cone</option>
-                    </select>
-                  </td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_code || '-'}</td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.required_qty} onChange={(e) => updateItem(item._key, 'required_qty', e.target.value)}
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
@@ -462,12 +484,12 @@ export default function MaterialIssueToBatchDetail() {
           <div className="space-y-2">
             <h3 className="text-xs font-bold text-gray-700 uppercase mb-2">Other Charges</h3>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-600">Loading / Unloading (â‚¹)</span>
+              <span className="text-xs text-gray-600">Loading / Unloading (₹)</span>
               <input type="number" value={issue.loading_unloading} onChange={(e) => update('loading_unloading', e.target.value)}
                 className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-600">Other Charges (â‚¹)</span>
+              <span className="text-xs text-gray-600">Other Charges (₹)</span>
               <input type="number" value={issue.other_charges} onChange={(e) => update('other_charges', e.target.value)}
                 className="w-28 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
             </div>
@@ -475,11 +497,11 @@ export default function MaterialIssueToBatchDetail() {
           {/* Right - Grand Total */}
           <div className="flex flex-col justify-center items-end space-y-2 bg-gradient-to-br from-rose-50 to-red-50 rounded-xl p-4 border border-rose-100">
             <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-medium text-gray-700">Total Material Cost (â‚¹)</span>
+              <span className="text-xs font-medium text-gray-700">Total Material Cost (₹)</span>
               <span className="text-sm font-bold text-gray-900">{totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-medium text-gray-700">Other Charges (â‚¹)</span>
+              <span className="text-xs font-medium text-gray-700">Other Charges (₹)</span>
               <span className="text-sm font-bold text-gray-900">{totalOtherCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex items-center justify-between w-full pt-2 border-t border-rose-200">

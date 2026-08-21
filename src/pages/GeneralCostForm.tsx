@@ -127,6 +127,7 @@ export default function GeneralCostForm() {
             completed_qty: plan.completed_qty || 0,
             balance_qty: plan.balance_qty || Math.max(0, (plan.issued_qty || 0) - (plan.completed_qty || 0)),
             plan_status: plan.status || '',
+            process_stage: plan.process_stage || 'All',
             uom: plan.uom || 'Pcs',
           }));
         }
@@ -138,6 +139,17 @@ export default function GeneralCostForm() {
     };
     loadData();
   }, [id, isNew, planId]);
+
+  useEffect(() => {
+    if (!formData.production_plan_id || !formData.production_date) return;
+    api<{ data: { planned_qty: number; output_qty: number } }>(`/production-status/orders/${formData.production_plan_id}/date-summary?date=${formData.production_date}`)
+      .then((res) => setFormData((prev) => ({
+        ...prev,
+        planned_qty: Number(res.data.planned_qty || 0),
+        output_qty: Number(res.data.output_qty || 0),
+      })))
+      .catch(() => {});
+  }, [formData.production_plan_id, formData.production_date]);
 
   const recalculate = useCallback((items: CostItem[]) => {
     const totalAmount = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);

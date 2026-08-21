@@ -18,7 +18,7 @@ export async function getAll({ search, type, category, status, supplier, page = 
   if (status) { where += ' AND m.status = ?'; params.push(status); }
   if (supplier) { where += ' AND s.name LIKE ?'; params.push(`%${supplier}%`); }
 
-  const allowedSortColumns = ['id', 'code', 'name', 'type', 'category', 'status', 'current_stock', 'last_purchase_price', 'standard_cost', 'created_at'];
+  const allowedSortColumns = ['id', 'code', 'name', 'type', 'category', 'status', 'current_stock', 'last_purchase_price', 'standard_cost', 'opening_stock', 'created_at'];
   const column = allowedSortColumns.includes(sortBy) ? `m.${sortBy}` : 'm.id';
   const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
@@ -63,6 +63,23 @@ export async function getNextCode() {
   const parts = row.code.split('-');
   const num = parseInt(parts[parts.length - 1], 10) + 1;
   return `MAT-${String(num).padStart(5, '0')}`;
+}
+
+async function resolveWarehouseId(warehouseName) {
+  if (!warehouseName) return 0;
+  // Try as numeric ID first
+  const numericId = parseInt(warehouseName);
+  if (numericId) {
+    const [[wh]] = await pool.query('SELECT id FROM warehouses WHERE id = ? LIMIT 1', [numericId]);
+    if (wh) return wh.id;
+  }
+  // Try exact name match
+  const [[wh1]] = await pool.query('SELECT id FROM warehouses WHERE name = ? LIMIT 1', [warehouseName]);
+  if (wh1) return wh1.id;
+  // Try LIKE match
+  const [[wh2]] = await pool.query('SELECT id FROM warehouses WHERE name LIKE ? LIMIT 1', [`%${warehouseName}%`]);
+  if (wh2) return wh2.id;
+  return 0;
 }
 
 export async function create(data, createdBy = null) {
@@ -115,6 +132,32 @@ export async function create(data, createdBy = null) {
       createdBy,
     ]
   );
+
+  // Insert opening stock transaction if opening_stock > 0
+  const openingQty = parseFloat(data.opening_stock) || 0;
+  const avgRate = parseFloat(data.standard_cost) || 0;
+  if (openingQty > 0) {
+    const openingValue = openingQty * avgRate;
+    const warehouseId = await resolveWarehouseId(data.default_warehouse);
+    await pool.query(
+      `INSERT INTO material_transactions 
+        (transaction_date, transaction_type, reference_no, warehouse_id, item_id, 
+         opening_qty, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
+       VALUES (NOW(), 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
+      [
+        code,
+        warehouseId,
+        result.insertId,
+        openingQty,
+        openingQty,
+        openingValue,
+        openingQty,
+        avgRate,
+        openingValue,
+      ]
+    );
+  }
+
   return { id: result.insertId, code };
 }
 
@@ -166,6 +209,41 @@ export async function update(id, data, updatedBy = null) {
       id,
     ]
   );
+
+  // Upsert opening stock transaction
+  const openingQty = parseFloat(data.opening_stock) || 0;
+  const avgRate = parseFloat(data.standard_cost) || 0;
+  // Remove old opening transaction for this material
+  await pool.query(
+    `DELETE FROM material_transactions WHERE item_id = ? AND transaction_type = 'OPENING'`,
+    [id]
+  );
+  // Insert new one if opening_stock > 0
+  if (openingQty > 0) {
+    const openingValue = openingQty * avgRate;
+    const warehouseId = await resolveWarehouseId(data.default_warehouse);
+    // Get material code
+    const [[mat]] = await pool.query('SELECT code FROM materials WHERE id = ?', [id]);
+    const refNo = mat ? mat.code : `MAT-${String(id).padStart(5, '0')}`;
+    await pool.query(
+      `INSERT INTO material_transactions 
+        (transaction_date, transaction_type, reference_no, warehouse_id, item_id, 
+         opening_qty, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
+       VALUES (NOW(), 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
+      [
+        refNo,
+        warehouseId,
+        id,
+        openingQty,
+        openingQty,
+        openingValue,
+        openingQty,
+        avgRate,
+        openingValue,
+      ]
+    );
+  }
+
   return result.affectedRows > 0;
 }
 

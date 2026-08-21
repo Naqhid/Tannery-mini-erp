@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import { updateStock, addLedgerEntry } from './stockLedgerModel.js';
+import { replaceReferenceTransactions } from './materialTransactionModel.js';
 
 export async function getAll({ search, status, warehouse_id, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
@@ -148,6 +149,20 @@ export async function create(data, items = [], createdBy = null) {
       });
     }
 
+    await replaceReferenceTransactions(conn, 'material_receipt', receiptId, items.map((item) => ({
+      transaction_date: data.receipt_date,
+      transaction_type: 'Receipt',
+      reference_no: receipt_no,
+      warehouse_id: data.warehouse_id,
+      item_id: item.material_id,
+      batch_no: item.batch_no || null,
+      receipt_qty: parseFloat(item.primary_uom_qty) || 0,
+      opening_qty: 0,
+      receipt_value: parseFloat(item.amount_inr) || 0,
+      issue_qty: 0,
+      issue_value: 0,
+    })));
+
     await conn.commit();
     return { id: receiptId, receipt_no };
   } catch (err) {
@@ -199,6 +214,7 @@ export async function update(id, data, items = [], updatedBy = null) {
     }
     await conn.query('DELETE FROM material_receipt_items WHERE receipt_id=?', [id]);
     await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
+    await replaceReferenceTransactions(conn, 'material_receipt', id, []);
 
     for (const item of items) {
       await conn.query(
@@ -242,6 +258,21 @@ export async function update(id, data, items = [], updatedBy = null) {
       });
     }
 
+    const [[receiptHeader]] = await conn.query('SELECT receipt_no FROM material_receipts WHERE id=?', [id]);
+    await replaceReferenceTransactions(conn, 'material_receipt', id, items.map((item) => ({
+      transaction_date: data.receipt_date,
+      transaction_type: 'Receipt',
+      reference_no: receiptHeader?.receipt_no || null,
+      warehouse_id: data.warehouse_id,
+      item_id: item.material_id,
+      batch_no: item.batch_no || null,
+      receipt_qty: parseFloat(item.primary_uom_qty) || 0,
+      opening_qty: 0,
+      receipt_value: parseFloat(item.amount_inr) || 0,
+      issue_qty: 0,
+      issue_value: 0,
+    })));
+
     await conn.commit();
     return true;
   } catch (err) {
@@ -265,6 +296,7 @@ export async function remove(id) {
       await updateStock(conn, item.warehouse_id, item.material_id, item.uom, -parseFloat(item.received_qty), 0);
     }
     await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
+    await replaceReferenceTransactions(conn, 'material_receipt', id, []);
     await conn.query('DELETE FROM material_receipt_items WHERE receipt_id=?', [id]);
     const [result] = await conn.query('DELETE FROM material_receipts WHERE id=?', [id]);
 

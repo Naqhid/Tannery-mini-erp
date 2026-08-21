@@ -259,3 +259,15 @@ export async function deleteTransaction(id, userId = null) {
 
   return result.affectedRows > 0;
 }
+
+export async function getOrderDateSummary(orderId, date) {
+  const [[row]] = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN DATE(production_date)=DATE(?) THEN input_qty ELSE 0 END),0) AS planned_qty,
+       COALESCE(SUM(CASE WHEN DATE(production_date)=DATE(?) THEN output_qty ELSE 0 END),0) AS output_qty
+     FROM production_status_transactions
+     WHERE production_status_order_id=? AND deleted_at IS NULL`,
+    [date, date, orderId]
+  );
+  return row || { planned_qty: 0, output_qty: 0 };
+}

@@ -32,6 +32,9 @@ interface MaterialData {
   storage_condition: string;
   hazardous: boolean;
   default_warehouse: string;
+  opening_stock: string;
+  opening_stock_uom: string;
+  standard_cost: string;
   current_stock: string;
   reorder_level: string;
   maximum_level: string;
@@ -49,6 +52,7 @@ const empty: MaterialData = {
   primary_uom_id: '', secondary_uom_id: '', currency: 'INR', chemical_group: '',
   color: '', ph_value: '', flash_point: '', hsn_code: '', hsn_code_display: '', cas_number: '',
   shelf_life: '', storage_condition: '', hazardous: false, default_warehouse: '',
+  opening_stock: '0', opening_stock_uom: '', standard_cost: '0',
   current_stock: '0.00', reorder_level: '0.00', maximum_level: '0.00',
   preferred_supplier_id: '', lead_time: '',
   description: '', application: '', remarks: '', attachment_path: '', status: 'Active',
@@ -62,7 +66,8 @@ const CURRENCY_OPTIONS = [
   { value: 'GBP', label: 'GBP - British Pound' },
 ];
 const STORAGE_CONDITIONS = ['Room Temperature', 'Cool & Dry', 'Refrigerated', 'Flammable Storage', 'Ventilated Area'];
-const WAREHOUSES = ['Main Warehouse', 'Chemical Store', 'Finished Goods Store', 'Raw Material Store'];
+
+interface Warehouse { id: number; name: string; code?: string; }
 
 export default function MaterialMasterForm() {
   const { id } = useParams<{ id: string }>();
@@ -71,6 +76,7 @@ export default function MaterialMasterForm() {
 
   const dropdowns = useDropdowns(['uom', 'product-categories', 'group-master']);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [form, setForm] = useState<MaterialData>(empty);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -86,6 +92,13 @@ export default function MaterialMasterForm() {
     } catch { setSuppliers([]); }
   }, []);
 
+  const fetchWarehouses = useCallback(async () => {
+    try {
+      const res = await api<{ data: Warehouse[] }>('/warehouses/dropdown');
+      setWarehouses(res.data || []);
+    } catch { setWarehouses([]); }
+  }, []);
+
   const fetchMaterial = useCallback(async () => {
     if (isNew) return;
     try {
@@ -94,6 +107,9 @@ export default function MaterialMasterForm() {
       setForm({
         ...empty, ...res.data,
         hazardous: !!(res.data as any).hazardous,
+        opening_stock: String((res.data as any).opening_stock ?? '0'),
+        opening_stock_uom: String((res.data as any).opening_stock_uom ?? ''),
+        standard_cost: String((res.data as any).standard_cost ?? '0'),
         current_stock: String((res.data as any).current_stock ?? '0.00'),
         reorder_level: String((res.data as any).reorder_level ?? '0.00'),
         maximum_level: String((res.data as any).maximum_level ?? '0.00'),
@@ -109,7 +125,7 @@ export default function MaterialMasterForm() {
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
-  useEffect(() => { fetchMaterial(); fetchSuppliers(); }, [fetchMaterial, fetchSuppliers]);
+  useEffect(() => { fetchMaterial(); fetchSuppliers(); fetchWarehouses(); }, [fetchMaterial, fetchSuppliers, fetchWarehouses]);
 
   // Filter groups based on category selection
   useEffect(() => {
@@ -281,7 +297,16 @@ export default function MaterialMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">3. Inventory</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...WAREHOUSES.map(w => ({ value: w, label: w }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} />
+          <Input label="Opening Stock Quantity" type="number" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} placeholder="0" />
+          <Select label="Opening Stock UOM" options={[{ value: '', label: 'Same as Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.opening_stock_uom} onChange={(e) => update('opening_stock_uom', e.target.value)} />
+          <Input label="Average Rate" type="number" value={form.standard_cost} onChange={(e) => update('standard_cost', e.target.value)} placeholder="0.00" />
+          <div>
+            <label className="block text-xs font-medium text-gray-900 mb-1">Opening Stock Value</label>
+            <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-medium">
+              {(parseFloat(form.opening_stock || '0') * parseFloat(form.standard_cost || '0')).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+          <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map(w => ({ value: w.name, label: w.name }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} />
           <Input label="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
           <Input label="Maximum Level" type="number" value={form.maximum_level} onChange={(e) => update('maximum_level', e.target.value)} placeholder="0.00" />
           <Select label="Preferred Supplier" options={supplierOptions} value={form.preferred_supplier_id} onChange={(e) => update('preferred_supplier_id', e.target.value)} />

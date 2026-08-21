@@ -1,5 +1,20 @@
 import pool from '../config/db.js';
 
+
+async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQty, currentId = null) {
+  const [[plan]] = await conn.query('SELECT issued_qty FROM production_status_orders WHERE id=? AND deleted_at IS NULL', [productionPlanId]);
+  if (!plan) throw new Error('Production plan/order not found');
+  const params = [productionPlanId];
+  let exclude = '';
+  if (currentId) { exclude = ' AND id <> ?'; params.push(currentId); }
+  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM ${table} WHERE production_plan_id=?${exclude}`, params);
+  const max = Number(plan.issued_qty) || 0;
+  const requested = Number(productionQty) || 0;
+  if (requested > Math.max(0, max - (Number(used.qty) || 0)) + 0.000001) {
+    throw new Error(`Output quantity cannot be greater than planned quantity. Available planned balance: ${Math.max(0, max - (Number(used.qty) || 0))}`);
+  }
+}
+
 /**
  * Get all production status orders for the General Cost list view.
  * Data source: production_status_orders (from Production Status page).
@@ -143,6 +158,8 @@ export async function create(data, userId = null) {
   try {
     await conn.beginTransaction();
 
+    await assertProductionQtyWithinPlan(conn, data.production_plan_id, data.production_qty || 0);
+
     const transactionNo = await getNextTransactionNo();
 
     // Calculate totals
@@ -202,6 +219,8 @@ export async function update(id, data, userId = null) {
     const [[current]] = await conn.query('SELECT status FROM general_cost_headers WHERE id = ?', [id]);
     if (!current) throw new Error('General Cost entry not found');
     if (current.status === 'Posted') throw new Error('Cannot edit a posted entry');
+
+    await assertProductionQtyWithinPlan(conn, data.production_plan_id || (await conn.query('SELECT production_plan_id FROM general_cost_headers WHERE id=?', [id]))[0][0].production_plan_id, data.production_qty || 0, id);
 
     const items = data.items || [];
     const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);

@@ -97,3 +97,13 @@ export async function deleteTransaction(req, res, next) {
     res.json({ data: { id: req.params.id }, message: 'Transaction deleted successfully!' });
   } catch (err) { next(err); }
 }
+
+
+export async function dateSummary(req, res, next) {
+  try {
+    const date = req.query.date;
+    if (!date) return res.status(400).json({ error: 'date is required' });
+    const data = await model.getOrderDateSummary(req.params.id, date);
+    res.json({ data });
+  } catch (err) { next(err); }
+}

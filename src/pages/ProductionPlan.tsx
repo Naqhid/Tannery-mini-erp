@@ -159,7 +159,7 @@ export default function ProductionPlan() {
             title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
             className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg transition-all shadow-sm ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
           >
-            <Plus size={14} /> New Production Plan
+            <Plus size={14} /> New Requirement Plan
           </button>
         </div>
 
@@ -295,7 +295,7 @@ export default function ProductionPlan() {
         {/* Table Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-blue-800">Production Plans</h2>
+            <h2 className="text-sm font-bold text-blue-800">Production Requirement Plans</h2>
             <span className="text-xs text-gray-500">[Total: {totalRecords}]</span>
           </div>
           <div className="flex items-center gap-2">
