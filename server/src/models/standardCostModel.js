@@ -337,3 +337,83 @@ export async function remove(id) {
   const [result] = await pool.query('DELETE FROM standard_cost_sheets WHERE id = ?', [id]);
   return result.affectedRows > 0;
 }
+
+/**
+ * Get order cost summary for a product:
+ * - Completed Sq.ft (from production_status_transactions)
+ * - Cost Per Sq.ft (total general + machine + material cost / completed qty)
+ * - Selling Price Per Sq.ft (from sales order items)
+ * - Variance Cost Per Sq.ft (cost - selling price)
+ */
+export async function getOrderCostSummary(productId) {
+  const [[result]] = await pool.query(
+    `SELECT 
+       COALESCE(pst_agg.total_output_sqft, 0) AS completed_sqft,
+       COALESCE(gc_agg.total_general_cost, 0) AS total_general_cost,
+       COALESCE(mc_agg.total_machine_cost, 0) AS total_machine_cost,
+       COALESCE(bom_agg.total_material_cost, 0) AS total_material_cost,
+       CASE 
+         WHEN COALESCE(pst_agg.total_output_sqft, 0) > 0 
+         THEN (COALESCE(gc_agg.total_general_cost, 0) + COALESCE(mc_agg.total_machine_cost, 0) + COALESCE(bom_agg.total_material_cost, 0)) / pst_agg.total_output_sqft
+         ELSE 0 
+       END AS cost_per_sqft,
+       COALESCE(soi_agg.avg_unit_price, 0) AS selling_price_per_sqft,
+       CASE 
+         WHEN COALESCE(pst_agg.total_output_sqft, 0) > 0 
+         THEN ((COALESCE(gc_agg.total_general_cost, 0) + COALESCE(mc_agg.total_machine_cost, 0) + COALESCE(bom_agg.total_material_cost, 0)) / pst_agg.total_output_sqft) - COALESCE(soi_agg.avg_unit_price, 0)
+         ELSE 0 
+       END AS variance_per_sqft
+     FROM products p
+     LEFT JOIN (
+       SELECT pp.product_id, SUM(pst.output_qty) AS total_output_sqft
+       FROM production_plans pp
+       JOIN production_status_transactions pst ON pst.production_plan_id = pp.id AND pst.deleted_at IS NULL
+       WHERE pp.deleted_at IS NULL
+       GROUP BY pp.product_id
+     ) pst_agg ON pst_agg.product_id = p.id
+     LEFT JOIN (
+       SELECT pp.product_id, SUM(gch.total_amount) AS total_general_cost
+       FROM production_plans pp
+       JOIN general_cost_headers gch ON gch.production_plan_id = pp.id
+       WHERE pp.deleted_at IS NULL
+       GROUP BY pp.product_id
+     ) gc_agg ON gc_agg.product_id = p.id
+     LEFT JOIN (
+       SELECT pp.product_id, SUM(mch.total_amount) AS total_machine_cost
+       FROM production_plans pp
+       JOIN machine_cost_headers mch ON mch.production_plan_id = pp.id
+       WHERE pp.deleted_at IS NULL
+       GROUP BY pp.product_id
+     ) mc_agg ON mc_agg.product_id = p.id
+     LEFT JOIN (
+       SELECT pp.product_id,
+         COALESCE(SUM(bi.qty * (1 + COALESCE(bi.scrap_percent, 0) / 100) * COALESCE(bi.unit_cost, 0)), 0) AS total_material_cost
+       FROM production_plans pp
+       LEFT JOIN boms b ON pp.bom_id = b.id
+       LEFT JOIN bom_items bi ON bi.bom_id = b.id
+       WHERE pp.deleted_at IS NULL
+       GROUP BY pp.product_id
+     ) bom_agg ON bom_agg.product_id = p.id
+     LEFT JOIN (
+       SELECT pp.product_id, AVG(soi.unit_price) AS avg_unit_price
+       FROM production_plans pp
+       JOIN sales_orders so ON pp.sales_order_id = so.id
+       JOIN sales_order_items soi ON soi.sales_order_id = so.id
+       WHERE pp.deleted_at IS NULL
+       GROUP BY pp.product_id
+     ) soi_agg ON soi_agg.product_id = p.id
+     WHERE p.id = ?`,
+    [productId]
+  );
+
+  if (!result) {
+    return { completed_sqft: 0, cost_per_sqft: 0, selling_price_per_sqft: 0, variance_per_sqft: 0 };
+  }
+
+  return {
+    completed_sqft: Number(result.completed_sqft) || 0,
+    cost_per_sqft: Number(result.cost_per_sqft) || 0,
+    selling_price_per_sqft: Number(result.selling_price_per_sqft) || 0,
+    variance_per_sqft: Number(result.variance_per_sqft) || 0,
+  };
+}

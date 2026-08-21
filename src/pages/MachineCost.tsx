@@ -12,7 +12,6 @@ import api from '../lib/api';
 
 interface OrderRow {
   id: number;
-  plan_no: string;
   customer_name: string;
   order_no: string;
   article: string;
@@ -46,7 +45,7 @@ export default function MachineCost() {
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 350);
   const [processStage, setProcessStage] = useState('All');
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(true);
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
@@ -115,10 +114,6 @@ export default function MachineCost() {
           </div>
         </div>
         <div className="flex items-center gap-3 self-start sm:self-auto">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
-            <span className="text-sm text-gray-700">Completed Orders</span>
-          </label>
           <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
@@ -137,6 +132,16 @@ export default function MachineCost() {
               <option value="Packing">Packing</option>
             </select>
           </div>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={e => setShowCompleted(e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">Show Completed orders</span>
+          </label>
 
           {/* Tabs */}
           <div className="flex border border-gray-200 rounded-lg overflow-hidden">
@@ -159,7 +164,7 @@ export default function MachineCost() {
         {loading ? (
           <div className="p-6"><SkeletonLoader rows={8} /></div>
         ) : rows.length === 0 ? (
-          <EmptyState title="No orders found" description="No production plans match your current filters." />
+          <EmptyState title="No orders found" description="No production status orders match your current filters." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -178,7 +183,7 @@ export default function MachineCost() {
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
                   <th onClick={() => handleSort('order_qty')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Order Qty (Pcs) <SortIcon field="order_qty" /></span>
+                    <span className="inline-flex items-center gap-1 justify-end">Planned Qty (Pcs) <SortIcon field="order_qty" /></span>
                   </th>
                   <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Completed Qty (Pcs)</th>
                   <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance Qty (Pcs)</th>
@@ -191,7 +196,7 @@ export default function MachineCost() {
                 {rows.map((row, idx) => (
                   <tr key={row.id} onClick={() => handleRowClick(row)} className={`cursor-pointer transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || row.plan_no || '—'}</td>
+                    <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.order_qty)}</td>
@@ -227,7 +232,7 @@ export default function MachineCost() {
         {loading ? (
           <div className="space-y-3">{[1,2,3,4].map(i => (<div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-3/4 mb-3" /><div className="h-3 bg-gray-100 rounded w-1/2" /></div>))}</div>
         ) : rows.length === 0 ? (
-          <EmptyState title="No orders found" description="No production plans match your current filters." />
+          <EmptyState title="No orders found" description="No production status orders match your current filters." />
         ) : (
           <>
             {rows.map(row => (
@@ -235,7 +240,7 @@ export default function MachineCost() {
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
-                    <p className="text-xs text-blue-700 font-mono mt-0.5">{row.order_no || row.plan_no || '—'}</p>
+                    <p className="text-xs text-blue-700 font-mono mt-0.5">{row.order_no || '—'}</p>
                   </div>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600'}`}>{row.status}</span>
                 </div>
@@ -244,7 +249,7 @@ export default function MachineCost() {
                   {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
                 </div>
                 <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
-                  <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Order</p><p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p></div>
+                  <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Planned</p><p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p></div>
                   <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p><p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.completed_qty)}</p></div>
                   <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p><p className={`text-sm font-bold tabular-nums ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{formatNumber(row.balance_qty)}</p></div>
                 </div>

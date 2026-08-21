@@ -33,6 +33,7 @@ interface GeneralCostData {
   color: string;
   order_qty: number;
   planned_qty: number;
+  output_qty: number;
   production_qty: number;
   completed_qty: number;
   balance_qty: number;
@@ -74,6 +75,7 @@ export default function GeneralCostForm() {
     color: '',
     order_qty: 0,
     planned_qty: 0,
+    output_qty: 0,
     production_qty: 0,
     completed_qty: 0,
     balance_qty: 0,
@@ -107,7 +109,7 @@ export default function GeneralCostForm() {
           setFormData(res.data);
         } else if (planId) {
           const [planRes, noRes] = await Promise.all([
-            api<{ data: any }>(`/production-plans/${planId}`),
+            api<{ data: any }>(`/production-status/orders/${planId}`),
             api<{ data: { transaction_no: string } }>('/general-costs/next-no'),
           ]);
           const plan = planRes.data;
@@ -116,13 +118,14 @@ export default function GeneralCostForm() {
             production_plan_id: Number(planId),
             transaction_no: noRes.data.transaction_no,
             customer_name: plan.customer_name || '',
-            order_no: plan.sales_order_no || plan.plan_no || '',
+            order_no: plan.order_no || '',
             article: plan.article || '',
             color: plan.color || '',
-            order_qty: plan.order_qty || 0,
-            planned_qty: plan.planned_qty || 0,
-            completed_qty: plan.output_qty || 0,
-            balance_qty: Math.max(0, (plan.order_qty || 0) - (plan.output_qty || 0)),
+            order_qty: plan.issued_qty || 0,
+            planned_qty: plan.issued_qty || 0,
+            output_qty: plan.completed_qty || 0,
+            completed_qty: plan.completed_qty || 0,
+            balance_qty: plan.balance_qty || Math.max(0, (plan.issued_qty || 0) - (plan.completed_qty || 0)),
             plan_status: plan.status || '',
             uom: plan.uom || 'Pcs',
           }));
@@ -338,14 +341,14 @@ export default function GeneralCostForm() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 md:gap-x-6 gap-y-3 md:gap-y-4">
-          <div>
-            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Customer Order Qty (Sq.Ft.)</label>
-            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 md:gap-x-6 gap-y-3 md:gap-y-4">
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Planned Qty (Pcs)</label>
-            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.planned_qty)}</p>
+            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.planned_qty || formData.order_qty)}</p>
+          </div>
+          <div>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Output Qty</label>
+            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.output_qty || 0)}</p>
           </div>
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Production Qty</label>
@@ -356,7 +359,7 @@ export default function GeneralCostForm() {
                 const prodQty = Number(e.target.value) || 0;
                 const plannedQty = formData.planned_qty || formData.order_qty;
                 if (prodQty > plannedQty) { toast.error('Production qty cannot exceed planned qty'); return; }
-                setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, prev.order_qty - (prev.completed_qty + prodQty)) }));
+                setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, (prev.planned_qty || prev.order_qty) - (prev.completed_qty + prodQty)) }));
               }} placeholder="0" className="w-full px-2 py-1.5 text-xs md:text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 tabular-nums font-semibold" />
             )}
           </div>

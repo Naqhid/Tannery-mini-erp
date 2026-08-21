@@ -102,6 +102,15 @@ export async function calculateBomCost(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function getOrderCostSummary(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    const summary = await model.getOrderCostSummary(productId);
+    res.json({ data: summary });
+  } catch (err) { next(err); }
+}
+
 export async function remove(req, res, next) {
   try {
     const ok = await model.remove(req.params.id);

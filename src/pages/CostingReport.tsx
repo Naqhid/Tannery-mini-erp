@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, ArrowUp, ArrowDown, ChevronsUpDown,
-  FileText, Download, Plus,
+  BarChart3, Download,
 } from 'lucide-react';
 import SkeletonLoader from '../components/ui/SkeletonLoader';
 import EmptyState from '../components/ui/EmptyState';
 import { useDebounce } from '../lib/useDebounce';
-import { usePermission } from '../lib/usePermission';
 import api from '../lib/api';
 
 interface ReportRow {
@@ -36,9 +34,7 @@ interface Filters {
 type SortField = 'customer_name' | 'order_no' | 'article' | 'color' | 'order_qty_sqft' | 'completed_qty_sqft' | 'cost_per_sqft' | 'selling_price_per_sqft' | 'variance_per_sqft';
 type SortOrder = 'asc' | 'desc';
 
-export default function StandardCosting() {
-  const navigate = useNavigate();
-  const { canWrite, isReadOnly } = usePermission();
+export default function CostingReport() {
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
@@ -96,7 +92,7 @@ export default function StandardCosting() {
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-400" />;
-    return sortOrder === 'asc' ? <ArrowUp size={12} className="text-indigo-600" /> : <ArrowDown size={12} className="text-indigo-600" />;
+    return sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-600" /> : <ArrowDown size={12} className="text-blue-600" />;
   };
 
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -107,26 +103,19 @@ export default function StandardCosting() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-lg shadow-indigo-200/50">
-            <FileText size={20} className="text-white" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-teal-600/20 shrink-0">
+            <BarChart3 size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Standard Costing</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Costing Report</h1>
             <p className="text-xs md:text-sm text-gray-500 mt-0.5">Order-wise cost analysis with material, machine & general cost summary.</p>
           </div>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg active:scale-95'}`}
-            onClick={canWrite ? () => navigate('/standard-costing/new') : undefined}
-            disabled={isReadOnly}
-          >
-            <Plus size={14} /> New Cost Sheet
-          </button>
           <button className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
             <Download size={14} /> Export
           </button>
-          <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors shadow-sm">
+          <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
@@ -138,7 +127,7 @@ export default function StandardCosting() {
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Customer</label>
             <select value={customerFilter} onChange={e => setCustomerFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 min-w-[150px]">
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 min-w-[150px]">
               <option value="">All</option>
               {filterOptions.customers.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -146,7 +135,7 @@ export default function StandardCosting() {
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Article</label>
             <select value={articleFilter} onChange={e => setArticleFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 min-w-[150px]">
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 min-w-[150px]">
               <option value="">All</option>
               {filterOptions.articles.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
@@ -154,7 +143,7 @@ export default function StandardCosting() {
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Color</label>
             <select value={colorFilter} onChange={e => setColorFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 min-w-[130px]">
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 min-w-[130px]">
               <option value="">All</option>
               {filterOptions.colors.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -165,7 +154,7 @@ export default function StandardCosting() {
           <div className="relative w-full sm:w-auto">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input type="text" placeholder="Search customer, order, article..." value={searchInput} onChange={e => setSearchInput(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-64 md:w-72 focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors" />
+              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-64 md:w-72 focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-colors" />
           </div>
         </div>
       </div>
@@ -180,41 +169,41 @@ export default function StandardCosting() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 bg-gradient-to-r from-slate-50 to-indigo-50/40">
-                  <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
                   </th>
-                  <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
                   </th>
-                  <th onClick={() => handleSort('article')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('article')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
                   </th>
-                  <th onClick={() => handleSort('color')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('color')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
-                  <th onClick={() => handleSort('order_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('order_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Order Qty (Sq.ft) <SortIcon field="order_qty_sqft" /></span>
                   </th>
-                  <th onClick={() => handleSort('completed_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('completed_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Completed Qty (Sq.ft) <SortIcon field="completed_qty_sqft" /></span>
                   </th>
-                  <th onClick={() => handleSort('cost_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('cost_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Cost / Sq.ft <SortIcon field="cost_per_sqft" /></span>
                   </th>
-                  <th onClick={() => handleSort('selling_price_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('selling_price_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Selling Price / Sq.ft <SortIcon field="selling_price_per_sqft" /></span>
                   </th>
-                  <th onClick={() => handleSort('variance_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                  <th onClick={() => handleSort('variance_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Variance / Sq.ft <SortIcon field="variance_per_sqft" /></span>
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {rows.map((row, idx) => (
-                  <tr key={row.id} className={`transition-colors hover:bg-indigo-50/60 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} onClick={() => navigate(`/standard-costing/${row.id}`)}>
+                  <tr key={row.id} className={`transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-indigo-700 font-mono font-medium">{row.order_no || '—'}</td>
+                    <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.order_qty_sqft)}</td>
@@ -248,7 +237,7 @@ export default function StandardCosting() {
                 if (page > totalPages) return null;
                 return (
                   <button key={page} onClick={() => setCurrentPage(page)}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${page === currentPage ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-gray-200 text-gray-700'}`}
+                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${page === currentPage ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-gray-200 text-gray-700'}`}
                   >{page}</button>
                 );
               })}
@@ -282,12 +271,12 @@ export default function StandardCosting() {
         ) : (
           <>
             {rows.map(row => (
-              <div key={row.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm cursor-pointer active:bg-indigo-50" onClick={() => navigate(`/standard-costing/${row.id}`)}>
+              <div key={row.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 {/* Top: Customer + Order */}
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
-                    <p className="text-xs text-indigo-700 font-mono mt-0.5">{row.order_no || '—'}</p>
+                    <p className="text-xs text-blue-700 font-mono mt-0.5">{row.order_no || '—'}</p>
                   </div>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${row.variance_per_sqft > 0 ? 'bg-red-50 text-red-700 border border-red-200' : row.variance_per_sqft < 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
                     {row.variance_per_sqft > 0 ? '↑' : row.variance_per_sqft < 0 ? '↓' : '—'} {formatNumber(Math.abs(row.variance_per_sqft))}/sqft

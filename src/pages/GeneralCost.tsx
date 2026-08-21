@@ -199,7 +199,7 @@ export default function GeneralCost() {
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
                   <th onClick={() => handleSort('order_qty')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Order Qty (Pcs) <SortIcon field="order_qty" /></span>
+                    <span className="inline-flex items-center gap-1 justify-end">Planned Qty (Pcs) <SortIcon field="order_qty" /></span>
                   </th>
                   <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Completed Qty (Pcs)</th>
                   <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance Qty (Pcs)</th>
@@ -326,7 +326,7 @@ export default function GeneralCost() {
                 {/* Bottom: Qty info */}
                 <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
                   <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Planned</p>
                     <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p>
                   </div>
                   <div className="text-center">

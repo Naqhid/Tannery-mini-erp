@@ -196,7 +196,7 @@ export default function ProductionStatus() {
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
                   <th onClick={() => handleSort('issued_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Issued-Qty (Pcs) <SortIcon field="issued_qty" /></span>
+                    <span className="inline-flex items-center gap-1 justify-end">Planned-Qty (Pcs) <SortIcon field="issued_qty" /></span>
                   </th>
                   <th onClick={() => handleSort('completed_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Completed-Qty (Pcs) <SortIcon field="completed_qty" /></span>

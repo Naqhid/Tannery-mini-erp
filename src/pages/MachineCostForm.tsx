@@ -11,7 +11,7 @@ interface CostItem { id?: number; machine_name: string; uom: string; amount: num
 interface MachineCostData {
   id?: number; transaction_no: string; production_plan_id: number; production_date: string; process_stage: string;
   total_amount: number; total_cost_per_piece: number; cost_after_adjustments: number; status: string; remarks: string;
-  customer_name: string; order_no: string; article: string; color: string; order_qty: number; completed_qty: number;
+  customer_name: string; order_no: string; article: string; color: string; order_qty: number; planned_qty: number; output_qty: number; completed_qty: number;
   production_qty: number; balance_qty: number; plan_status: string; uom: string; created_by_name: string; created_at: string; items: CostItem[];
 }
 
@@ -27,7 +27,7 @@ export default function MachineCostForm() {
     transaction_no: '', production_plan_id: 0, production_date: new Date().toISOString().split('T')[0],
     process_stage: 'All', total_amount: 0, total_cost_per_piece: 0, cost_after_adjustments: 0,
     status: 'Pending', remarks: '', customer_name: '', order_no: '', article: '', color: '',
-    order_qty: 0, completed_qty: 0, production_qty: 0, balance_qty: 0, plan_status: '', uom: 'Pcs',
+    order_qty: 0, planned_qty: 0, output_qty: 0, completed_qty: 0, production_qty: 0, balance_qty: 0, plan_status: '', uom: 'Pcs',
     created_by_name: '', created_at: '', items: [],
   });
 
@@ -46,14 +46,15 @@ export default function MachineCostForm() {
           setFormData(res.data);
         } else if (planId) {
           const [planRes, noRes] = await Promise.all([
-            api<{ data: any }>(`/production-plans/${planId}`),
+            api<{ data: any }>(`/production-status/orders/${planId}`),
             api<{ data: { transaction_no: string } }>('/machine-costs/next-no'),
           ]);
           const plan = planRes.data;
           setFormData(prev => ({ ...prev, production_plan_id: Number(planId), transaction_no: noRes.data.transaction_no,
-            customer_name: plan.customer_name || '', order_no: plan.sales_order_no || plan.plan_no || '',
-            article: plan.article || '', color: plan.color || '', order_qty: plan.order_qty || 0,
-            completed_qty: plan.output_qty || 0, balance_qty: Math.max(0, (plan.order_qty || 0) - (plan.output_qty || 0)),
+            customer_name: plan.customer_name || '', order_no: plan.order_no || '',
+            article: plan.article || '', color: plan.color || '', order_qty: plan.issued_qty || 0,
+            planned_qty: plan.issued_qty || 0, output_qty: plan.completed_qty || 0,
+            completed_qty: plan.completed_qty || 0, balance_qty: plan.balance_qty || Math.max(0, (plan.issued_qty || 0) - (plan.completed_qty || 0)),
             plan_status: plan.status || '', uom: plan.uom || 'Pcs',
           }));
         }
@@ -147,7 +148,8 @@ export default function MachineCostForm() {
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Color</label><p className="text-xs md:text-sm text-gray-900">{formData.color || '—'}</p></div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 md:gap-x-6 gap-y-3">
-          <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Order Qty (Pcs)</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.order_qty)}</p></div>
+          <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Planned Qty (Pcs)</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.planned_qty || formData.order_qty)}</p></div>
+          <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Output Qty</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.output_qty || 0)}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Completed Qty</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.completed_qty)}</p></div>
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Production Qty (Pcs)</label>
@@ -156,9 +158,9 @@ export default function MachineCostForm() {
             ) : (
               <input type="number" value={formData.production_qty || ''} onChange={e => {
                 const prodQty = Number(e.target.value) || 0;
-                const maxQty = formData.order_qty || 9999999;
-                if (prodQty > maxQty) { toast.error('Production qty cannot exceed order qty'); return; }
-                setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, prev.order_qty - (prev.completed_qty + prodQty)) }));
+                const maxQty = formData.planned_qty || formData.order_qty || 9999999;
+                if (prodQty > maxQty) { toast.error('Production qty cannot exceed planned qty'); return; }
+                setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, (prev.planned_qty || prev.order_qty) - (prev.completed_qty + prodQty)) }));
               }} placeholder="0" className="w-full px-2 py-1.5 text-xs md:text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 tabular-nums font-semibold" />
             )}
           </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { ArrowLeft, Save, Plus, Trash2, FileText, Send, Copy, Printer, Download } from 'lucide-react';
+import { ArrowLeft, Save, Plus, FileText, Send, Copy, Printer, Download } from 'lucide-react';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { usePermission } from '../lib/usePermission';
@@ -77,6 +77,7 @@ export default function StandardCostingForm() {
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [scrapPercent, setScrapPercent] = useState(1.5);
+  const [orderCostSummary, setOrderCostSummary] = useState<{ completed_sqft: number; cost_per_sqft: number; selling_price_per_sqft: number; variance_per_sqft: number } | null>(null);
 
   const isPosted = formData.status === 'Posted';
   const user = JSON.parse(localStorage.getItem('tannery_user') || '{}');
@@ -95,7 +96,10 @@ export default function StandardCostingForm() {
       api<{ data: CostSheet }>(`/standard-costs/${id}`)
         .then(res => {
           setFormData({ ...res.data, items: res.data.items || [] });
-          if (res.data.product_id) fetchBomsByProduct(res.data.product_id);
+          if (res.data.product_id) {
+            fetchBomsByProduct(res.data.product_id);
+            fetchOrderCostSummary(res.data.product_id);
+          }
         })
         .catch(() => toast.error('Failed to load cost sheet'))
         .finally(() => setLoading(false));
@@ -112,8 +116,9 @@ export default function StandardCostingForm() {
   const handleProductChange = async (productId: string) => {
     const pid = Number(productId);
     setFormData(prev => ({ ...prev, product_id: pid, bom_id: null, total_bom_cost: 0 }));
-    if (!pid) { setBomOptions([]); return; }
+    if (!pid) { setBomOptions([]); setOrderCostSummary(null); return; }
     await fetchBomsByProduct(pid);
+    await fetchOrderCostSummary(pid);
     try {
       const res = await api<{ data: { id: number; process_type: string; version: number } }>(`/boms/latest-by-product/${pid}`);
       if (res.data) {
@@ -121,6 +126,13 @@ export default function StandardCostingForm() {
         await fetchBomCost(res.data.id);
       }
     } catch {}
+  };
+
+  const fetchOrderCostSummary = async (productId: number) => {
+    try {
+      const res = await api<{ data: { completed_sqft: number; cost_per_sqft: number; selling_price_per_sqft: number; variance_per_sqft: number } }>(`/standard-costs/order-cost-summary/${productId}`);
+      setOrderCostSummary(res.data);
+    } catch { setOrderCostSummary(null); }
   };
 
   const handleBomChange = async (bomId: string) => {
@@ -299,11 +311,6 @@ export default function StandardCostingForm() {
               className="w-full px-2.5 py-[7px] text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600" />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Cost Sheet Version *</label>
-            <input type="text" value={`Rev ${String(formData.cost_sheet_version).padStart(2, '0')}`} readOnly
-              className="w-full px-2.5 py-[7px] text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600" />
-          </div>
-          <div>
             <label className="block text-[11px] font-semibold text-gray-600 mb-1">Currency</label>
             <select value={formData.currency} onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))} disabled={isPosted}
               className="w-full px-2.5 py-[7px] text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/30 disabled:bg-gray-50">
@@ -313,7 +320,7 @@ export default function StandardCostingForm() {
             </select>
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Approved Status</label>
+            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Status</label>
             <select value={formData.status} onChange={(e) => {
               if (!isAdmin) { toast.error('Only Admin users can change status'); return; }
               if (!isNew) handleStatusChange(e.target.value);
@@ -321,23 +328,20 @@ export default function StandardCostingForm() {
             }} disabled={isPosted}
               className="w-full px-2.5 py-[7px] text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/30 disabled:bg-gray-50">
               <option value="Draft">Draft</option>
+              <option value="In-Process">In-Process</option>
+              <option value="Completed">Completed</option>
               <option value="Approved">Approved</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Approved Status</label>
+            <span className={`inline-flex items-center px-2.5 py-[7px] text-xs font-semibold rounded-lg border ${formData.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : formData.status === 'Completed' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+              {formData.status}
+            </span>
           </div>
         </div>
         {/* Row 2 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mt-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Basis / Unit *</label>
-            <select value={formData.basis_unit} onChange={(e) => setFormData(prev => ({ ...prev, basis_unit: e.target.value }))} disabled={isPosted}
-              className="w-full px-2.5 py-[7px] text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/30 disabled:bg-gray-50">
-              <option value="Per Sq.Ft.">Per Sq.Ft.</option>
-              <option value="Per Sq.Meter">Per Sq.Meter</option>
-              <option value="Per Kg">Per Kg</option>
-              <option value="Per Piece">Per Piece</option>
-              <option value="Per Order">Per Order</option>
-            </select>
-          </div>
           <div>
             <label className="block text-[11px] font-semibold text-gray-600 mb-1">Effective From *</label>
             <input type="date" value={formData.effective_from || ''} onChange={(e) => setFormData(prev => ({ ...prev, effective_from: e.target.value }))} disabled={isPosted}
@@ -348,7 +352,7 @@ export default function StandardCostingForm() {
             <input type="text" value={formData.prepared_by_name || user?.name || 'Costing Dept.'} readOnly
               className="w-full px-2.5 py-[7px] text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600" />
           </div>
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-4">
             <label className="block text-[11px] font-semibold text-gray-600 mb-1">Description / Note</label>
             <input type="text" value={formData.description || ''} onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))} disabled={isPosted}
               placeholder="Standard cost prepared for export orders..."
@@ -362,7 +366,7 @@ export default function StandardCostingForm() {
         {/* 1. BOM Cost Summary */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-bold text-blue-700">1. BOM Cost Summary ({formData.basis_unit})</span>
+            <span className="text-xs font-bold text-blue-700">1. BOM Cost Summary (Per Piece)</span>
             <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[9px]">i</span>
           </div>
           <table className="w-full text-xs">
@@ -390,7 +394,7 @@ export default function StandardCostingForm() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-blue-200">
-                <td colSpan={2} className="py-3 text-blue-700 font-bold text-xs">Total BOM Cost ({formData.basis_unit})</td>
+                <td colSpan={2} className="py-3 text-blue-700 font-bold text-xs">Total BOM Cost (Per Piece)</td>
                 <td className="py-3 text-right font-bold text-blue-800 text-sm">{Number(formData.total_bom_cost).toFixed(2)}</td>
                 <td className="py-3 text-right font-bold text-blue-700">{bomPercent.toFixed(2)} %</td>
               </tr>
@@ -417,15 +421,13 @@ export default function StandardCostingForm() {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-2 text-[10px] font-semibold text-gray-500 uppercase">Cost Component</th>
                   <th className="text-left py-2 text-[10px] font-semibold text-gray-500 uppercase">Category</th>
-                  <th className="text-left py-2 text-[10px] font-semibold text-gray-500 uppercase">Basis</th>
                   <th className="text-right py-2 text-[10px] font-semibold text-gray-500 uppercase">Cost (INR)</th>
                   <th className="text-right py-2 text-[10px] font-semibold text-gray-500 uppercase">Amount (INR)</th>
-                  {!isPosted && <th className="w-[30px]"></th>}
                 </tr>
               </thead>
               <tbody>
                 {formData.items.length === 0 ? (
-                  <tr><td colSpan={6} className="py-4 text-center text-gray-400 text-[11px]">No cost components added</td></tr>
+                  <tr><td colSpan={4} className="py-4 text-center text-gray-400 text-[11px]">No cost components added</td></tr>
                 ) : formData.items.map((item, idx) => (
                   <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="py-2">
@@ -447,33 +449,17 @@ export default function StandardCostingForm() {
                       />
                     </td>
                     <td className="py-2">
-                      <select value={item.basis || 'Per Sq.Ft.'} onChange={(e) => updateCostItem(idx, 'basis', e.target.value)} disabled={isPosted}
-                        className="w-full px-1.5 py-1 text-[11px] border border-gray-200 rounded focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50">
-                        <option value="Per Sq.Ft.">Per Sq.Ft.</option>
-                        <option value="Per Order">Per Order</option>
-                        <option value="Per Kg">Per Kg</option>
-                        <option value="Per Piece">Per Piece</option>
-                        <option value="Per Sq.Meter">Per Sq.Meter</option>
-                      </select>
-                    </td>
-                    <td className="py-2">
                       <input type="number" step="0.01" min="0" value={item.cost_value || ''} onChange={(e) => updateCostItem(idx, 'cost_value', parseFloat(e.target.value) || 0)} disabled={isPosted}
                         className="w-20 px-1.5 py-1 text-[11px] border border-gray-200 rounded text-right focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50" />
                     </td>
                     <td className="py-2 text-right font-medium text-gray-800">{Number(item.cost_value).toFixed(2)}</td>
-                    {!isPosted && (
-                      <td className="py-2 text-center">
-                        <button onClick={() => removeCostItem(idx)} className="p-0.5 text-rose-400 hover:text-rose-600"><Trash2 size={12} /></button>
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-blue-200">
-                  <td colSpan={3} className="py-3 text-blue-700 font-bold text-xs">Total Other Cost ({formData.basis_unit})</td>
+                  <td colSpan={2} className="py-3 text-blue-700 font-bold text-xs">Total Other Cost (Per Piece)</td>
                   <td colSpan={2} className="py-3 text-right font-bold text-blue-800 text-sm">{Number(formData.total_other_cost).toFixed(2)} <span className="text-[10px] font-normal text-gray-500">INR</span></td>
-                  {!isPosted && <td></td>}
                 </tr>
               </tfoot>
             </table>
@@ -516,26 +502,26 @@ export default function StandardCostingForm() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Standard Cost Summary */}
         <div className="lg:col-span-8 bg-white rounded-xl border border-blue-200 shadow-sm p-5">
-          <h3 className="text-xs font-bold text-blue-800 mb-4">Standard Cost Summary ({formData.basis_unit})</h3>
+          <h3 className="text-xs font-bold text-blue-800 mb-4">Standard Cost Summary (Per Piece)</h3>
           <div className="flex items-center justify-between gap-6">
             {/* Numbers */}
             <div className="flex items-center gap-6">
               <div className="text-center">
                 <p className="text-[10px] text-gray-500 font-medium mb-1">Total BOM Cost (A)</p>
                 <p className="text-xl font-bold text-gray-900">{Number(formData.total_bom_cost).toFixed(2)}</p>
-                <p className="text-[10px] text-gray-400">{formData.currency}</p>
+                <p className="text-[10px] text-gray-400">{formData.currency} / Piece</p>
               </div>
               <span className="text-lg text-gray-400 font-light">+</span>
               <div className="text-center">
                 <p className="text-[10px] text-gray-500 font-medium mb-1">Other Cost Components (B)</p>
                 <p className="text-xl font-bold text-gray-900">{Number(formData.total_other_cost).toFixed(2)}</p>
-                <p className="text-[10px] text-gray-400">{formData.currency}</p>
+                <p className="text-[10px] text-gray-400">{formData.currency} / Piece</p>
               </div>
               <span className="text-lg text-gray-400 font-light">=</span>
               <div className="text-center">
                 <p className="text-[10px] text-gray-500 font-medium mb-1">Standard Cost (A + B)</p>
                 <p className="text-2xl font-bold text-blue-700">{Number(formData.standard_cost).toFixed(2)}</p>
-                <p className="text-[10px] text-gray-400">{formData.currency}</p>
+                <p className="text-[10px] text-gray-400">{formData.currency} / Piece</p>
               </div>
             </div>
             {/* Donut Chart */}
@@ -569,33 +555,31 @@ export default function StandardCostingForm() {
           </div>
         </div>
 
-        {/* Comparison (Variance) */}
+        {/* Order Cost Summary */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-orange-200 shadow-sm p-5">
-          <h3 className="text-xs font-bold text-orange-700 mb-4">Comparison (Optional)</h3>
-          {formData.variance && formData.variance.previous_cost !== null ? (
-            <div className="flex items-start gap-4">
-              <div className="text-center">
-                <p className="text-[10px] text-gray-500 font-medium mb-1">Previous Standard Cost<br/>({formData.basis_unit})</p>
-                <p className="text-lg font-bold text-gray-900">{Number(formData.variance.previous_cost).toFixed(2)}</p>
-                <p className="text-[10px] text-gray-400">{formData.currency}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] text-gray-500 font-medium mb-1">Variance</p>
-                <p className={`text-lg font-bold ${Number(formData.variance.variance) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  {Number(formData.variance.variance) > 0 ? '↑' : '↓'} {Math.abs(Number(formData.variance.variance)).toFixed(2)}
-                </p>
-                <p className="text-[10px] text-gray-400">{formData.currency}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] text-gray-500 font-medium mb-1">Variance %</p>
-                <p className={`text-lg font-bold ${Number(formData.variance.variance_percent) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  {formData.variance.variance_percent === 'N/A' ? 'N/A' : `${Number(formData.variance.variance_percent) > 0 ? '↑' : '↓'} ${Math.abs(Number(formData.variance.variance_percent)).toFixed(2)} %`}
-                </p>
-              </div>
+          <h3 className="text-xs font-bold text-orange-700 mb-4">Order Cost Summary</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-[10px] text-gray-500 font-medium mb-1">Completed Sq.ft</p>
+              <p className="text-lg font-bold text-gray-900">{orderCostSummary ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(orderCostSummary.completed_sqft) : '—'}</p>
+              <p className="text-[10px] text-gray-400">From Production</p>
             </div>
-          ) : (
-            <p className="text-xs text-gray-400 text-center py-3">No previous standard cost available for comparison</p>
-          )}
+            <div className="text-center">
+              <p className="text-[10px] text-gray-500 font-medium mb-1">Cost Per Sq.ft</p>
+              <p className="text-lg font-bold text-gray-900">{orderCostSummary ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(orderCostSummary.cost_per_sqft) : '—'}</p>
+              <p className="text-[10px] text-gray-400">{formData.currency}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-gray-500 font-medium mb-1">Selling Price Per Sq.ft</p>
+              <p className="text-lg font-bold text-gray-900">{orderCostSummary ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(orderCostSummary.selling_price_per_sqft) : '—'}</p>
+              <p className="text-[10px] text-gray-400">{formData.currency}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-gray-500 font-medium mb-1">Variance Cost Per Sq.ft</p>
+              <p className={`text-lg font-bold ${orderCostSummary && orderCostSummary.variance_per_sqft > 0 ? 'text-red-600' : orderCostSummary && orderCostSummary.variance_per_sqft < 0 ? 'text-emerald-600' : 'text-gray-900'}`}>{orderCostSummary ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(orderCostSummary.variance_per_sqft) : '—'}</p>
+              <p className="text-[10px] text-gray-400">{formData.currency}</p>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1,74 +1,55 @@
 import pool from '../config/db.js';
 
 /**
- * Get all production plans for the General Cost list view.
- * Shows order-level info with completion status.
+ * Get all production status orders for the General Cost list view.
+ * Data source: production_status_orders (from Production Status page).
  */
 export async function getOrders({ search, status, process_stage, show_completed, has_entry, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
-  let where = 'pp.deleted_at IS NULL';
+  let where = 'o.deleted_at IS NULL';
 
   if (search) {
-    where += ' AND (c.name LIKE ? OR so.order_no LIKE ? OR pp.article LIKE ? OR pp.color LIKE ? OR pp.plan_no LIKE ?)';
+    where += ' AND (o.customer_name LIKE ? OR o.order_no LIKE ? OR o.article LIKE ? OR o.color LIKE ?)';
     const t = `%${search}%`;
-    params.push(t, t, t, t, t);
+    params.push(t, t, t, t);
   }
   if (status && status !== 'All') {
-    where += ' AND pp.status = ?';
+    where += ' AND o.status = ?';
     params.push(status);
   }
   if (show_completed === 'false' || show_completed === false) {
-    where += " AND pp.status != 'Completed'";
+    where += " AND o.status != 'Completed'";
   }
   if (process_stage && process_stage !== 'All') {
-    where += ' AND pst.process_stage_name = ?';
+    where += ' AND o.process_stage = ?';
     params.push(process_stage);
   }
   if (has_entry === 'true') {
     where += ' AND gch.id IS NOT NULL';
   }
 
-  const allowedSort = ['id', 'customer_name', 'order_no', 'article', 'color', 'order_qty', 'status', 'created_at'];
-  const col = allowedSort.includes(sortBy) ? (sortBy === 'customer_name' ? 'c.name' : sortBy === 'order_no' ? 'so.order_no' : `pp.${sortBy}`) : 'pp.id';
+  const allowedSort = ['id', 'customer_name', 'order_no', 'article', 'color', 'issued_qty', 'completed_qty', 'status', 'created_at'];
+  const col = allowedSort.includes(sortBy) ? `o.${sortBy}` : 'o.id';
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
-    `SELECT pp.id, pp.plan_no, pp.order_qty,
-       COALESCE(pst_agg.total_output, pp.output_qty) AS completed_qty,
-       GREATEST(0, pp.order_qty - COALESCE(pst_agg.total_output, pp.output_qty)) AS balance_qty,
-       pp.article, pp.color, pp.status, pp.uom,
-       c.name AS customer_name,
-       so.order_no AS order_no,
+    `SELECT o.id, o.order_no, o.customer_name, o.article, o.color,
+       o.process_stage, o.issued_qty AS order_qty,
+       o.completed_qty, o.balance_qty, o.status, o.uom,
        gch.id AS general_cost_id, gch.transaction_no, gch.status AS cost_status
-     FROM production_plans pp
-     LEFT JOIN customers c ON pp.customer_id = c.id
-     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
-     LEFT JOIN general_cost_headers gch ON gch.production_plan_id = pp.id
-     LEFT JOIN production_status_transactions pst ON pst.production_plan_id = pp.id AND pst.deleted_at IS NULL
-     LEFT JOIN (
-       SELECT production_plan_id,
-         SUM(output_qty) AS total_output
-       FROM production_status_transactions
-       WHERE deleted_at IS NULL
-       ${process_stage && process_stage !== 'All' ? 'AND process_stage_name = ?' : ''}
-       GROUP BY production_plan_id
-     ) pst_agg ON pst_agg.production_plan_id = pp.id
+     FROM production_status_orders o
+     LEFT JOIN general_cost_headers gch ON gch.production_plan_id = o.id
      WHERE ${where}
-     GROUP BY pp.id, pp.plan_no, pp.order_qty, pp.article, pp.color, pp.status, pp.uom,
-       c.name, so.order_no, gch.id, gch.transaction_no, gch.status, pst_agg.total_output, pp.output_qty
      ORDER BY ${col} ${ord}
      LIMIT ? OFFSET ?`,
-    [...(process_stage && process_stage !== 'All' ? [process_stage] : []), ...params, Number(limit), Number(offset)]
+    [...params, Number(limit), Number(offset)]
   );
 
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(DISTINCT pp.id) AS total
-     FROM production_plans pp
-     LEFT JOIN customers c ON pp.customer_id = c.id
-     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
-     LEFT JOIN general_cost_headers gch ON gch.production_plan_id = pp.id
-     LEFT JOIN production_status_transactions pst ON pst.production_plan_id = pp.id AND pst.deleted_at IS NULL
+    `SELECT COUNT(*) AS total
+     FROM production_status_orders o
+     LEFT JOIN general_cost_headers gch ON gch.production_plan_id = o.id
      WHERE ${where}`,
     params
   );
@@ -82,17 +63,15 @@ export async function getOrders({ search, status, process_stage, show_completed,
 export async function getById(id) {
   const [[header]] = await pool.query(
     `SELECT gch.*,
-       pp.plan_no, pp.order_qty, pp.planned_qty,
+       o.order_no, o.issued_qty AS order_qty, o.issued_qty AS planned_qty,
+       o.completed_qty AS output_qty,
        COALESCE((SELECT SUM(g2.production_qty) FROM general_cost_headers g2 WHERE g2.production_plan_id = gch.production_plan_id AND g2.id != gch.id), 0) AS completed_qty,
-       GREATEST(0, pp.order_qty - COALESCE((SELECT SUM(g2.production_qty) FROM general_cost_headers g2 WHERE g2.production_plan_id = gch.production_plan_id), 0)) AS balance_qty,
-       pp.article, pp.color, pp.status AS plan_status, pp.uom,
-       c.name AS customer_name,
-       so.order_no AS order_no,
+       GREATEST(0, o.issued_qty - COALESCE((SELECT SUM(g2.production_qty) FROM general_cost_headers g2 WHERE g2.production_plan_id = gch.production_plan_id), 0)) AS balance_qty,
+       o.article, o.color, o.status AS plan_status, o.uom,
+       o.customer_name,
        u.full_name AS created_by_name
      FROM general_cost_headers gch
-     JOIN production_plans pp ON gch.production_plan_id = pp.id
-     LEFT JOIN customers c ON pp.customer_id = c.id
-     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     JOIN production_status_orders o ON gch.production_plan_id = o.id
      LEFT JOIN users u ON gch.created_by = u.id
      WHERE gch.id = ?`,
     [id]
@@ -108,21 +87,20 @@ export async function getById(id) {
 }
 
 /**
- * Get general cost by production plan ID
+ * Get general cost by production status order ID
  */
 export async function getByPlanId(planId) {
   const [[header]] = await pool.query(
     `SELECT gch.*,
-       pp.plan_no, pp.order_qty, pp.output_qty AS completed_qty,
-       GREATEST(0, pp.order_qty - pp.output_qty) AS balance_qty,
-       pp.article, pp.color, pp.status AS plan_status, pp.uom,
-       c.name AS customer_name,
-       so.order_no AS order_no,
+       o.order_no, o.issued_qty AS order_qty, o.issued_qty AS planned_qty,
+       o.completed_qty AS output_qty,
+       o.completed_qty,
+       o.balance_qty,
+       o.article, o.color, o.status AS plan_status, o.uom,
+       o.customer_name,
        u.full_name AS created_by_name
      FROM general_cost_headers gch
-     JOIN production_plans pp ON gch.production_plan_id = pp.id
-     LEFT JOIN customers c ON pp.customer_id = c.id
-     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     JOIN production_status_orders o ON gch.production_plan_id = o.id
      LEFT JOIN users u ON gch.created_by = u.id
      WHERE gch.production_plan_id = ?`,
     [planId]

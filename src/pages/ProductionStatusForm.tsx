@@ -294,10 +294,14 @@ export default function ProductionStatusForm() {
 
         {/* KPIs (read-only, driven by transactions) */}
         {isEdit && (
-          <div className="grid grid-cols-3 gap-4 mt-5 pt-4 border-t border-gray-100">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-4 border-t border-gray-100">
             <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <p className="text-xs text-gray-500 font-medium">Issued-Qty (Pcs)</p>
+              <p className="text-xs text-gray-500 font-medium">Planned-Qty (Pcs)</p>
               <p className="text-lg font-bold text-blue-700 mt-1">{formatNumber(Number(form.issued_qty))}</p>
+            </div>
+            <div className="text-center p-3 bg-purple-50 rounded-lg">
+              <p className="text-xs text-gray-500 font-medium">Output-Qty (Pcs)</p>
+              <p className="text-lg font-bold text-purple-700 mt-1">{formatNumber(txnSummary.total_output_qty)}</p>
             </div>
             <div className="text-center p-3 bg-emerald-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">Completed-Qty (Pcs)</p>
