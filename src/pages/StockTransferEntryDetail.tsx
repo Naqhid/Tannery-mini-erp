@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Plus, Trash2, ArrowLeftRight, RotateCcw, Info, Minus } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; allow_negative_stock: number; }
@@ -56,14 +57,19 @@ export default function StockTransferEntryDetail() {
   const [items, setItems] = useState<Item[]>([{ ...emptyItem, _key: genKey() }]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stockList, setStockList] = useState<StockItem[]>([]);
+  const [materials, setMaterials] = useState<{ id: number; code: string; name: string; uom: string; }[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [searchItem, setSearchItem] = useState('');
 
   const fetchWarehouses = useCallback(async () => {
     try {
-      const res = await api<{ data: Warehouse[] }>('/warehouses/dropdown');
-      setWarehouses(res.data || []);
+      const [whRes, matRes] = await Promise.all([
+        api<{ data: Warehouse[] }>('/warehouses/dropdown'),
+        api<{ data: any[] }>('/materials/dropdown'),
+      ]);
+      setWarehouses(whRes.data || []);
+      setMaterials(matRes.data || []);
     } catch { setWarehouses([]); }
   }, []);
 
@@ -121,21 +127,28 @@ export default function StockTransferEntryDetail() {
     setItems((prev) => prev.map((it) => {
       if (it._key !== key) return it;
       const updated = { ...it, [field]: value };
-      if (field === 'material_id') {
-        const stock = stockList.find((s) => String(s.material_id) === value);
-        if (stock) {
-          updated.uom = stock.uom; updated.available_qty = stock.current_qty;
-          updated.unit_cost = String(stock.avg_unit_cost);
-          updated.material_code = stock.material_code; updated.material_name = stock.material_name;
-        }
-      }
-      if (field === 'transfer_qty' || field === 'unit_cost' || field === 'material_id') {
+      if (field === 'transfer_qty' || field === 'unit_cost') {
         const qty = parseFloat(updated.transfer_qty) || 0;
         const cost = parseFloat(updated.unit_cost) || 0;
         updated.amount = parseFloat((qty * cost).toFixed(2));
       }
       return updated;
     }));
+  };
+
+  const handleItemChange = async (rowKey: string, materialId: string) => {
+    const mat = materials.find(m => String(m.id) === materialId);
+    setItems(prev => prev.map(it => it._key !== rowKey ? it : ({
+      ...it, material_id: materialId, material_code: mat?.code || '', material_name: mat?.name || '', uom: mat?.uom || '', available_qty: 0, unit_cost: '', amount: 0,
+    })));
+    if (!materialId || !transfer.from_warehouse_id) return;
+    try {
+      const info = await api<{ data: { available_qty: number; avg_rate: number } }>(`/material-issues/item-info/${materialId}?warehouse_id=${transfer.from_warehouse_id}&date=${transfer.transfer_date}`);
+      setItems(prev => prev.map(it => it._key !== rowKey ? it : ({
+        ...it, available_qty: info.data.available_qty || 0, unit_cost: (info.data.avg_rate || 0).toFixed(2),
+        amount: parseFloat(((parseFloat(it.transfer_qty) || 0) * (info.data.avg_rate || 0)).toFixed(2)),
+      })));
+    } catch {}
   };
 
   const addItem = () => setItems((p) => [...p, { ...emptyItem, _key: genKey() }]);
@@ -218,12 +231,10 @@ export default function StockTransferEntryDetail() {
               {transfer.transfer_no || <span className="italic">Will be auto-generated on save</span>}
             </div>
           </div>
-          <Select label="From Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.from_warehouse_id} onChange={(e) => update('from_warehouse_id', e.target.value)} />
-          <Input label="Reference No." value={transfer.reference_no} onChange={(e) => update('reference_no', e.target.value)} placeholder="REF-2024-101" />
-          <Input label="Reference Date" type="date" value={transfer.reference_date} onChange={(e) => update('reference_date', e.target.value)} />
-          {/* Row 2 */}
           <Input label="Transfer Date" type="date" required value={transfer.transfer_date} onChange={(e) => update('transfer_date', e.target.value)} />
+          <Select label="From Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.from_warehouse_id} onChange={(e) => update('from_warehouse_id', e.target.value)} />
           <Select label="To Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.to_warehouse_id} onChange={(e) => update('to_warehouse_id', e.target.value)} />
+          {/* Row 2 */}
           <Input label="Transporter (if any)" value={transfer.transporter} onChange={(e) => update('transporter', e.target.value)} placeholder="Shree Logistics" />
           <Input label="Delivery Challan No." value={transfer.delivery_challan_no} onChange={(e) => update('delivery_challan_no', e.target.value)} placeholder="DC-4587" />
         </div>
@@ -279,8 +290,7 @@ export default function StockTransferEntryDetail() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Available Qty<br/><span className="text-[9px] text-gray-400">(From Store)</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Transfer Qty <span className="text-rose-500">*</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Unit Cost</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (â‚¹)</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Batch No.</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (₹)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Remarks</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
               </tr>
@@ -291,11 +301,12 @@ export default function StockTransferEntryDetail() {
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-2.5 px-3 text-xs text-gray-700 font-mono">{item.material_code || '-'}</td>
                   <td className="py-2.5 px-3">
-                    <select value={item.material_id} onChange={(e) => updateItem(item._key, 'material_id', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[160px]">
-                      <option value="">Select Item</option>
-                      {stockList.map((s) => <option key={s.material_id} value={String(s.material_id)}>{s.material_name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={materials.map(m => ({ value: String(m.id), label: m.name }))}
+                      value={item.material_id}
+                      onChange={(val) => handleItemChange(item._key, val)}
+                      placeholder="Search item..."
+                    />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{item.available_qty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -309,11 +320,7 @@ export default function StockTransferEntryDetail() {
                     <input type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)}
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
-                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2.5 px-3">
-                    <input value={item.batch_no} onChange={(e) => updateItem(item._key, 'batch_no', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[85px]" placeholder="BATCH-001" />
-                  </td>
+                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">₹{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">
                     <input value={item.remarks} onChange={(e) => updateItem(item._key, 'remarks', e.target.value)}
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[60px]" placeholder="-" />
@@ -326,7 +333,7 @@ export default function StockTransferEntryDetail() {
                 </tr>
               ))}
               {!transfer.from_warehouse_id && (
-                <tr><td colSpan={11} className="py-6 text-center text-xs text-gray-400">Select "From Warehouse / Store" to load available stock</td></tr>
+                <tr><td colSpan={10} className="py-6 text-center text-xs text-gray-400">Select "From Warehouse / Store" to load available stock</td></tr>
               )}
             </tbody>
           </table>
@@ -348,7 +355,7 @@ export default function StockTransferEntryDetail() {
               <span className="text-sm font-bold text-gray-900 bg-yellow-50 px-3 py-1 rounded-lg">{totalQty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-600">Total Amount (â‚¹)</span>
+              <span className="text-xs text-gray-600">Total Amount (₹)</span>
               <span className="text-sm font-bold text-gray-900 bg-yellow-50 px-3 py-1 rounded-lg">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
@@ -356,7 +363,7 @@ export default function StockTransferEntryDetail() {
           <div className="flex items-center justify-end">
             <div className="bg-gradient-to-br from-blue-50 to-blue-50 rounded-xl p-5 border border-blue-100">
               <div className="flex items-center gap-6">
-                <span className="text-sm font-bold text-gray-900">Grand Total (â‚¹)</span>
+                <span className="text-sm font-bold text-gray-900">Grand Total (₹)</span>
                 <span className="text-2xl font-black text-blue-700">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>

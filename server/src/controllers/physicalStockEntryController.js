@@ -21,6 +21,11 @@ export const getStats = catchAsync(async (req, res) => {
   res.json({ success: true, data: stats });
 });
 
+export const getNextNo = catchAsync(async (req, res) => {
+  const entry_no = await stockModel.getNextEntryNo();
+  res.json({ data: { entry_no } });
+});
+
 export const create = catchAsync(async (req, res) => {
   const data = req.body;
   const items = data.items || [];

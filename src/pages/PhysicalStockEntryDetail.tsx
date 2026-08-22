@@ -2,15 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Save, Plus, Trash2, Loader2, Download, Upload, RotateCcw, X,
-  ClipboardList, Search, MessageSquare, Package, BarChart3, FileSpreadsheet
+  Save, Plus, Trash2, Loader2, RotateCcw, X,
+  ClipboardList, Package, BarChart3, FileSpreadsheet
 } from 'lucide-react';
 import api from '../lib/api';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import { usePermission } from '../lib/usePermission';
 
 interface Warehouse { id: number; code: string; name: string; }
-interface Location { id: number; code: string; name: string; }
-interface Material { id: number; code: string; name: string; uom: string; type?: string; }
+interface Material { id: number; code: string; name: string; uom: string; }
 
 interface StockItem {
   _key: string;
@@ -18,11 +18,11 @@ interface StockItem {
   material_code: string;
   material_name: string;
   uom: string;
-  batch_no: string;
   location: string;
   system_qty: number;
   physical_qty: string;
   variance_qty: number;
+  avg_rate: number;
   variance_value: number;
   remarks: string;
 }
@@ -31,27 +31,20 @@ interface EntryData {
   entry_no: string;
   entry_date: string;
   stock_date: string;
-  reference_no: string;
   warehouse_id: string;
   location_id: string;
-  item_group: string;
-  material_id: string;
-  uom: string;
-  batch_no: string;
-  from_item_code: string;
-  to_item_code: string;
   remarks: string;
 }
 
 const emptyEntry: EntryData = {
   entry_no: '', entry_date: new Date().toISOString().split('T')[0],
-  stock_date: new Date().toISOString().split('T')[0], reference_no: '',
-  warehouse_id: '', location_id: '', item_group: '', material_id: '',
-  uom: '', batch_no: '', from_item_code: '', to_item_code: '', remarks: '',
+  stock_date: new Date().toISOString().split('T')[0],
+  warehouse_id: '', location_id: '', remarks: '',
 };
 
 let _kc = 0;
 const genKey = () => `si_${++_kc}_${Date.now()}`;
+const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function PhysicalStockEntryDetail() {
   const { id } = useParams<{ id: string }>();
@@ -61,23 +54,20 @@ export default function PhysicalStockEntryDetail() {
 
   const [entry, setEntry] = useState<EntryData>(emptyEntry);
   const [items, setItems] = useState<StockItem[]>([
-    { _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', batch_no: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, variance_value: 0, remarks: '' },
+    { _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, avg_rate: 0, variance_value: 0, remarks: '' },
   ]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
-      const [wh, loc, mat] = await Promise.all([
+      const [wh, mat] = await Promise.all([
         api<{ data: Warehouse[] }>('/warehouses/dropdown'),
-        api<{ data: Location[] }>('/locations?limit=500'),
-        api<{ data: Material[] }>('/materials?limit=500'),
+        api<{ data: Material[] }>('/materials/dropdown'),
       ]);
       setWarehouses(wh.data || []);
-      setLocations(loc.data || []);
       setMaterials(mat.data || []);
     } catch { /* silent */ }
   }, []);
@@ -85,38 +75,37 @@ export default function PhysicalStockEntryDetail() {
   const fetchEntry = useCallback(async () => {
     if (isNew) {
       try {
-        const res = await api<{ data: { entry_no: string } }>('/physical-stock-entry/next-no');
-        setEntry(p => ({ ...p, entry_no: res.data.entry_no }));
-      } catch {
-        setEntry(p => ({ ...p, entry_no: 'PSE-2025-0042' }));
-      }
+        const res = await api<{ data: { entry_no: string } }>('/physical-stock-entries/next-no');
+        setEntry(p => ({ ...p, entry_no: res.data?.entry_no || '' }));
+      } catch {}
       return;
     }
     try {
       setLoading(true);
-      const res = await api<{ data: any }>(`/physical-stock-entry/${id}`);
+      const res = await api<{ data: any }>(`/physical-stock-entries/${id}`);
       const d = res.data;
       setEntry({
         ...emptyEntry,
-        ...d,
+        entry_no: d.entry_no || '',
         entry_date: d.entry_date?.split('T')[0] || '',
         stock_date: d.stock_date?.split('T')[0] || '',
         warehouse_id: String(d.warehouse_id || ''),
         location_id: String(d.location_id || ''),
+        remarks: d.remarks || '',
       });
       if (d.items?.length) {
         setItems(d.items.map((it: any) => ({
           _key: genKey(),
-          material_id: String(it.material_id),
-          material_code: it.material_code || '',
-          material_name: it.material_name || '',
+          material_id: String(it.material_id || ''),
+          material_code: it.material_code || it.item_code || '',
+          material_name: it.material_name || it.item_description || '',
           uom: it.uom || '',
-          batch_no: it.batch_no || '',
-          location: it.location || '',
-          system_qty: it.system_qty || 0,
+          location: it.location || it.location_rack || '',
+          system_qty: parseFloat(it.system_qty) || 0,
           physical_qty: String(it.physical_qty || ''),
-          variance_qty: (it.physical_qty || 0) - (it.system_qty || 0),
-          variance_value: it.variance_value || 0,
+          variance_qty: (parseFloat(it.physical_qty) || 0) - (parseFloat(it.system_qty) || 0),
+          avg_rate: parseFloat(it.avg_rate) || 0,
+          variance_value: parseFloat(it.variance_value) || 0,
           remarks: it.remarks || '',
         })));
       }
@@ -126,16 +115,28 @@ export default function PhysicalStockEntryDetail() {
 
   useEffect(() => { fetchDropdowns(); fetchEntry(); }, [fetchDropdowns, fetchEntry]);
 
-  const update = (key: keyof EntryData, value: string) => {
-    setEntry(p => {
-      const updated = { ...p, [key]: value };
-      // Auto-populate UOM when material is selected in header
-      if (key === 'material_id' && value) {
-        const mat = materials.find(m => String(m.id) === value);
-        if (mat && mat.uom) { updated.uom = mat.uom; }
-      }
-      return updated;
-    });
+  const update = (key: keyof EntryData, value: string) => setEntry(p => ({ ...p, [key]: value }));
+
+  // Fetch system qty and avg rate from material transactions when item is selected
+  const handleItemChange = async (rowKey: string, materialId: string) => {
+    const mat = materials.find(m => String(m.id) === materialId);
+    setItems(prev => prev.map(it => {
+      if (it._key !== rowKey) return it;
+      return { ...it, material_id: materialId, material_code: mat?.code || '', material_name: mat?.name || '', uom: mat?.uom || '', system_qty: 0, avg_rate: 0 };
+    }));
+
+    if (!materialId || !entry.warehouse_id) return;
+    try {
+      const info = await api<{ data: { available_qty: number; avg_rate: number } }>(`/material-issues/item-info/${materialId}?warehouse_id=${entry.warehouse_id}&date=${entry.stock_date || entry.entry_date}`);
+      setItems(prev => prev.map(it => {
+        if (it._key !== rowKey) return it;
+        const systemQty = info.data.available_qty || 0;
+        const avgRate = info.data.avg_rate || 0;
+        const physQty = parseFloat(it.physical_qty) || 0;
+        const variance = physQty - systemQty;
+        return { ...it, system_qty: systemQty, avg_rate: avgRate, variance_qty: variance, variance_value: parseFloat((variance * avgRate).toFixed(2)) };
+      }));
+    } catch {}
   };
 
   const updateItem = (key: string, field: string, value: string) => {
@@ -145,18 +146,14 @@ export default function PhysicalStockEntryDetail() {
       if (field === 'physical_qty') {
         const phys = parseFloat(value) || 0;
         updated.variance_qty = phys - updated.system_qty;
-        updated.variance_value = updated.variance_qty * 185; // approximation with avg price
-      }
-      if (field === 'material_id') {
-        const mat = materials.find(m => String(m.id) === value);
-        if (mat) { updated.material_code = mat.code; updated.material_name = mat.name; updated.uom = mat.uom; }
+        updated.variance_value = parseFloat((updated.variance_qty * updated.avg_rate).toFixed(2));
       }
       return updated;
     }));
   };
 
   const addItem = () => {
-    setItems(p => [...p, { _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', batch_no: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, variance_value: 0, remarks: '' }]);
+    setItems(p => [...p, { _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, avg_rate: 0, variance_value: 0, remarks: '' }]);
   };
 
   const removeItem = (key: string) => {
@@ -165,13 +162,13 @@ export default function PhysicalStockEntryDetail() {
 
   const handleClear = () => {
     setEntry({ ...emptyEntry, entry_no: entry.entry_no });
-    setItems([{ _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', batch_no: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, variance_value: 0, remarks: '' }]);
+    setItems([{ _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, avg_rate: 0, variance_value: 0, remarks: '' }]);
   };
 
   const handleSave = async () => {
-    if (!entry.warehouse_id) { toast.error('Godown is required'); return; }
+    if (!entry.warehouse_id) { toast.error('Warehouse is required'); return; }
     if (!entry.entry_date) { toast.error('Entry date is required'); return; }
-    if (!entry.stock_date) { toast.error('Stock date is required'); return; }
+    if (!entry.stock_date) { toast.error('Physical Stock Date is required'); return; }
     const validItems = items.filter(i => i.material_id && i.physical_qty);
     if (!validItems.length) { toast.error('At least one item is required'); return; }
 
@@ -181,11 +178,13 @@ export default function PhysicalStockEntryDetail() {
         ...entry,
         warehouse_id: Number(entry.warehouse_id),
         location_id: entry.location_id ? Number(entry.location_id) : null,
-        items: validItems.map(i => ({
+        items: validItems.map((i, idx) => ({
+          seq: idx + 1,
           material_id: Number(i.material_id),
+          item_code: i.material_code,
+          item_description: i.material_name,
           uom: i.uom,
-          batch_no: i.batch_no || null,
-          location: i.location || null,
+          location_rack: i.location || null,
           system_qty: i.system_qty,
           physical_qty: parseFloat(i.physical_qty),
           variance_qty: i.variance_qty,
@@ -194,10 +193,10 @@ export default function PhysicalStockEntryDetail() {
         })),
       };
       if (isNew) {
-        await api('/physical-stock-entry', { method: 'POST', body: JSON.stringify(payload) });
+        await api('/physical-stock-entries', { method: 'POST', body: JSON.stringify(payload) });
         toast.success('Physical stock entry created!');
       } else {
-        await api(`/physical-stock-entry/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        await api(`/physical-stock-entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success('Physical stock entry updated!');
       }
       navigate('/physical-stock-entry');
@@ -207,16 +206,18 @@ export default function PhysicalStockEntryDetail() {
 
   // Summary calculations
   const totalItems = items.filter(i => i.material_id).length;
+  const totalSystemQty = items.reduce((s, i) => s + i.system_qty, 0);
+  const totalPhysicalQty = items.reduce((s, i) => s + (parseFloat(i.physical_qty) || 0), 0);
+  const totalVarianceQty = items.reduce((s, i) => s + i.variance_qty, 0);
+  const totalVarianceValue = items.reduce((s, i) => s + i.variance_value, 0);
   const matchedItems = items.filter(i => i.variance_qty === 0 && i.material_id).length;
   const varianceItems = items.filter(i => i.variance_qty !== 0 && i.material_id).length;
-  const totalVarianceValue = items.reduce((s, i) => s + i.variance_value, 0);
+
+  // Get warehouse name for location display
+  const selectedWarehouse = warehouses.find(w => String(w.id) === entry.warehouse_id);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-      </div>
-    );
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
   }
 
   return (
@@ -228,7 +229,7 @@ export default function PhysicalStockEntryDetail() {
             <ClipboardList className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{isNew ? 'Physical Stock Entry' : 'Physical Stock Entry'}</h1>
+            <h1 className="text-xl font-bold text-gray-900">Physical Stock Entry</h1>
             <p className="text-xs text-gray-500">Inventory &gt; Physical Stock Entry</p>
           </div>
         </div>
@@ -256,11 +257,10 @@ export default function PhysicalStockEntryDetail() {
           <h2 className="text-base font-bold text-blue-700">1. Entry Information</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Row 1 */}
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1.5">Entry No.</label>
             <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-500 min-h-[34px] flex items-center">
-              {entry.entry_no || <span className="italic">Will be auto-generated on save</span>}
+              {entry.entry_no || <span className="italic">Auto-generated on save</span>}
             </div>
           </div>
           <div>
@@ -268,88 +268,19 @@ export default function PhysicalStockEntryDetail() {
             <input type="date" value={entry.entry_date} onChange={e => update('entry_date', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Stock Date <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Physical Stock Date <span className="text-red-500">*</span></label>
             <input type="date" value={entry.stock_date} onChange={e => update('stock_date', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Reference No.</label>
-            <input type="text" value={entry.reference_no} onChange={e => update('reference_no', e.target.value)} placeholder="Enter reference" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
-          </div>
-
-          {/* Row 2 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Godown <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Warehouse <span className="text-red-500">*</span></label>
             <select value={entry.warehouse_id} onChange={e => update('warehouse_id', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="">Select Godown</option>
+              <option value="">Select Warehouse</option>
               {warehouses.map(w => <option key={w.id} value={String(w.id)}>{w.name} ({w.code})</option>)}
             </select>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Location / Rack</label>
-            <select value={entry.location_id} onChange={e => update('location_id', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="">Select Location</option>
-              {locations.map(l => <option key={l.id} value={String(l.id)}>{l.name} ({l.code})</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Item Group</label>
-            <select value={entry.item_group} onChange={e => update('item_group', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="">All Groups</option>
-              <option value="Chemicals">Chemicals</option>
-              <option value="Dyes">Dyes</option>
-              <option value="Raw Materials">Raw Materials</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Item</label>
-            <div className="relative">
-              <select value={entry.material_id} onChange={e => update('material_id', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9">
-                <option value="">Select Item</option>
-                {materials.map(m => <option key={m.id} value={String(m.id)}>{m.code} - {m.name}</option>)}
-              </select>
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Row 3 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">UOM</label>
-            <div className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[34px] flex items-center">
-              {entry.uom || <span className="text-gray-400 italic">Auto-filled from item</span>}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Batch No.</label>
-            <div className="relative">
-              <input type="text" value={entry.batch_no} onChange={e => update('batch_no', e.target.value)} placeholder="Search batch" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9" />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">From Item Code</label>
-            <div className="relative">
-              <input type="text" value={entry.from_item_code} onChange={e => update('from_item_code', e.target.value)} placeholder="From code" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9" />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">To Item Code</label>
-            <div className="relative">
-              <input type="text" value={entry.to_item_code} onChange={e => update('to_item_code', e.target.value)} placeholder="To code" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-9" />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            </div>
-          </div>
-
-          {/* Row 4: Remarks */}
           <div className="lg:col-span-4">
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Remarks</label>
-            <textarea
-              rows={2}
-              value={entry.remarks}
-              onChange={e => update('remarks', e.target.value)}
-              placeholder="Enter any remarks or notes..."
-              className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
-            />
+            <textarea rows={2} value={entry.remarks} onChange={e => update('remarks', e.target.value)} placeholder="Enter any remarks or notes..." className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none" />
           </div>
         </div>
       </div>
@@ -363,6 +294,9 @@ export default function PhysicalStockEntryDetail() {
             </div>
             <h2 className="text-base font-bold text-blue-700">2. Stock Details</h2>
           </div>
+          <button onClick={addItem} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
+            <Plus className="w-4 h-4" /> Add Row
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -370,15 +304,14 @@ export default function PhysicalStockEntryDetail() {
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">#</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Code</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Item Name <span className="text-red-500">*</span></th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 min-w-[180px]">Item Name <span className="text-red-500">*</span></th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">UOM</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Batch No.</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Location / Rack</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Location/Rack</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">System Qty</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Physical Qty <span className="text-red-500">*</span></th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Qty</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Avg Rate</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Value</th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600">Remarks</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600">Action</th>
               </tr>
             </thead>
@@ -386,34 +319,27 @@ export default function PhysicalStockEntryDetail() {
               {items.map((item, idx) => (
                 <tr key={item._key} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600 font-mono">{item.material_code || '—'}</td>
                   <td className="px-4 py-3">
-                    <input type="text" value={item.material_code} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-w-[120px]" placeholder="Auto-filled" />
+                    <SearchableSelect
+                      options={materials.map(m => ({ value: String(m.id), label: m.name }))}
+                      value={item.material_id}
+                      onChange={(val) => handleItemChange(item._key, val)}
+                      placeholder="Search item..."
+                    />
                   </td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{item.uom || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{selectedWarehouse?.name || '—'}</td>
+                  <td className="px-4 py-3 text-right text-xs text-gray-700 font-medium">{fmt(item.system_qty)}</td>
                   <td className="px-4 py-3">
-                    <select value={item.material_id} onChange={e => updateItem(item._key, 'material_id', e.target.value)} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[160px]">
-                      <option value="">Select Item</option>
-                      {materials.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{item.uom || '-'}</td>
-                  <td className="px-4 py-3">
-                    <input type="text" value={item.batch_no} onChange={e => updateItem(item._key, 'batch_no', e.target.value)} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg min-w-[100px]" placeholder="Batch" />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{item.location || '-'}</td>
-                  <td className="px-4 py-3 text-right text-xs text-gray-700 font-medium">{item.system_qty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="px-4 py-3">
-                    <input type="number" value={item.physical_qty} onChange={e => updateItem(item._key, 'physical_qty', e.target.value)} className="w-full px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+                    <input type="number" step="0.01" value={item.physical_qty} onChange={e => updateItem(item._key, 'physical_qty', e.target.value)} className="w-full px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
                   </td>
                   <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_qty < 0 ? 'text-red-600' : item.variance_qty > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
-                    {item.variance_qty > 0 ? '+' : ''}{item.variance_qty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    {item.variance_qty > 0 ? '+' : ''}{fmt(item.variance_qty)}
                   </td>
+                  <td className="px-4 py-3 text-right text-xs text-gray-700">{fmt(item.avg_rate)}</td>
                   <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_value < 0 ? 'text-red-600' : item.variance_value > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
-                    {item.variance_value > 0 ? '+' : ''}{item.variance_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <button className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg" title="Add remarks">
-                      <MessageSquare className="w-4 h-4" />
-                    </button>
+                    ₹{item.variance_value > 0 ? '+' : ''}{fmt(item.variance_value)}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
@@ -425,33 +351,6 @@ export default function PhysicalStockEntryDetail() {
             </tbody>
           </table>
         </div>
-
-        {/* Table Footer Totals Row */}
-        <div className="overflow-x-auto border-t border-gray-200">
-          <table className="w-full text-sm">
-            <tbody>
-              <tr className="bg-gray-50 font-medium">
-                <td className="px-4 py-3" colSpan={6}></td>
-                <td className="px-4 py-3 text-right text-xs text-gray-700">Total Items: <span className="font-bold">{totalItems}</span></td>
-                <td className="px-4 py-3"></td>
-                <td className={`px-4 py-3 text-right text-xs font-bold ${items.reduce((s, i) => s + i.variance_qty, 0) < 0 ? 'text-red-600' : items.reduce((s, i) => s + i.variance_qty, 0) > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
-                  {items.reduce((s, i) => s + i.variance_qty, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </td>
-                <td className={`px-4 py-3 text-right text-xs font-bold ${totalVarianceValue < 0 ? 'text-red-600' : totalVarianceValue > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
-                  {totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </td>
-                <td className="px-4 py-3" colSpan={2}></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Add Row */}
-        <div className="px-6 py-4 border-t border-gray-100">
-          <button onClick={addItem} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
-            <Plus className="w-4 h-4" /> Add Row
-          </button>
-        </div>
       </div>
 
       {/* Section 3: Summary */}
@@ -462,44 +361,26 @@ export default function PhysicalStockEntryDetail() {
           </div>
           <h2 className="text-base font-bold text-blue-700">3. Summary</h2>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-              <Package className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Total Items</div>
-              <div className="text-2xl font-bold text-blue-700">{totalItems}</div>
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
+            <div className="text-xs text-gray-500">Total Items</div>
+            <div className="text-2xl font-bold text-blue-700">{totalItems}</div>
           </div>
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <ClipboardList className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Matched Items</div>
-              <div className="text-2xl font-bold text-emerald-700">{matchedItems}</div>
-            </div>
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-center">
+            <div className="text-xs text-gray-500">Total System Qty</div>
+            <div className="text-lg font-bold text-gray-700">{fmt(totalSystemQty)}</div>
           </div>
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Variance Items</div>
-              <div className="text-2xl font-bold text-red-700">{varianceItems}</div>
-            </div>
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-center">
+            <div className="text-xs text-gray-500">Total Physical Qty</div>
+            <div className="text-lg font-bold text-gray-700">{fmt(totalPhysicalQty)}</div>
           </div>
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Total Variance Value</div>
-              <div className={`text-xl font-bold ${totalVarianceValue < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                {totalVarianceValue < 0 ? '' : '+'}{totalVarianceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </div>
-            </div>
+          <div className={`p-4 rounded-xl text-center ${totalVarianceQty < 0 ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+            <div className="text-xs text-gray-500">Total Variance Qty</div>
+            <div className={`text-lg font-bold ${totalVarianceQty < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{totalVarianceQty > 0 ? '+' : ''}{fmt(totalVarianceQty)}</div>
+          </div>
+          <div className={`p-4 rounded-xl text-center ${totalVarianceValue < 0 ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+            <div className="text-xs text-gray-500">Total Variance Value</div>
+            <div className={`text-lg font-bold ${totalVarianceValue < 0 ? 'text-red-700' : 'text-emerald-700'}`}>₹{totalVarianceValue > 0 ? '+' : ''}{fmt(totalVarianceValue)}</div>
           </div>
         </div>
       </div>

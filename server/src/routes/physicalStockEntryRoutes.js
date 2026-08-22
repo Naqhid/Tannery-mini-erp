@@ -13,6 +13,9 @@ router.get('/', stockController.getAll);
 // GET /api/physical-stock-entries/stats - Get stock entry statistics
 router.get('/stats', stockController.getStats);
 
+// GET /api/physical-stock-entries/next-no - Get next entry number
+router.get('/next-no', stockController.getNextNo);
+
 // GET /api/physical-stock-entries/dashboard-stats - Get dashboard statistics
 router.get('/dashboard-stats', stockController.getDashboardStats);
 
