@@ -143,6 +143,7 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',
       'address', 'city', 'state', 'country', 'phone', 'email', 'gstin',
       'category_id', 'hsn_code', 'uom_type', 'uom', 'rate_indian', 'rate_imported',
+      'warehouse_id',
       ...Object.keys(_extraColumns),
     ])];
 
@@ -175,6 +176,7 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',
       'address', 'city', 'state', 'country', 'phone', 'email', 'gstin',
       'category_id', 'hsn_code', 'uom_type', 'uom', 'rate_indian', 'rate_imported',
+      'warehouse_id',
       ...Object.keys(_extraColumns),
     ])];
 
