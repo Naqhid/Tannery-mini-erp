@@ -166,25 +166,6 @@ export default function ProductionPlan() {
         {/* Filter Row 1 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-              placeholder="dd-mm-yyyy"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">To Date</label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            />
-          </div>
-          <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Customer</label>
             <select
               value={customerId}
@@ -223,10 +204,6 @@ export default function ProductionPlan() {
               ))}
             </select>
           </div>
-        </div>
-
-        {/* Filter Row 2 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Color</label>
             <select
@@ -239,39 +216,6 @@ export default function ProductionPlan() {
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Finish</label>
-            <select
-              value={finish}
-              onChange={(e) => setFinish(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-              <option value="">All</option>
-              {filterOptions.finishes.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Sales Order No.</label>
-            <input
-              type="text"
-              value={salesOrderNo}
-              onChange={(e) => setSalesOrderNo(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-              placeholder="Search SO No."
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Customer Order No.</label>
-            <input
-              type="text"
-              value={customerOrderNo}
-              onChange={(e) => setCustomerOrderNo(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-              placeholder="Search Customer Order No."
-            />
           </div>
           <div className="flex items-end gap-2">
             <button
@@ -288,6 +232,7 @@ export default function ProductionPlan() {
             </button>
           </div>
         </div>
+
       </div>
 
       {/* Table Section */}

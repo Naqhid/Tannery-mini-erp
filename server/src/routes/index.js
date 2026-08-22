@@ -33,6 +33,7 @@ import {
   roleRoutes,
   companyRoutes,
   businessUnitRoutes,
+  locationRackRoutes,
 } from './masterRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
 // New module routes
@@ -93,6 +94,7 @@ router.use('/process-stages', processStageRoutes);
 router.use('/group-master', groupMasterRoutes);
 router.use('/machines', machineRoutes);
 router.use('/rate-master', rateMasterRoutes);
+router.use('/location-racks', locationRackRoutes);
 
 // Settings routes
 router.use('/roles', roleRoutes);

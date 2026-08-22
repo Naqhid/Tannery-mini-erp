@@ -178,3 +178,14 @@ export const businessUnitModel = createMasterModel(
     filterableFields: ['city', 'state', 'company_id'],
   }
 );
+
+export const locationRackModel = createMasterModel(
+  'location_racks',
+  'LOC',
+  ['id', 'code', 'name', 'warehouse_id', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code'],
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    filterableFields: ['warehouse_id'],
+  }
+);

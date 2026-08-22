@@ -138,6 +138,9 @@ export const companyRoutes = createMasterRoutes(ctrl.companyController);
 // Business Unit routes
 export const businessUnitRoutes = createMasterRoutes(ctrl.businessUnitController);
 
+// Location/Rack routes
+export const locationRackRoutes = createMasterRoutes(ctrl.locationRackController);
+
 export default {
   productCategoryRoutes,
   leatherTypeRoutes,
@@ -155,4 +158,5 @@ export default {
   roleRoutes,
   companyRoutes,
   businessUnitRoutes,
+  locationRackRoutes,
 };

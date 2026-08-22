@@ -21,6 +21,7 @@ interface Item {
   amount: number;
   batch_no: string;
   remarks: string;
+  stock_error: string;
 }
 
 interface TransferData {
@@ -37,7 +38,7 @@ interface TransferData {
   status: string;
 }
 
-const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', available_qty: 0, transfer_qty: '', unit_cost: '', amount: 0, batch_no: '', remarks: '' };
+const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', available_qty: 0, transfer_qty: '', unit_cost: '', amount: 0, batch_no: '', remarks: '', stock_error: '' };
 
 const emptyTransfer: TransferData = {
   transfer_no: '', transfer_date: new Date().toISOString().split('T')[0],
@@ -132,6 +133,15 @@ export default function StockTransferEntryDetail() {
         const cost = parseFloat(updated.unit_cost) || 0;
         updated.amount = parseFloat((qty * cost).toFixed(2));
       }
+      // Stock validation
+      if (field === 'transfer_qty') {
+        const qty = parseFloat(value) || 0;
+        if (qty > updated.available_qty + 0.001 && updated.available_qty >= 0) {
+          updated.stock_error = `Insufficient Stock\nAvailable: ${updated.available_qty.toFixed(2)} ${updated.uom || 'Kg'}`;
+        } else {
+          updated.stock_error = '';
+        }
+      }
       return updated;
     }));
   };
@@ -166,12 +176,11 @@ export default function StockTransferEntryDetail() {
     if (!transfer.transfer_date) { toast.error('Transfer date is required'); return; }
     const validItems = items.filter((i) => i.material_id && i.transfer_qty);
     if (!validItems.length) { toast.error('At least one item is required'); return; }
-    for (const item of validItems) {
-      const qty = parseFloat(item.transfer_qty) || 0;
-      if (qty > item.available_qty) {
-        const wh = warehouses.find((w) => String(w.id) === transfer.from_warehouse_id);
-        if (!wh?.allow_negative_stock) { toast.error('Transfer qty exceeds available stock'); return; }
-      }
+    // Stock validation
+    const stockErrors = validItems.filter(i => i.stock_error);
+    if (stockErrors.length > 0) {
+      toast.error(`Insufficient stock for: ${stockErrors.map(i => i.material_name).join(', ')}`);
+      return;
     }
     setSaving(true);
     try {
@@ -312,9 +321,12 @@ export default function StockTransferEntryDetail() {
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{item.available_qty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.transfer_qty} onChange={(e) => updateItem(item._key, 'transfer_qty', e.target.value)}
-                      className={`w-full px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right ${
-                        parseFloat(item.transfer_qty) > item.available_qty ? 'border-rose-300 bg-rose-50' : 'border-gray-200'
+                      className={`w-full px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 min-w-[80px] text-right ${
+                        item.stock_error ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500 bg-red-50' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'
                       }`} placeholder="0.00" />
+                    {item.stock_error && (
+                      <div className="mt-1 text-[10px] text-red-600 font-medium leading-tight whitespace-pre-line">{item.stock_error}</div>
+                    )}
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)}
