@@ -11,6 +11,7 @@ import { usePermission } from '../lib/usePermission';
 
 interface Warehouse { id: number; code: string; name: string; }
 interface Material { id: number; code: string; name: string; uom: string; }
+interface LocationRackOption { id: number; code: string; name: string; }
 
 interface StockItem {
   _key: string;
@@ -58,17 +59,20 @@ export default function PhysicalStockEntryDetail() {
   ]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [locationRacks, setLocationRacks] = useState<LocationRackOption[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
-      const [wh, mat] = await Promise.all([
+      const [wh, mat, lr] = await Promise.all([
         api<{ data: Warehouse[] }>('/warehouses/dropdown'),
         api<{ data: Material[] }>('/materials/dropdown'),
+        api<{ data: LocationRackOption[] }>('/location-racks/dropdown'),
       ]);
       setWarehouses(wh.data || []);
       setMaterials(mat.data || []);
+      setLocationRacks(lr.data || []);
     } catch { /* silent */ }
   }, []);
 
@@ -213,9 +217,6 @@ export default function PhysicalStockEntryDetail() {
   const matchedItems = items.filter(i => i.variance_qty === 0 && i.material_id).length;
   const varianceItems = items.filter(i => i.variance_qty !== 0 && i.material_id).length;
 
-  // Get warehouse name for location display
-  const selectedWarehouse = warehouses.find(w => String(w.id) === entry.warehouse_id);
-
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
   }
@@ -329,7 +330,14 @@ export default function PhysicalStockEntryDetail() {
                     />
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-600">{item.uom || '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{selectedWarehouse?.name || '—'}</td>
+                  <td className="px-4 py-3">
+                    <SearchableSelect
+                      options={locationRacks.map(l => ({ value: l.name, label: l.name }))}
+                      value={item.location}
+                      onChange={(val) => updateItem(item._key, 'location', val)}
+                      placeholder="Select location..."
+                    />
+                  </td>
                   <td className="px-4 py-3 text-right text-xs text-gray-700 font-medium">{fmt(item.system_qty)}</td>
                   <td className="px-4 py-3">
                     <input type="number" step="0.01" value={item.physical_qty} onChange={e => updateItem(item._key, 'physical_qty', e.target.value)} className="w-full px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
@@ -366,17 +374,13 @@ export default function PhysicalStockEntryDetail() {
             <div className="text-xs text-gray-500">Total Items</div>
             <div className="text-2xl font-bold text-blue-700">{totalItems}</div>
           </div>
-          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-center">
-            <div className="text-xs text-gray-500">Total System Qty</div>
-            <div className="text-lg font-bold text-gray-700">{fmt(totalSystemQty)}</div>
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+            <div className="text-xs text-gray-500">Matched Items</div>
+            <div className="text-lg font-bold text-emerald-700">{matchedItems}</div>
           </div>
-          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-center">
-            <div className="text-xs text-gray-500">Total Physical Qty</div>
-            <div className="text-lg font-bold text-gray-700">{fmt(totalPhysicalQty)}</div>
-          </div>
-          <div className={`p-4 rounded-xl text-center ${totalVarianceQty < 0 ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-            <div className="text-xs text-gray-500">Total Variance Qty</div>
-            <div className={`text-lg font-bold ${totalVarianceQty < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{totalVarianceQty > 0 ? '+' : ''}{fmt(totalVarianceQty)}</div>
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-center">
+            <div className="text-xs text-gray-500">Variance Items</div>
+            <div className="text-lg font-bold text-red-700">{varianceItems}</div>
           </div>
           <div className={`p-4 rounded-xl text-center ${totalVarianceValue < 0 ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
             <div className="text-xs text-gray-500">Total Variance Value</div>
