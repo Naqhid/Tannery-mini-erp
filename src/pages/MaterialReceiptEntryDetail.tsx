@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Plus, Trash2, Truck, RotateCcw, Info, Minus, Send } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; }
@@ -86,6 +87,7 @@ export default function MaterialReceiptEntryDetail() {
   const [saving, setSaving] = useState(false);
   const [isPosted, setIsPosted] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [searchItem, setSearchItem] = useState('');
 
   const fetchDropdowns = useCallback(async () => {
@@ -210,7 +212,7 @@ export default function MaterialReceiptEntryDetail() {
     try {
       const payload = {
         ...receipt,
-        status: isNew ? 'Draft' : receipt.status,
+        status: 'Draft',
         supplier_id: receipt.supplier_id ? Number(receipt.supplier_id) : null,
         warehouse_id: Number(receipt.warehouse_id),
         freight, loading_charges: loadingCharges, other_charges: otherCharges,
@@ -239,13 +241,13 @@ export default function MaterialReceiptEntryDetail() {
         })),
       };
       if (isNew) {
-        const res = await api('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await api<{ data: { id: number; receipt_no: string }; message: string }>('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Receipt saved as Draft!');
+        navigate(`/material-receipt/${res.data.id}`);
       } else {
-        const res = await api(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        const res = await api<{ message: string }>(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success(res.message || 'Receipt updated!');
       }
-      navigate('/material-receipt');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { setSaving(false); }
   };
@@ -288,10 +290,10 @@ export default function MaterialReceiptEntryDetail() {
         })),
       };
       if (isNew) {
-        const res = await api('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await api<{ data: { id: number; receipt_no: string }; message: string }>('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Receipt posted!');
       } else {
-        const res = await api(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        const res = await api<{ message: string }>(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success(res.message || 'Receipt posted!');
       }
       navigate('/material-receipt');
@@ -410,11 +412,12 @@ export default function MaterialReceiptEntryDetail() {
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-2.5 px-3 text-xs text-gray-700 font-mono">{item.material_code || '-'}</td>
                   <td className="py-2.5 px-3">
-                    <select value={item.material_id} onChange={(e) => updateItem(item._key, 'material_id', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[160px]">
-                      <option value="">Select Item</option>
-                      {materials.map((m) => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={materials.map((m) => ({ value: String(m.id), label: m.name }))}
+                      value={item.material_id}
+                      onChange={(val) => updateItem(item._key, 'material_id', val)}
+                      placeholder="Search item..."
+                    />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.primary_uom || '-'}</td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.secondary_uom || 'NA'}</td>
@@ -549,13 +552,44 @@ export default function MaterialReceiptEntryDetail() {
         <button onClick={handleClear} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
           <RotateCcw size={14} /> Clear
         </button>
-        <button onClick={handlePost} disabled={posting || isPosted} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
+        <button onClick={() => setShowPostConfirm(true)} disabled={posting || isPosted || isNew} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
           <Send size={14} /> {posting ? 'Posting...' : isPosted ? 'Posted' : 'Post'}
         </button>
         <button onClick={handleSave} disabled={saving || isPosted} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50">
           <Save size={14} /> {saving ? 'Saving...' : 'Save'}
         </button>
       </div>
+
+      {/* Post Confirmation Dialog */}
+      {showPostConfirm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80] flex items-center justify-center">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl mx-4 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Send size={20} className="text-emerald-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Posting</h3>
+              <p className="text-sm text-gray-600">Are you sure you want to post this Material Receipt?</p>
+              <p className="text-xs text-amber-600 mt-2">Once posted, the transaction will affect inventory and stock values.</p>
+            </div>
+            <div className="flex border-t border-gray-200">
+              <button
+                onClick={() => setShowPostConfirm(false)}
+                className="flex-1 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowPostConfirm(false); handlePost(); }}
+                disabled={posting}
+                className="flex-1 py-3 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {posting ? 'Posting...' : 'Confirm Post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

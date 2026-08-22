@@ -67,20 +67,23 @@ export async function create(data, items = [], createdBy = null) {
   try {
     await conn.beginTransaction();
     const issue_no = data.issue_no || await getNextNo();
+    const status = data.status || 'Draft';
+
+    // Only validate stock and compute server-side costs if posting
+    if (status === 'Posted') {
+      for (const item of items) {
+        const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
+        const requested = parseFloat(item.issue_qty) || 0;
+        if (requested > info.available_qty + 0.000001) {
+          throw new Error(`Insufficient stock. Available stock: ${info.available_qty}. Current balance: ${info.available_qty}. Requested issue quantity: ${requested}`);
+        }
+        item.unit_cost = info.avg_rate;
+        item.amount = Number((requested * info.avg_rate).toFixed(2));
+      }
+    }
+
     const totalCost = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
     const grandTotal = totalCost + (parseFloat(data.loading_unloading) || 0) + (parseFloat(data.other_charges) || 0);
-
-    // Validate against the latest running balance in material_transactions.
-    for (const item of items) {
-      const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
-      const requested = parseFloat(item.issue_qty) || 0;
-      if (requested > info.available_qty + 0.000001) {
-        throw new Error(`Insufficient stock. Available stock: ${info.available_qty}. Current balance: ${info.available_qty}. Requested issue quantity: ${requested}`);
-      }
-      // Server-side source of truth for average rate and amount.
-      item.unit_cost = info.avg_rate;
-      item.amount = Number((requested * info.avg_rate).toFixed(2));
-    }
 
     const [result] = await conn.query(
       `INSERT INTO material_issues (
@@ -95,7 +98,7 @@ export async function create(data, items = [], createdBy = null) {
         data.batch_description || null, data.costing_method || 'FIFO', data.warehouse_id,
         data.required_date || data.planned_date || null, data.planned_date || data.required_date || null, data.issued_by || null, data.loading_unloading || 0,
         data.other_charges || 0, totalCost, grandTotal, data.remarks || null,
-        data.status || 'Posted', createdBy,
+        status, createdBy,
       ]
     );
     const issueId = result.insertId;
@@ -107,40 +110,45 @@ export async function create(data, items = [], createdBy = null) {
         [issueId, item.material_id, item.uom || null, item.required_qty || 0,
          item.issue_qty || 0, item.unit_cost || 0, item.amount || 0, item.remarks || null]
       );
-
-      await updateStock(conn, data.warehouse_id, item.material_id, item.uom, -(parseFloat(item.issue_qty) || 0), 0);
-
-      await addLedgerEntry(conn, {
-        transaction_date: data.issue_date,
-        transaction_type: 'Issue',
-        reference_type: 'material_issue',
-        reference_id: issueId,
-        reference_no: issue_no,
-        warehouse_id: data.warehouse_id,
-        material_id: item.material_id,
-        uom: item.uom,
-        in_qty: 0,
-        out_qty: item.issue_qty || 0,
-        unit_cost: item.unit_cost || 0,
-        amount: item.amount || 0,
-        balance_qty: -(item.issue_qty || 0),
-        remarks: `Issue to batch ${data.production_batch || ''}`,
-        created_by: createdBy,
-      });
     }
 
-    await replaceReferenceTransactions(conn, 'material_issue', issueId, items.map((item) => ({
-      transaction_date: data.issue_date,
-      transaction_type: 'Issue',
-      reference_no: issue_no,
-      warehouse_id: data.warehouse_id,
-      item_id: item.material_id,
-      receipt_qty: 0,
-      opening_qty: 0,
-      receipt_value: 0,
-      issue_qty: parseFloat(item.issue_qty) || 0,
-      issue_value: parseFloat(item.amount) || 0,
-    })));
+    // Only affect stock/transactions if posting
+    if (status === 'Posted') {
+      for (const item of items) {
+        await updateStock(conn, data.warehouse_id, item.material_id, item.uom, -(parseFloat(item.issue_qty) || 0), 0);
+        await addLedgerEntry(conn, {
+          transaction_date: data.issue_date,
+          transaction_type: 'Issue',
+          reference_type: 'material_issue',
+          reference_id: issueId,
+          reference_no: issue_no,
+          warehouse_id: data.warehouse_id,
+          material_id: item.material_id,
+          uom: item.uom,
+          in_qty: 0,
+          out_qty: item.issue_qty || 0,
+          unit_cost: item.unit_cost || 0,
+          amount: item.amount || 0,
+          balance_qty: -(item.issue_qty || 0),
+          remarks: `Issue to batch ${data.production_batch || ''}`,
+          created_by: createdBy,
+        });
+      }
+
+      await replaceReferenceTransactions(conn, 'material_issue', issueId, items.map((item) => ({
+        transaction_date: data.issue_date,
+        transaction_type: 'Issue',
+        reference_no: issue_no,
+        warehouse_id: data.warehouse_id,
+        item_id: item.material_id,
+        receipt_qty: 0,
+        opening_stock: null,
+        opening_value: null,
+        receipt_value: 0,
+        issue_qty: parseFloat(item.issue_qty) || 0,
+        issue_value: parseFloat(item.amount) || 0,
+      })));
+    }
 
     await conn.commit();
     return { id: issueId, issue_no };
@@ -157,26 +165,36 @@ export async function update(id, data, items = [], updatedBy = null) {
   try {
     await conn.beginTransaction();
 
-    // Reverse old stock
-    const [oldItems] = await conn.query(
-      'SELECT material_id, uom, issue_qty FROM material_issue_items WHERE issue_id=?', [id]
-    );
-    for (const old of oldItems) {
-      await updateStock(conn, data.warehouse_id, old.material_id, old.uom, parseFloat(old.issue_qty), 0);
-    }
-    await conn.query('DELETE FROM material_issue_items WHERE issue_id=?', [id]);
-    await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_issue', id]);
-    // Remove current reference from transaction table first so stock validation does not count the old issue.
-    await replaceReferenceTransactions(conn, 'material_issue', id, []);
-    for (const item of items) {
-      const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
-      const requested = parseFloat(item.issue_qty) || 0;
-      if (requested > info.available_qty + 0.000001) {
-        throw new Error(`Insufficient stock. Available stock: ${info.available_qty}. Current balance: ${info.available_qty}. Requested issue quantity: ${requested}`);
+    // Check current status
+    const [[current]] = await conn.query('SELECT status, issue_no FROM material_issues WHERE id=?', [id]);
+    const wasPosted = current && current.status === 'Posted';
+    const newStatus = data.status || current?.status || 'Draft';
+
+    // If it was posted, reverse old stock first
+    if (wasPosted) {
+      const [oldItems] = await conn.query(
+        'SELECT material_id, uom, issue_qty FROM material_issue_items WHERE issue_id=?', [id]
+      );
+      for (const old of oldItems) {
+        await updateStock(conn, data.warehouse_id, old.material_id, old.uom, parseFloat(old.issue_qty), 0);
       }
-      item.unit_cost = info.avg_rate;
-      item.amount = Number((requested * info.avg_rate).toFixed(2));
+      await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_issue', id]);
+      await replaceReferenceTransactions(conn, 'material_issue', id, []);
     }
+
+    // If posting, validate stock and compute costs
+    if (newStatus === 'Posted') {
+      for (const item of items) {
+        const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
+        const requested = parseFloat(item.issue_qty) || 0;
+        if (requested > info.available_qty + 0.000001) {
+          throw new Error(`Insufficient stock. Available stock: ${info.available_qty}. Current balance: ${info.available_qty}. Requested issue quantity: ${requested}`);
+        }
+        item.unit_cost = info.avg_rate;
+        item.amount = Number((requested * info.avg_rate).toFixed(2));
+      }
+    }
+
     const totalCost = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
     const grandTotal = totalCost + (parseFloat(data.loading_unloading) || 0) + (parseFloat(data.other_charges) || 0);
 
@@ -185,16 +203,18 @@ export async function update(id, data, items = [], updatedBy = null) {
         issue_date=?, department=?, job_order_no=?, production_batch=?, article=?, color=?, batch_qty=?,
         batch_uom=?, batch_description=?, costing_method=?, warehouse_id=?, required_date=?, planned_date=?,
         issued_by=?, loading_unloading=?, other_charges=?, total_material_cost=?,
-        grand_total=?, remarks=?, updated_by=? WHERE id=?`,
+        grand_total=?, remarks=?, status=?, updated_by=? WHERE id=?`,
       [
         data.issue_date, data.department || null, data.job_order_no || null,
         data.production_batch || null, data.article || data.batch_description || null, data.color || null, data.batch_qty || 0, data.batch_uom || null,
         data.batch_description || null, data.costing_method || 'FIFO', data.warehouse_id,
         data.required_date || data.planned_date || null, data.planned_date || data.required_date || null, data.issued_by || null, data.loading_unloading || 0,
-        data.other_charges || 0, totalCost, grandTotal, data.remarks || null, updatedBy, id,
+        data.other_charges || 0, totalCost, grandTotal, data.remarks || null, newStatus, updatedBy, id,
       ]
     );
 
+    // Re-insert items
+    await conn.query('DELETE FROM material_issue_items WHERE issue_id=?', [id]);
     for (const item of items) {
       await conn.query(
         `INSERT INTO material_issue_items (issue_id, material_id, uom, required_qty, issue_qty, unit_cost, amount, remarks)
@@ -202,22 +222,30 @@ export async function update(id, data, items = [], updatedBy = null) {
         [id, item.material_id, item.uom || null, item.required_qty || 0,
          item.issue_qty || 0, item.unit_cost || 0, item.amount || 0, item.remarks || null]
       );
-      await updateStock(conn, data.warehouse_id, item.material_id, item.uom, -(parseFloat(item.issue_qty) || 0), 0);
     }
 
-    const [[issueHeader]] = await conn.query('SELECT issue_no FROM material_issues WHERE id=?', [id]);
-    await replaceReferenceTransactions(conn, 'material_issue', id, items.map((item) => ({
-      transaction_date: data.issue_date,
-      transaction_type: 'Issue',
-      reference_no: issueHeader?.issue_no || null,
-      warehouse_id: data.warehouse_id,
-      item_id: item.material_id,
-      receipt_qty: 0,
-      opening_qty: 0,
-      receipt_value: 0,
-      issue_qty: parseFloat(item.issue_qty) || 0,
-      issue_value: parseFloat(item.amount) || 0,
-    })));
+    // Only affect stock/transactions if posting
+    if (newStatus === 'Posted') {
+      for (const item of items) {
+        await updateStock(conn, data.warehouse_id, item.material_id, item.uom, -(parseFloat(item.issue_qty) || 0), 0);
+      }
+
+      const issue_no = data.issue_no || current?.issue_no || null;
+      await replaceReferenceTransactions(conn, 'material_issue', id, items.map((item) => ({
+        transaction_date: data.issue_date,
+        transaction_type: 'Issue',
+        reference_no: issue_no,
+        warehouse_id: data.warehouse_id,
+        item_id: item.material_id,
+        receipt_qty: 0,
+        opening_stock: null,
+        opening_value: null,
+        receipt_value: 0,
+        issue_qty: parseFloat(item.issue_qty) || 0,
+        issue_value: parseFloat(item.amount) || 0,
+      })));
+    }
+
     await conn.commit();
     return true;
   } catch (err) {

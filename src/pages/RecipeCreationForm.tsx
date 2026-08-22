@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import Select from '../components/ui/Select';
 import { useDropdowns } from '../lib/useDropdowns';
 import { usePermission } from '../lib/usePermission';
@@ -678,17 +679,15 @@ export default function RecipeCreationForm() {
                     <tr key={item.id} className="hover:bg-blue-50/20">
                       <td className="py-1.5 px-2 text-gray-500">{idx + 1}</td>
                       <td className="py-1.5 px-2">
-                        <select
+                        <SearchableSelect
+                          options={materials.map(m => ({ value: String(m.id), label: `${m.code} - ${m.name}` }))}
                           value={String(item.material_id || '')}
-                          onChange={(e) => {
-                            const mat = materials.find(m => m.id === Number(e.target.value));
-                            setRecipeItems(prev => prev.map(i => i.id === item.id ? { ...i, material_id: Number(e.target.value), material_code: mat?.code || '', material_name: mat?.name || '', uom: mat?.uom || i.uom } : i));
+                          onChange={(val) => {
+                            const mat = materials.find(m => m.id === Number(val));
+                            setRecipeItems(prev => prev.map(i => i.id === item.id ? { ...i, material_id: Number(val), material_code: mat?.code || '', material_name: mat?.name || '', uom: mat?.uom || i.uom } : i));
                           }}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
-                        >
-                          <option value="">Select material...</option>
-                          {materials.map(m => <option key={m.id} value={m.id}>{m.code} - {m.name}</option>)}
-                        </select>
+                          placeholder="Search material..."
+                        />
                       </td>
                       <td className="py-1.5 px-2 text-gray-600">{item.uom || '-'}</td>
                       <td className="py-1.5 px-2">

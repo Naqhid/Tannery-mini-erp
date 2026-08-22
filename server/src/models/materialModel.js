@@ -142,7 +142,7 @@ export async function create(data, createdBy = null) {
     await pool.query(
       `INSERT INTO material_transactions 
         (transaction_date, transaction_type, reference_no, warehouse_id, item_id, 
-         opening_qty, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
+         opening_stock, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
        VALUES (NOW(), 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
       [
         code,
@@ -228,7 +228,7 @@ export async function update(id, data, updatedBy = null) {
     await pool.query(
       `INSERT INTO material_transactions 
         (transaction_date, transaction_type, reference_no, warehouse_id, item_id, 
-         opening_qty, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
+         opening_stock, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
        VALUES (NOW(), 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
       [
         refNo,

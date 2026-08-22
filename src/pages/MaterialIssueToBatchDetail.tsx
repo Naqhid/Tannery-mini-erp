@@ -21,6 +21,8 @@ interface Item {
   unit_cost: string;
   amount: number;
   remarks: string;
+  available_qty: number;
+  stock_error: string;
 }
 
 interface IssueData {
@@ -48,13 +50,13 @@ interface IssueData {
 
 interface BatchOption { id: number; batch_no: string; article_name: string; product_id: number | null; product_name: string | null; product_code: string | null; batch_qty: number; batch_uom: string; }
 
-const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', required_qty: '', issue_qty: '', unit_cost: '', amount: 0, remarks: '' };
+const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', required_qty: '', issue_qty: '', unit_cost: '', amount: 0, remarks: '', available_qty: 0, stock_error: '' };
 
 const emptyIssue: IssueData = {
   issue_no: '', issue_date: new Date().toISOString().split('T')[0], department: '', job_order_no: '',
   production_batch: '', article: '', color: '', product_id: '', batch_qty: '', batch_uom: '', batch_description: '',
   warehouse_id: '', required_date: '', planned_date: '', issued_by: '', loading_unloading: '', other_charges: '',
-  remarks: '', status: 'Posted',
+  remarks: '', status: 'Draft',
 };
 
 const DEPARTMENTS = [
@@ -231,12 +233,18 @@ export default function MaterialIssueToBatchDetail() {
       material_code: material?.code || '',
       material_name: material?.name || '',
       uom: material?.primary_uom_name || material?.primary_uom || material?.uom || '',
-      unit_cost: '', amount: 0,
+      unit_cost: '', amount: 0, available_qty: 0, stock_error: '',
     })));
     if (!materialId || !issue.warehouse_id) return;
     try {
       const info = await api<{ data: { available_qty: number; avg_rate: number } }>(`/material-issues/item-info/${materialId}?warehouse_id=${issue.warehouse_id}&date=${issue.issue_date}`);
-      setItems((prev) => prev.map((it) => it._key !== key ? it : ({ ...it, unit_cost: String(info.data.avg_rate || 0), amount: Number(((parseFloat(it.issue_qty) || 0) * (info.data.avg_rate || 0)).toFixed(2)) })));
+      setItems((prev) => prev.map((it) => it._key !== key ? it : ({
+        ...it,
+        unit_cost: (info.data.avg_rate || 0).toFixed(2),
+        amount: Number(((parseFloat(it.issue_qty) || 0) * (info.data.avg_rate || 0)).toFixed(2)),
+        available_qty: info.data.available_qty || 0,
+        stock_error: '',
+      })));
     } catch { toast.error('Unable to fetch current average rate'); }
   };
 
@@ -258,6 +266,15 @@ export default function MaterialIssueToBatchDetail() {
         const qty = parseFloat(updated.issue_qty) || 0;
         const cost = parseFloat(updated.unit_cost) || 0;
         updated.amount = parseFloat((qty * cost).toFixed(2));
+      }
+      // Stock validation
+      if (field === 'issue_qty') {
+        const qty = parseFloat(value) || 0;
+        if (qty > updated.available_qty + 0.001 && updated.available_qty >= 0) {
+          updated.stock_error = `Insufficient Stock\nAvailable: ${updated.available_qty.toFixed(2)} ${updated.uom || 'Kg'}`;
+        } else {
+          updated.stock_error = '';
+        }
       }
       return updated;
     }));
@@ -281,10 +298,16 @@ export default function MaterialIssueToBatchDetail() {
     if (!issue.issue_date) { toast.error('Issue date is required'); return; }
     const validItems = items.filter((i) => i.material_id && i.issue_qty);
     if (!validItems.length) { toast.error('At least one item is required'); return; }
+    // Frontend stock validation
+    const stockErrors = validItems.filter(i => i.stock_error);
+    if (stockErrors.length > 0) {
+      toast.error(`Insufficient stock for: ${stockErrors.map(i => i.material_name).join(', ')}`);
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
-        ...issue, warehouse_id: Number(issue.warehouse_id), batch_qty: parseFloat(issue.batch_qty) || 0,
+        ...issue, status: 'Draft', warehouse_id: Number(issue.warehouse_id), batch_qty: parseFloat(issue.batch_qty) || 0,
         loading_unloading: loadingUnloading, other_charges: otherCharges,
         total_material_cost: totalCost, grand_total: grandTotal,
         items: validItems.map((i) => ({
@@ -294,22 +317,34 @@ export default function MaterialIssueToBatchDetail() {
         })),
       };
       if (isNew) {
-        const res = await api('/material-issues', { method: 'POST', body: JSON.stringify(payload) });
-        toast.success(res.message || 'Material issue created!');
+        const res = await api<{ data: { id: number; issue_no: string }; message: string }>('/material-issues', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success(res.message || 'Material issue saved as Draft!');
+        navigate(`/material-issue/${res.data.id}`);
       } else {
         const res = await api(`/material-issues/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success(res.message || 'Material issue updated!');
       }
-      navigate('/material-issue');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { setSaving(false); }
   };
 
   const handlePost = async () => {
-    if (!issue.id) return;
+    if (!id || isNew) { toast.error('Please save the record first'); return; }
+    if (isPosted) return;
     setPosting(true);
     try {
-      await api(`/material-issues/${issue.id}`, { method: 'PUT', body: JSON.stringify({ ...issue, status: 'Posted' }) });
+      const validItems = items.filter((i) => i.material_id && i.issue_qty);
+      const payload = {
+        ...issue, status: 'Posted', warehouse_id: Number(issue.warehouse_id), batch_qty: parseFloat(issue.batch_qty) || 0,
+        loading_unloading: loadingUnloading, other_charges: otherCharges,
+        total_material_cost: totalCost, grand_total: grandTotal,
+        items: validItems.map((i) => ({
+          material_id: Number(i.material_id), uom: i.uom,
+          required_qty: parseFloat(i.required_qty) || 0, issue_qty: parseFloat(i.issue_qty) || 0,
+          unit_cost: parseFloat(i.unit_cost) || 0, amount: i.amount, remarks: i.remarks || null,
+        })),
+      };
+      await api(`/material-issues/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
       toast.success('Material issue posted successfully!');
       setIsPosted(true);
       setShowPostConfirm(false);
@@ -437,7 +472,10 @@ export default function MaterialIssueToBatchDetail() {
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.issue_qty} onChange={(e) => updateItem(item._key, 'issue_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className={`w-full px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 min-w-[80px] text-right ${item.stock_error ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500 bg-red-50' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`} placeholder="0.00" />
+                    {item.stock_error && (
+                      <div className="mt-1 text-[10px] text-red-600 font-medium leading-tight whitespace-pre-line">{item.stock_error}</div>
+                    )}
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)}
