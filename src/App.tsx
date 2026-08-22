@@ -56,6 +56,8 @@ import BusinessUnits from './pages/BusinessUnits';
 // Inventory Pages
 import WarehouseMaster from './pages/WarehouseMaster';
 import WarehouseMasterForm from './pages/WarehouseMasterForm';
+import LocationRack from './pages/LocationRack';
+import LocationRackForm from './pages/LocationRackForm';
 import StockOpeningEntry from './pages/StockOpeningEntry';
 import StockOpeningEntryDetail from './pages/StockOpeningEntryDetail';
 import MaterialReceiptEntry from './pages/MaterialReceiptEntry';
@@ -193,6 +195,9 @@ function App() {
             <Route path="warehouse-master" element={<WarehouseMaster />} />
             <Route path="warehouse-master/new" element={<WarehouseMasterForm />} />
             <Route path="warehouse-master/:id" element={<WarehouseMasterForm />} />
+            <Route path="location-rack" element={<LocationRack />} />
+            <Route path="location-rack/new" element={<LocationRackForm />} />
+            <Route path="location-rack/:id" element={<LocationRackForm />} />
             <Route path="stock-opening-entry" element={<StockOpeningEntry />} />
             <Route path="stock-opening-entry/new" element={<StockOpeningEntryDetail />} />
             <Route path="stock-opening-entry/:id" element={<StockOpeningEntryDetail />} />

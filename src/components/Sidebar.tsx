@@ -67,6 +67,7 @@ export const menuItems: MenuItem[] = [
       { label: 'Process Stage', icon: <ListChecks size={16} />, path: '/process-stage' },
       { label: 'Machine / Equipment', icon: <Factory size={16} />, path: '/machine' },
       { label: 'Warehouse / Store Master', icon: <Warehouse size={16} />, path: '/warehouse-master' },
+      { label: 'Location / Rack', icon: <Layers size={16} />, path: '/location-rack' },
     ],
   },
   {
