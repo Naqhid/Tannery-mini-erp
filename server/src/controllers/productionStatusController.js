@@ -107,3 +107,17 @@ export async function dateSummary(req, res, next) {
     res.json({ data });
   } catch (err) { next(err); }
 }
+
+export async function postOrder(req, res, next) {
+  try {
+    const userId = req.user?.id || null;
+    const ok = await model.postOrder(req.params.id, userId);
+    if (!ok) return res.status(404).json({ error: 'Record not found or already posted' });
+    res.json({ data: { id: req.params.id, status: 'Posted' }, message: 'Posted successfully!' });
+  } catch (err) {
+    if (err.message?.includes('already posted')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+}

@@ -92,7 +92,7 @@ export const taxMasterModel = createMasterModel(
 export const processStageModel = createMasterModel(
   'process_stages',
   'PS',
-  ['id', 'code', 'name', 'description', 'seq', 'status', 'created_at', 'updated_at'],
+  ['id', 'code', 'name', 'description', 'seq', 'uom', 'status', 'created_at', 'updated_at'],
   ['name', 'code'],
   { uniqueFields: [{ fields: ['name'] }] }
 );

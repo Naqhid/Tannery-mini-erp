@@ -84,11 +84,39 @@ export async function getById(id) {
   );
 
   const [stages] = await pool.query(
-    `SELECT pps.*, ps.name AS process_stage_name, ps.code AS process_stage_code
+    `SELECT pps.*, ps.name AS process_stage_name, ps.code AS process_stage_code, ps.uom AS stage_uom
      FROM production_plan_stages pps
      LEFT JOIN process_stages ps ON pps.stage_id = ps.id
      WHERE pps.plan_id = ? ORDER BY pps.seq ASC`, [id]
   );
+
+  // Aggregate Daily Production transactions per stage for this plan
+  const [dpAgg] = await pool.query(
+    `SELECT pso.process_stage,
+       COALESCE(SUM(t.input_qty), 0) AS agg_input_qty,
+       COALESCE(SUM(t.output_qty), 0) AS agg_output_qty,
+       COALESCE(SUM(t.rejection_qty), 0) AS agg_rejection_qty
+     FROM production_status_orders pso
+     JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+     WHERE pso.production_plan_id = ? AND pso.deleted_at IS NULL
+     GROUP BY pso.process_stage`, [id]
+  );
+  const aggMap = {};
+  for (const row of dpAgg) {
+    aggMap[row.process_stage] = row;
+  }
+
+  // Merge aggregated data into stages
+  for (const stage of stages) {
+    const stageName = stage.stage_name || stage.process_stage_name;
+    const agg = aggMap[stageName];
+    if (agg) {
+      stage.issue_input_qty = parseFloat(agg.agg_input_qty) || 0;
+      stage.output_qty = parseFloat(agg.agg_output_qty) || 0;
+      stage.rejection_qty = parseFloat(agg.agg_rejection_qty) || 0;
+      stage.wip_qty = Math.max(0, (parseFloat(stage.planned_qty) || 0) - stage.output_qty - stage.rejection_qty);
+    }
+  }
 
   const [batches] = await pool.query(
     `SELECT * FROM production_batches

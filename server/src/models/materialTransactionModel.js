@@ -23,16 +23,36 @@ export async function getLatestBalance(conn, { warehouseId, itemId }) {
 }
 
 export async function insertTransaction(conn, row) {
+  // Initialise opening balance only for the first transaction of this item/warehouse.
+  // Later transactions must not repeatedly add material master opening stock.
+  if (row.opening_qty == null && row.opening_value == null) {
+    const [[existing]] = await conn.query(
+      `SELECT transaction_id FROM material_transactions WHERE warehouse_id=? AND item_id=? LIMIT 1`,
+      [row.warehouse_id, row.item_id]
+    );
+    if (!existing) {
+      const [[material]] = await conn.query(
+        `SELECT opening_stock, opening_stock_value, current_stock, rate, last_purchase_price FROM materials WHERE id=?`,
+        [row.item_id]
+      );
+      if (material) {
+        const openingQty = n(material.opening_stock) || n(material.current_stock);
+        const rate = n(material.rate) || n(material.last_purchase_price);
+        row.opening_qty = openingQty;
+        row.opening_value = n(material.opening_stock_value) || openingQty * rate;
+      }
+    }
+  }
   const [result] = await conn.query(
     `INSERT INTO material_transactions
      (transaction_date, transaction_type, reference_no, warehouse_id, item_id, batch_no,
-      receipt_qty, opening_qty, receipt_value, issue_qty, issue_value,
+      receipt_qty, opening_qty, opening_value, receipt_value, issue_qty, issue_value,
       balance_qty, avg_rate, balance_value, reference_type, reference_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       row.transaction_date, row.transaction_type, row.reference_no || null,
       row.warehouse_id, row.item_id, row.batch_no || null,
-      n(row.receipt_qty), n(row.opening_qty), n(row.receipt_value),
+      n(row.receipt_qty), n(row.opening_qty), n(row.opening_value), n(row.receipt_value),
       n(row.issue_qty), n(row.issue_value), n(row.balance_qty), n(row.avg_rate),
       n(row.balance_value), row.reference_type || null, row.reference_id || null,
     ]
@@ -52,10 +72,11 @@ export async function recalculateMaterialTransactions(conn, warehouseId, itemId)
   for (const row of rows) {
     const receiptQty = n(row.receipt_qty);
     const openingQty = n(row.opening_qty);
+    const openingValue = n(row.opening_value);
     const issueQty = n(row.issue_qty);
     const receiptValue = n(row.receipt_value);
     qty += openingQty + receiptQty;
-    value += receiptValue;
+    value += openingValue + receiptValue;
     const rateBeforeIssue = qty > 0 ? value / qty : 0;
     const issueValue = issueQty * rateBeforeIssue;
     qty -= issueQty;

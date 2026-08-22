@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, ArrowUp, ArrowDown, ChevronsUpDown,
-  Factory, Plus, Download, Pencil, Trash2,
+  Factory, Download, Pencil, Trash2,
 } from 'lucide-react';
 import SkeletonLoader from '../components/ui/SkeletonLoader';
 import EmptyState from '../components/ui/EmptyState';
@@ -24,6 +24,8 @@ interface OrderRow {
   balance_qty: number;
   status: string;
   uom: string;
+  plan_date: string;
+  posted_at: string | null;
 }
 
 type SortField = 'order_no' | 'customer_name' | 'article' | 'color' | 'issued_qty' | 'completed_qty' | 'balance_qty' | 'status';
@@ -33,6 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
   Completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   'In-Process': 'bg-blue-50 text-blue-700 border border-blue-200',
   Pending: 'bg-amber-50 text-amber-700 border border-amber-200',
+  Posted: 'bg-violet-50 text-violet-700 border border-violet-200',
 };
 
 export default function ProductionStatus() {
@@ -83,7 +86,7 @@ export default function ProductionStatus() {
     if (!deletingId) return;
     try {
       await api(`/production-status/orders/${deletingId.id}`, { method: 'DELETE' });
-      toast.success('Order deleted!');
+      toast.success('Record deleted!');
       setDeletingId(null);
       fetchData();
     } catch (err: any) {
@@ -92,12 +95,12 @@ export default function ProductionStatus() {
   };
 
   const handleExport = () => {
-    const headers = ['Order No', 'Customer', 'Article', 'Color', 'Issued Qty', 'Completed Qty', 'Balance Qty', 'Status'];
+    const headers = ['Plan No', 'Customer', 'Article', 'Color', 'Planned Qty', 'Completed Qty', 'Balance Qty', 'Status'];
     const csvRows = rows.map(r => [r.order_no, r.customer_name, r.article, r.color, r.issued_qty, r.completed_qty, r.balance_qty, r.status].join(','));
     const csv = [headers.join(','), ...csvRows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'production_status.csv'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = 'daily_production.csv'; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -117,14 +120,14 @@ export default function ProductionStatus() {
             <Factory size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Production Status</h1>
-            <p className="text-xs md:text-sm text-gray-500 mt-0.5">View order progress at selected process stage</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Daily Production</h1>
+            <p className="text-xs md:text-sm text-gray-500 mt-0.5">View production progress at selected process stage</p>
           </div>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <button onClick={() => navigate('/production-status/new')}
             className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-            <Plus size={14} /> Add Order
+            <Factory size={14} /> New Entry
           </button>
           <button onClick={fetchData}
             className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm">
@@ -180,14 +183,14 @@ export default function ProductionStatus() {
         {loading ? (
           <div className="p-6"><SkeletonLoader rows={8} /></div>
         ) : rows.length === 0 ? (
-          <EmptyState title="No orders found" message={activeTab === 'transaction' ? "No orders with transactions yet." : "Click 'Add Order' to create your first production status entry."} />
+          <EmptyState title="No records found" message={activeTab === 'transaction' ? "No records with transactions yet." : "Daily Production records are created from Production Plans."} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th onClick={() => handleSort('order_no')} className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
+                    <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
                   </th>
                   <th onClick={() => handleSort('article')} className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
@@ -196,13 +199,13 @@ export default function ProductionStatus() {
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
                   <th onClick={() => handleSort('issued_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Planned-Qty (Pcs) <SortIcon field="issued_qty" /></span>
+                    <span className="inline-flex items-center gap-1 justify-end">Planned Qty <SortIcon field="issued_qty" /></span>
                   </th>
                   <th onClick={() => handleSort('completed_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Completed-Qty (Pcs) <SortIcon field="completed_qty" /></span>
+                    <span className="inline-flex items-center gap-1 justify-end">Completed Qty <SortIcon field="completed_qty" /></span>
                   </th>
                   <th onClick={() => handleSort('balance_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Balance-Qty (Pcs) <SortIcon field="balance_qty" /></span>
+                    <span className="inline-flex items-center gap-1 justify-end">Balance Qty <SortIcon field="balance_qty" /></span>
                   </th>
                   <th onClick={() => handleSort('status')} className="px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span>
@@ -212,8 +215,12 @@ export default function ProductionStatus() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {rows.map((row, idx) => (
-                  <tr key={row.id} className={`transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                    <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium cursor-pointer" onClick={() => navigate(`/production-status/${row.id}`)}>{row.order_no || '—'}</td>
+                  <tr
+                    key={row.id}
+                    className={`transition-colors hover:bg-blue-50/60 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
+                    onClick={() => navigate(`/production-status/${row.id}`)}
+                  >
+                    <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.color || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.issued_qty)}</td>
@@ -228,7 +235,7 @@ export default function ProductionStatus() {
                     </td>
                     <td className="px-4 py-3.5 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => navigate(`/production-status/${row.id}`)}
+                        <button onClick={(e) => { e.stopPropagation(); navigate(`/production-status/${row.id}`); }}
                           className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors" title="Edit">
                           <Pencil size={14} />
                         </button>
@@ -286,12 +293,12 @@ export default function ProductionStatus() {
                 <Trash2 size={20} className="text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Delete Order</h3>
+                <h3 className="text-lg font-bold text-gray-900">Delete Record</h3>
                 <p className="text-sm text-gray-500">This action cannot be undone.</p>
               </div>
             </div>
             <p className="text-sm text-gray-700 mb-6">
-              Are you sure you want to delete order <span className="font-semibold text-blue-700 font-mono">{deletingId.order_no || `#${deletingId.id}`}</span>?
+              Are you sure you want to delete <span className="font-semibold text-blue-700 font-mono">{deletingId.order_no || `#${deletingId.id}`}</span>?
             </p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setDeletingId(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>

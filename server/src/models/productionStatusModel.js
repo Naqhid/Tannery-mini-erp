@@ -57,11 +57,12 @@ export async function createOrder(data, userId = null) {
   const balanceQty = Math.max(0, (parseFloat(data.issued_qty) || 0) - (parseFloat(data.completed_qty) || 0));
   const [result] = await pool.query(
     `INSERT INTO production_status_orders
-     (order_no, customer_name, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, remarks, created_by, updated_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     (order_no, customer_name, customer_id, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, remarks, production_plan_id, plan_date, created_by, updated_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       data.order_no || null,
       data.customer_name || null,
+      data.customer_id || null,
       data.article || null,
       data.color || null,
       data.process_stage || null,
@@ -71,6 +72,8 @@ export async function createOrder(data, userId = null) {
       data.uom || 'Pcs',
       data.status || 'In-Process',
       data.remarks || null,
+      data.production_plan_id || null,
+      data.plan_date || null,
       userId, userId
     ]
   );
@@ -81,12 +84,14 @@ export async function updateOrder(id, data, userId = null) {
   const balanceQty = Math.max(0, (parseFloat(data.issued_qty) || 0) - (parseFloat(data.completed_qty) || 0));
   const [result] = await pool.query(
     `UPDATE production_status_orders SET
-       order_no=?, customer_name=?, article=?, color=?, process_stage=?,
-       issued_qty=?, completed_qty=?, balance_qty=?, uom=?, status=?, remarks=?, updated_by=?
-     WHERE id=? AND deleted_at IS NULL`,
+       order_no=?, customer_name=?, customer_id=?, article=?, color=?, process_stage=?,
+       issued_qty=?, completed_qty=?, balance_qty=?, uom=?, status=?, remarks=?,
+       production_plan_id=?, plan_date=?, updated_by=?
+     WHERE id=? AND deleted_at IS NULL AND posted_at IS NULL`,
     [
       data.order_no || null,
       data.customer_name || null,
+      data.customer_id || null,
       data.article || null,
       data.color || null,
       data.process_stage || null,
@@ -96,6 +101,8 @@ export async function updateOrder(id, data, userId = null) {
       data.uom || 'Pcs',
       data.status || 'In-Process',
       data.remarks || null,
+      data.production_plan_id || null,
+      data.plan_date || null,
       userId, id
     ]
   );
@@ -115,18 +122,24 @@ export async function recalcOrderTotals(orderId) {
   const [[totals]] = await pool.query(
     `SELECT
        COALESCE(SUM(input_qty), 0) AS total_input,
-       COALESCE(SUM(output_qty), 0) AS total_output
+       COALESCE(SUM(output_qty), 0) AS total_output,
+       COALESCE(SUM(rejection_qty), 0) AS total_rejection
      FROM production_status_transactions
      WHERE production_status_order_id = ? AND deleted_at IS NULL`,
     [orderId]
   );
   const issuedQty = totals.total_input;
+  // Completed Qty = SUM(Output Qty)
   const completedQty = totals.total_output;
   const balanceQty = Math.max(0, issuedQty - completedQty);
 
   let status = 'In-Process';
   if (issuedQty === 0 && completedQty === 0) status = 'Pending';
   else if (balanceQty <= 0 && completedQty > 0) status = 'Completed';
+
+  // Don't overwrite status if already posted
+  const [[current]] = await pool.query('SELECT posted_at FROM production_status_orders WHERE id=?', [orderId]);
+  if (current && current.posted_at) return; // Don't modify posted records
 
   await pool.query(
     `UPDATE production_status_orders SET issued_qty=?, completed_qty=?, balance_qty=?, status=? WHERE id=?`,
@@ -159,6 +172,7 @@ export async function getTransactions({ production_status_order_id, page = 1, li
        COALESCE(SUM(t.opening_qty), 0) AS total_opening_qty,
        COALESCE(SUM(t.input_qty), 0) AS total_input_qty,
        COALESCE(SUM(t.output_qty), 0) AS total_output_qty,
+       COALESCE(SUM(t.rejection_qty), 0) AS total_rejection_qty,
        COALESCE(SUM(t.wip_qty), 0) AS total_wip_qty
      FROM production_status_transactions t WHERE ${where}`, params
   );
@@ -195,8 +209,8 @@ export async function createTransaction(data, userId = null) {
 
   const [result] = await pool.query(
     `INSERT INTO production_status_transactions
-     (production_status_order_id, transaction_no, production_date, opening_qty, input_qty, output_qty, wip_qty, uom, remarks, created_by, updated_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+     (production_status_order_id, transaction_no, production_date, opening_qty, input_qty, output_qty, rejection_qty, wip_qty, uom, remarks, created_by, updated_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       data.production_status_order_id,
       transactionNo,
@@ -204,7 +218,8 @@ export async function createTransaction(data, userId = null) {
       parseFloat(data.opening_qty) || 0,
       parseFloat(data.input_qty) || 0,
       parseFloat(data.output_qty) || 0,
-      parseFloat(data.wip_qty) || 0,
+      parseFloat(data.rejection_qty) || 0,
+      Math.max(0, (parseFloat(data.opening_qty)||0) + (parseFloat(data.input_qty)||0) - (parseFloat(data.output_qty)||0) - (parseFloat(data.rejection_qty)||0)),
       data.uom || 'Pcs',
       data.remarks || null,
       userId, userId
@@ -224,14 +239,15 @@ export async function updateTransaction(id, data, userId = null) {
 
   const [result] = await pool.query(
     `UPDATE production_status_transactions SET
-       production_date=?, opening_qty=?, input_qty=?, output_qty=?, wip_qty=?, remarks=?, updated_by=?
+       production_date=?, opening_qty=?, input_qty=?, output_qty=?, rejection_qty=?, wip_qty=?, remarks=?, updated_by=?
      WHERE id=? AND deleted_at IS NULL`,
     [
       data.production_date,
       parseFloat(data.opening_qty) || 0,
       parseFloat(data.input_qty) || 0,
       parseFloat(data.output_qty) || 0,
-      parseFloat(data.wip_qty) || 0,
+      parseFloat(data.rejection_qty) || 0,
+      Math.max(0, (parseFloat(data.opening_qty)||0) + (parseFloat(data.input_qty)||0) - (parseFloat(data.output_qty)||0) - (parseFloat(data.rejection_qty)||0)),
       data.remarks || null,
       userId, id
     ]
@@ -270,4 +286,22 @@ export async function getOrderDateSummary(orderId, date) {
     [date, date, orderId]
   );
   return row || { planned_qty: 0, output_qty: 0 };
+}
+
+/** Post a Daily Production order - locks it from further editing */
+export async function postOrder(id, userId = null) {
+  // Check if already posted
+  const [[existing]] = await pool.query(
+    'SELECT id, posted_at FROM production_status_orders WHERE id = ? AND deleted_at IS NULL', [id]
+  );
+  if (!existing) return false;
+  if (existing.posted_at) {
+    throw new Error('This record is already posted');
+  }
+
+  const [result] = await pool.query(
+    `UPDATE production_status_orders SET posted_at = NOW(), posted_by = ?, status = 'Posted', updated_by = ? WHERE id = ? AND deleted_at IS NULL`,
+    [userId, userId, id]
+  );
+  return result.affectedRows > 0;
 }

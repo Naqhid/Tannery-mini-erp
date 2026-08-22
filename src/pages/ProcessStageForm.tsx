@@ -13,9 +13,10 @@ export default function ProcessStageForm() {
         { key: 'code', label: 'Code', placeholder: 'Auto-generated', disabled: true },
         { key: 'name', label: 'Name', required: true, placeholder: 'Enter process stage name' },
         { key: 'seq', label: 'Sequence', placeholder: 'Display order' },
+        { key: 'uom', label: 'UOM', placeholder: 'e.g. Sq.Ft., Pcs, Kg' },
         { key: 'description', label: 'Description', type: 'textarea' },
       ]}
-      emptyData={{ code: '', name: '', seq: '', description: '', status: 'Active' }}
+      emptyData={{ code: '', name: '', seq: '', uom: '', description: '', status: 'Active' }}
     />
   );
 }

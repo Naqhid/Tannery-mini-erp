@@ -8,7 +8,7 @@ import { usePermission } from '../lib/usePermission';
 
 interface Customer { id: number; name: string; }
 interface SalesOrder { id: number; order_no: string; customer_id?: number; customer_name?: string; order_qty?: number; }
-interface ProcessStage { id: number; code: string; name: string; }
+interface ProcessStage { id: number; code: string; name: string; uom?: string; }
 
 interface PlanData {
   id?: number;
@@ -124,7 +124,7 @@ export default function ProductionPlanDetail() {
           seq: s.seq || 1,
           stage_id: String(s.stage_id || ''),
           stage_name: s.stage_name || s.process_stage_name || '',
-          uom: 'Pcs',
+          uom: s.stage_uom || s.uom || '',
           planned_qty: String(s.planned_qty || '0'),
           issue_input_qty: String(s.issue_input_qty || '0'),
           output_qty: String(s.output_qty || '0'),
@@ -163,7 +163,7 @@ export default function ProductionPlanDetail() {
   const addStage = () => {
     setStages((prev) => [...prev, {
       _key: genKey(), seq: prev.length + 1, stage_id: '', stage_name: '',
-      uom: 'Pcs', planned_qty: '0', issue_input_qty: '0', output_qty: '0',
+      uom: '', planned_qty: '0', issue_input_qty: '0', output_qty: '0',
       rejection_qty: '0', wip_qty: 0, status: 'In-Process',
     }]);
   };
@@ -174,12 +174,16 @@ export default function ProductionPlanDetail() {
       const updated = { ...s, [field]: value };
       if (field === 'stage_id') {
         const ps = processStages.find((p) => String(p.id) === value);
-        if (ps) updated.stage_name = ps.name;
+        if (ps) {
+          updated.stage_name = ps.name;
+          updated.uom = ps.uom || '';
+        }
       }
-      // Recalculate WIP = planned - output
+      // Recalculate WIP = planned - output - rejection
       const pQty = parseFloat(updated.planned_qty) || 0;
       const oQty = parseFloat(updated.output_qty) || 0;
-      updated.wip_qty = Math.max(0, pQty - oQty);
+      const rQty = parseFloat(updated.rejection_qty) || 0;
+      updated.wip_qty = Math.max(0, pQty - oQty - rQty);
       return updated;
     }));
   };
@@ -366,7 +370,7 @@ export default function ProductionPlanDetail() {
       {/* Stage Wise Plan and Tracking */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-700">Stage Wise Plan and Tracking (Pieces)</h2>
+          <h2 className="text-sm font-bold text-gray-700">Stage Wise Plan and Tracking</h2>
           <button onClick={addStage} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-all">
             <Plus size={13} /> Add Stage
           </button>
@@ -378,11 +382,11 @@ export default function ProductionPlanDetail() {
                 <th className="py-3 px-3 text-[11px] font-bold uppercase text-center w-10">#</th>
                 <th className="py-3 px-3 text-[11px] font-bold uppercase text-left">Process Stage</th>
                 <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">UOM</th>
-                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Plan Qty<br />(Pcs)</th>
-                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Issue / Input Qty<br />(Pcs)</th>
-                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Output Qty<br />(Pcs)</th>
-                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Rejection Qty<br />(Pcs)</th>
-                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">WIP Qty<br />(Pcs)</th>
+                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Plan Qty</th>
+                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Issue / Input Qty</th>
+                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Output Qty</th>
+                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Rejection Qty</th>
+                <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">WIP Qty</th>
                 <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Status</th>
                 <th className="py-3 px-3 text-[11px] font-bold uppercase text-center">Action</th>
               </tr>
@@ -401,22 +405,22 @@ export default function ProductionPlanDetail() {
                       {processStages.map((ps) => <option key={ps.id} value={String(ps.id)}>{ps.name}</option>)}
                     </select>
                   </td>
-                  <td className="py-3 px-3 text-center text-xs text-gray-600">Pcs</td>
+                  <td className="py-3 px-3 text-center text-xs text-gray-600 font-medium">{stage.uom || '—'}</td>
                   <td className="py-3 px-3">
                     <input type="number" value={stage.planned_qty} onChange={(e) => updateStage(stage._key, 'planned_qty', e.target.value)}
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                   </td>
                   <td className="py-3 px-3">
-                    <input type="number" value={stage.issue_input_qty} onChange={(e) => updateStage(stage._key, 'issue_input_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                    <input type="number" value={stage.issue_input_qty} readOnly
+                      className="w-full px-2 py-1.5 text-xs border border-gray-100 rounded-lg text-center min-w-[80px] bg-gray-50 text-gray-600" />
                   </td>
                   <td className="py-3 px-3">
-                    <input type="number" value={stage.output_qty} onChange={(e) => updateStage(stage._key, 'output_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                    <input type="number" value={stage.output_qty} readOnly
+                      className="w-full px-2 py-1.5 text-xs border border-gray-100 rounded-lg text-center min-w-[80px] bg-gray-50 text-gray-600" />
                   </td>
                   <td className="py-3 px-3">
-                    <input type="number" value={stage.rejection_qty} onChange={(e) => updateStage(stage._key, 'rejection_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                    <input type="number" value={stage.rejection_qty} readOnly
+                      className="w-full px-2 py-1.5 text-xs border border-gray-100 rounded-lg text-center min-w-[80px] bg-gray-50 text-gray-600" />
                   </td>
                   <td className="py-3 px-3 text-center text-xs font-bold text-amber-700">{fmt(stage.wip_qty)}</td>
                   <td className="py-3 px-3 text-center">
@@ -453,21 +457,21 @@ export default function ProductionPlanDetail() {
             <div className="flex items-center gap-2">
               <div className="w-1 h-8 bg-blue-500 rounded-full" />
               <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total Plan Qty (Pcs)</p>
+                <p className="text-[10px] text-gray-500 uppercase">Total Plan Qty</p>
                 <p className="text-sm font-black text-gray-900">{fmt(totalPlanQty)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1 h-8 bg-amber-500 rounded-full" />
               <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total WIP Qty (Pcs)</p>
+                <p className="text-[10px] text-gray-500 uppercase">Total WIP Qty</p>
                 <p className="text-sm font-black text-gray-900">{fmt(totalWipQty)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1 h-8 bg-emerald-500 rounded-full" />
               <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total Output Qty (Pcs)</p>
+                <p className="text-[10px] text-gray-500 uppercase">Total Output Qty</p>
                 <p className="text-sm font-black text-gray-900">{fmt(totalOutputQty)}</p>
               </div>
             </div>
@@ -481,7 +485,7 @@ export default function ProductionPlanDetail() {
             <div className="flex items-center gap-2">
               <div className="w-1 h-8 bg-rose-500 rounded-full" />
               <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total Rejection Qty (Pcs)</p>
+                <p className="text-[10px] text-gray-500 uppercase">Total Rejection Qty</p>
                 <p className="text-sm font-black text-gray-900">{fmt(totalRejectionQty)}</p>
               </div>
             </div>

@@ -6,6 +6,7 @@ export default function ProcessStage() {
     { key: 'code', header: 'Code' },
     { key: 'name', header: 'Name' },
     { key: 'seq', header: 'Sequence' },
+    { key: 'uom', header: 'UOM' },
     { key: 'status', header: 'Status' },
   ];
 
@@ -13,6 +14,7 @@ export default function ProcessStage() {
     { key: 'code', label: 'Code', required: false, placeholder: 'Auto-generated' },
     { key: 'name', label: 'Name', required: true },
     { key: 'seq', label: 'Sequence', type: 'text' as const, placeholder: 'Display order' },
+    { key: 'uom', label: 'UOM', type: 'text' as const, placeholder: 'e.g. Sq.Ft., Pcs, Kg' },
     { key: 'description', label: 'Description', type: 'textarea' as const, gridCol: false },
   ];
 
@@ -20,6 +22,7 @@ export default function ProcessStage() {
     { key: 'code', header: 'Code' },
     { key: 'name', header: 'Name' },
     { key: 'seq', header: 'Sequence' },
+    { key: 'uom', header: 'UOM' },
     { key: 'status', header: 'Status' },
   ];
 
@@ -32,7 +35,7 @@ export default function ProcessStage() {
       apiEndpoint="/process-stages"
       columns={columns}
       formFields={formFields}
-      emptyData={{ code: '', name: '', seq: 0, description: '', status: 'Active' }}
+      emptyData={{ code: '', name: '', seq: 0, uom: '', description: '', status: 'Active' }}
       exportColumns={exportColumns}
       pdfAccentColor={[59, 130, 246]}
       modalSize="max-w-2xl"

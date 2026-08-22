@@ -10,6 +10,7 @@ router.get('/orders', validatePagination, ctrl.listOrders);
 router.get('/orders/:id', validateId, ctrl.getOrder);
 router.get('/orders/:id/date-summary', validateId, ctrl.dateSummary);
 router.post('/orders', requireWriteAccess, ctrl.createOrder);
+router.post('/orders/:id/post', validateId, requireWriteAccess, ctrl.postOrder);
 router.put('/orders/:id', validateId, requireWriteAccess, ctrl.updateOrder);
 router.delete('/orders/:id', validateId, requireWriteAccess, ctrl.deleteOrder);
 

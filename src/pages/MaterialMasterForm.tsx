@@ -297,15 +297,6 @@ export default function MaterialMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">3. Inventory</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Input label="Opening Stock Quantity" type="number" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} placeholder="0" />
-          <Select label="Opening Stock UOM" options={[{ value: '', label: 'Same as Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.opening_stock_uom} onChange={(e) => update('opening_stock_uom', e.target.value)} />
-          <Input label="Average Rate" type="number" value={form.standard_cost} onChange={(e) => update('standard_cost', e.target.value)} placeholder="0.00" />
-          <div>
-            <label className="block text-xs font-medium text-gray-900 mb-1">Opening Stock Value</label>
-            <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-medium">
-              {(parseFloat(form.opening_stock || '0') * parseFloat(form.standard_cost || '0')).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-          </div>
           <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map(w => ({ value: w.name, label: w.name }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} />
           <Input label="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
           <Input label="Maximum Level" type="number" value={form.maximum_level} onChange={(e) => update('maximum_level', e.target.value)} placeholder="0.00" />
