@@ -119,19 +119,30 @@ export default function ProductionPlanDetail() {
         status: d.status || 'Draft',
       });
       if (d.stages && d.stages.length > 0) {
-        setStages(d.stages.map((s: any) => ({
-          _key: genKey(),
-          seq: s.seq || 1,
-          stage_id: String(s.stage_id || ''),
-          stage_name: s.stage_name || s.process_stage_name || '',
-          uom: s.stage_uom || s.uom || '',
-          planned_qty: String(s.planned_qty || '0'),
-          issue_input_qty: String(s.issue_input_qty || '0'),
-          output_qty: String(s.output_qty || '0'),
-          rejection_qty: String(s.rejection_qty || '0'),
-          wip_qty: parseFloat(s.wip_qty) || 0,
-          status: s.status || 'In-Process',
-        })));
+        setStages(d.stages.map((s: any) => {
+          const pQty = parseFloat(s.planned_qty) || 0;
+          const oQty = parseFloat(s.output_qty) || 0;
+          const iQty = parseFloat(s.issue_input_qty) || 0;
+          const rQty = parseFloat(s.rejection_qty) || 0;
+          let stageStatus = 'Pending';
+          if (pQty === 0) stageStatus = 'Pending';
+          else if (oQty >= pQty) stageStatus = 'Completed';
+          else if (oQty > 0) stageStatus = 'In Progress';
+          else stageStatus = 'Planned';
+          return {
+            _key: genKey(),
+            seq: s.seq || 1,
+            stage_id: String(s.stage_id || ''),
+            stage_name: s.stage_name || s.process_stage_name || '',
+            uom: s.stage_uom || s.uom || '',
+            planned_qty: String(s.planned_qty || '0'),
+            issue_input_qty: String(s.issue_input_qty || '0'),
+            output_qty: String(s.output_qty || '0'),
+            rejection_qty: String(s.rejection_qty || '0'),
+            wip_qty: Math.max(0, iQty - oQty - rQty),
+            status: stageStatus,
+          };
+        }));
       }
     } catch { toast.error('Failed to load plan'); navigate('/production-plan'); }
     finally { setLoading(false); }
@@ -179,11 +190,22 @@ export default function ProductionPlanDetail() {
           updated.uom = ps.uom || '';
         }
       }
-      // Recalculate WIP = planned - output - rejection
-      const pQty = parseFloat(updated.planned_qty) || 0;
+      // Recalculate WIP = Input - Output - Rejection
+      const iQty = parseFloat(updated.issue_input_qty) || 0;
       const oQty = parseFloat(updated.output_qty) || 0;
       const rQty = parseFloat(updated.rejection_qty) || 0;
-      updated.wip_qty = Math.max(0, pQty - oQty - rQty);
+      const pQty = parseFloat(updated.planned_qty) || 0;
+      updated.wip_qty = Math.max(0, iQty - oQty - rQty);
+      // Auto-calculate status based on production progress
+      if (pQty === 0) {
+        updated.status = 'Pending';
+      } else if (oQty >= pQty) {
+        updated.status = 'Completed';
+      } else if (oQty > 0) {
+        updated.status = 'In Progress';
+      } else {
+        updated.status = 'Planned';
+      }
       return updated;
     }));
   };
@@ -322,14 +344,6 @@ export default function ProductionPlanDetail() {
             <label className="block text-xs font-medium text-gray-600 mb-1">Color <span className="text-rose-500">*</span></label>
             <input type="text" value={plan.color} onChange={(e) => update('color', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="e.g. Black" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Expected Yield (%)</label>
-            <input type="number" value={plan.expected_yield} onChange={(e) => update('expected_yield', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="92.00" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Planner</label>
-            <input type="text" value={plan.planner} onChange={(e) => update('planner', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="e.g. Ravi Kumar" />
-          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
@@ -448,78 +462,31 @@ export default function ProductionPlanDetail() {
         </div>
       </div>
 
-      {/* Summary & Notes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Summary */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">Summary</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-8 bg-blue-500 rounded-full" />
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total Plan Qty</p>
-                <p className="text-sm font-black text-gray-900">{fmt(totalPlanQty)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-8 bg-amber-500 rounded-full" />
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total WIP Qty</p>
-                <p className="text-sm font-black text-gray-900">{fmt(totalWipQty)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-8 bg-emerald-500 rounded-full" />
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total Output Qty</p>
-                <p className="text-sm font-black text-gray-900">{fmt(totalOutputQty)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-8 bg-indigo-500 rounded-full" />
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase">Measurement Completed (Sq.Ft.)</p>
-                <p className="text-sm font-black text-gray-900">{fmtCurrency(completedQty)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-8 bg-rose-500 rounded-full" />
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase">Total Rejection Qty</p>
-                <p className="text-sm font-black text-gray-900">{fmt(totalRejectionQty)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-8 bg-violet-500 rounded-full" />
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase">Order Balance (Sq.Ft.)</p>
-                <p className="text-sm font-black text-blue-700">{fmtCurrency(balanceQty)}</p>
-              </div>
+      {/* Summary */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <h3 className="text-sm font-bold text-gray-700 mb-4">Summary</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-12 bg-blue-500 rounded-full" />
+            <div>
+              <p className="text-[11px] text-gray-500 uppercase font-medium">Sale Order Qty</p>
+              <p className="text-xl font-black text-gray-900">{fmtCurrency(salesOrderQty)}</p>
             </div>
           </div>
-        </div>
-
-        {/* Notes */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">Notes</h3>
-          <ul className="space-y-2 text-xs text-gray-600">
-            <li className="flex items-start gap-2">
-              <span className="mt-1 w-1.5 h-1.5 bg-gray-400 rounded-full shrink-0" />
-              Plan quantities are in Pieces. Sales Order quantity is in Sq.Ft. (for reference only).
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-1 w-1.5 h-1.5 bg-gray-400 rounded-full shrink-0" />
-              Issue/Input qty is captured from Material Issue / Production Input.
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-1 w-1.5 h-1.5 bg-gray-400 rounded-full shrink-0" />
-              Output qty is captured from Production Output at each stage.
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-1 w-1.5 h-1.5 bg-gray-400 rounded-full shrink-0" />
-              Measurement in Sq.Ft. is captured in Packing / Measurement stage.
-            </li>
-          </ul>
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-12 bg-emerald-500 rounded-full" />
+            <div>
+              <p className="text-[11px] text-gray-500 uppercase font-medium">Completed Qty</p>
+              <p className="text-xl font-black text-emerald-700">{fmtCurrency(completedQty)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-12 bg-amber-500 rounded-full" />
+            <div>
+              <p className="text-[11px] text-gray-500 uppercase font-medium">Balance Qty</p>
+              <p className="text-xl font-black text-amber-700">{fmtCurrency(balanceQty)}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

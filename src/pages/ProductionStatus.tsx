@@ -34,8 +34,9 @@ type SortOrder = 'asc' | 'desc';
 const STATUS_COLORS: Record<string, string> = {
   Completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   'In-Process': 'bg-blue-50 text-blue-700 border border-blue-200',
+  'In Progress': 'bg-blue-50 text-blue-700 border border-blue-200',
   Pending: 'bg-amber-50 text-amber-700 border border-amber-200',
-  Posted: 'bg-violet-50 text-violet-700 border border-violet-200',
+  Planned: 'bg-slate-50 text-slate-700 border border-slate-200',
 };
 
 export default function ProductionStatus() {
@@ -189,28 +190,28 @@ export default function ProductionStatus() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th onClick={() => handleSort('order_no')} className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                  <th onClick={() => handleSort('order_no')} className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
                   </th>
-                  <th onClick={() => handleSort('article')} className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                  <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Customer</th>
+                  <th onClick={() => handleSort('article')} className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
                   </th>
-                  <th onClick={() => handleSort('color')} className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
+                  <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stage</th>
+                  <th onClick={() => handleSort('issued_qty')} className="px-3 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                    <span className="inline-flex items-center gap-1 justify-end">Input <SortIcon field="issued_qty" /></span>
                   </th>
-                  <th onClick={() => handleSort('issued_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Planned Qty <SortIcon field="issued_qty" /></span>
+                  <th onClick={() => handleSort('completed_qty')} className="px-3 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                    <span className="inline-flex items-center gap-1 justify-end">Output <SortIcon field="completed_qty" /></span>
                   </th>
-                  <th onClick={() => handleSort('completed_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Completed Qty <SortIcon field="completed_qty" /></span>
+                  <th className="px-3 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Rejection</th>
+                  <th onClick={() => handleSort('balance_qty')} className="px-3 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                    <span className="inline-flex items-center gap-1 justify-end">WIP <SortIcon field="balance_qty" /></span>
                   </th>
-                  <th onClick={() => handleSort('balance_qty')} className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Balance Qty <SortIcon field="balance_qty" /></span>
-                  </th>
-                  <th onClick={() => handleSort('status')} className="px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                  <th onClick={() => handleSort('status')} className="px-3 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span>
                   </th>
-                  <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-3 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -220,20 +221,20 @@ export default function ProductionStatus() {
                     className={`transition-colors hover:bg-blue-50/60 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
                     onClick={() => navigate(`/production-status/${row.id}`)}
                   >
-                    <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.color || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.issued_qty)}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
-                    <td className="px-4 py-3.5 text-sm text-right tabular-nums">
-                      <span className={`font-semibold ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{formatNumber(row.balance_qty)}</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-center">
+                    <td className="px-3 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-700">{(row as any).customer_name || '—'}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-600">{(row as any).process_stage || '—'}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.issued_qty)}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
+                    <td className="px-3 py-3.5 text-sm text-rose-600 font-semibold text-right tabular-nums">{formatNumber((row as any).rejection_qty || 0)}</td>
+                    <td className="px-3 py-3.5 text-sm text-amber-700 font-semibold text-right tabular-nums">{formatNumber(row.balance_qty)}</td>
+                    <td className="px-3 py-3.5 text-center">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
                         {row.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 text-center">
+                    <td className="px-3 py-3.5 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={(e) => { e.stopPropagation(); navigate(`/production-status/${row.id}`); }}
                           className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors" title="Edit">
