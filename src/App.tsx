@@ -58,6 +58,7 @@ import WarehouseMaster from './pages/WarehouseMaster';
 import WarehouseMasterForm from './pages/WarehouseMasterForm';
 import LocationRack from './pages/LocationRack';
 import LocationRackForm from './pages/LocationRackForm';
+import MonthlyBatchProcess from './pages/MonthlyBatchProcess';
 import StockOpeningEntry from './pages/StockOpeningEntry';
 import StockOpeningEntryDetail from './pages/StockOpeningEntryDetail';
 import MaterialReceiptEntry from './pages/MaterialReceiptEntry';
@@ -210,6 +211,7 @@ function App() {
             <Route path="material-issue" element={<MaterialIssueToBatch />} />
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
+            <Route path="monthly-batch-process" element={<MonthlyBatchProcess />} />
             {/* Purchase */}
             <Route path="supplier-pricing-history" element={<SupplierPricingHistory />} />
             <Route path="supplier-pricing-history/new" element={<AddNewPrice />} />

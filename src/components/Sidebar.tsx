@@ -97,6 +97,7 @@ export const menuItems: MenuItem[] = [
       { label: 'Physical Stock Entry', icon: <ClipboardList size={16} />, path: '/physical-stock-entry' },
       { label: 'Stock Transfer Entry', icon: <ArrowLeftRight size={16} />, path: '/stock-transfer' },
       { label: 'Material Issue to Production', icon: <Factory size={16} />, path: '/material-issue' },
+      { label: 'Monthly Batch Process', icon: <ClipboardList size={16} />, path: '/monthly-batch-process' },
     ],
   },
   { label: 'Production', icon: <Factory size={20} />, children: [
