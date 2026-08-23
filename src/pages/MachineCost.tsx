@@ -153,7 +153,7 @@ export default function MachineCost() {
 
           <div className="relative w-full sm:w-auto">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search customer, order no..." value={searchInput} onChange={e => setSearchInput(e.target.value)}
+            <input type="text" placeholder="Search customer, plan no..." value={searchInput} onChange={e => setSearchInput(e.target.value)}
               className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-64 md:w-72 focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-colors" />
           </div>
         </div>
@@ -171,7 +171,7 @@ export default function MachineCost() {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
+                    <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
                   </th>
                   <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
