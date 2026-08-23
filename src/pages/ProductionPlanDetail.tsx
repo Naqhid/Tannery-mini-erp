@@ -20,8 +20,6 @@ interface PlanData {
   color: string;
   order_qty: string;
   sales_order_qty: string;
-  expected_yield: string;
-  planner: string;
   completed_qty: string;
   remarks: string;
   status: string;
@@ -44,14 +42,15 @@ interface StageItem {
 const emptyPlan: PlanData = {
   plan_no: '', plan_date: new Date().toISOString().split('T')[0],
   sales_order_id: '', customer_id: '', article: '', color: '',
-  order_qty: '', sales_order_qty: '', expected_yield: '92.00',
-  planner: '', completed_qty: '0', remarks: '', status: 'Draft',
+  order_qty: '', sales_order_qty: '',
+  completed_qty: '0', remarks: '', status: 'Pending',
 };
 
-const STATUSES = ['Draft', 'In-Process', 'Completed', 'On Hold', 'Cancelled'];
+const STATUSES = ['Pending', 'Planned', 'In Progress', 'Completed'];
 const STATUS_COLORS: Record<string, string> = {
-  Draft: 'bg-slate-100 text-slate-700',
-  'In-Process': 'bg-amber-100 text-amber-700',
+  Pending: 'bg-slate-100 text-slate-700',
+  Planned: 'bg-blue-100 text-blue-700',
+  'In Progress': 'bg-amber-100 text-amber-700',
   Completed: 'bg-emerald-100 text-emerald-700',
   'On Hold': 'bg-violet-100 text-violet-700',
   Cancelled: 'bg-rose-100 text-rose-600',
@@ -112,11 +111,9 @@ export default function ProductionPlanDetail() {
         color: d.color || '',
         order_qty: String(d.order_qty || ''),
         sales_order_qty: String(d.sales_order_qty || d.order_qty || ''),
-        expected_yield: String(d.expected_yield || '92.00'),
-        planner: d.planner || '',
         completed_qty: String(d.completed_qty || '0'),
         remarks: d.remarks || '',
-        status: d.status || 'Draft',
+        status: d.status || 'Pending',
       });
       if (d.stages && d.stages.length > 0) {
         setStages(d.stages.map((s: any) => {
@@ -175,7 +172,7 @@ export default function ProductionPlanDetail() {
     setStages((prev) => [...prev, {
       _key: genKey(), seq: prev.length + 1, stage_id: '', stage_name: '',
       uom: '', planned_qty: '0', issue_input_qty: '0', output_qty: '0',
-      rejection_qty: '0', wip_qty: 0, status: 'In-Process',
+      rejection_qty: '0', wip_qty: 0, status: 'Pending',
     }]);
   };
 
@@ -321,31 +318,19 @@ export default function ProductionPlanDetail() {
             <input type="text" value={plan.plan_no} readOnly className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Article <span className="text-rose-500">*</span></label>
-            <input type="text" value={plan.article} onChange={(e) => update('article', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="e.g. Buffalo Napa" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Balance Qty (Sq.Ft.)</label>
-            <input type="text" value={fmtCurrency(balanceQty)} readOnly className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg bg-blue-50 text-blue-800 font-bold" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-            <select value={plan.status} onChange={(e) => update('status', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Plan Date <span className="text-rose-500">*</span></label>
             <input type="date" value={plan.plan_date} onChange={(e) => update('plan_date', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Article <span className="text-rose-500">*</span></label>
+            <input type="text" value={plan.article} onChange={(e) => update('article', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="e.g. Buffalo Napa" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Color <span className="text-rose-500">*</span></label>
             <input type="text" value={plan.color} onChange={(e) => update('color', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="e.g. Black" />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Customer <span className="text-rose-500">*</span></label>
             <SearchableSelect
@@ -364,11 +349,11 @@ export default function ProductionPlanDetail() {
             <input type="number" value={plan.completed_qty} onChange={(e) => update('completed_qty', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Remarks</label>
-            <input type="text" value={plan.remarks} onChange={(e) => update('remarks', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="e.g. Urgent order" />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Balance Qty (Sq.Ft.)</label>
+            <input type="text" value={fmtCurrency(balanceQty)} readOnly className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg bg-blue-50 text-blue-800 font-bold" />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Order No.</label>
             <SearchableSelect
@@ -377,6 +362,16 @@ export default function ProductionPlanDetail() {
               onChange={handleOrderChange}
               placeholder="Search order..."
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+            <select value={plan.status} onChange={(e) => update('status', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
+              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Remarks</label>
+            <input type="text" value={plan.remarks} onChange={(e) => update('remarks', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="e.g. Urgent order" />
           </div>
         </div>
       </div>

@@ -226,7 +226,7 @@ export async function create(data, items = [], stages = [], createdBy = null) {
       );
     }
 
-    // Insert stages
+    // Insert stages and auto-create Daily Production entries
     for (const stage of stages) {
       await conn.query(
         `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, issue_input_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
@@ -247,6 +247,55 @@ export async function create(data, items = [], stages = [], createdBy = null) {
           parseFloat(stage.wip_qty) || 0,
           stage.status || 'In-Process',
           stage.remarks || null,
+        ]
+      );
+
+      // Auto-create Daily Production entry for this plan+stage if stage has a name
+      if (stage.stage_name || stage.stage_id) {
+        const stageName = stage.stage_name || '';
+        // Check if a Daily Production entry already exists for this plan+stage
+        const [[existing]] = await conn.query(
+          `SELECT id FROM production_status_orders WHERE production_plan_id=? AND process_stage=? AND deleted_at IS NULL`,
+          [planId, stageName]
+        );
+        if (!existing) {
+          // Fetch customer name
+          let customerName = '';
+          if (data.customer_id) {
+            const [[cust]] = await conn.query('SELECT name FROM customers WHERE id=?', [data.customer_id]);
+            if (cust) customerName = cust.name;
+          }
+          await conn.query(
+            `INSERT INTO production_status_orders
+             (order_no, production_plan_id, plan_date, customer_name, customer_id, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, created_by, updated_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [
+              plan_no, planId, data.plan_date || null,
+              customerName, data.customer_id || null,
+              data.article || null, data.color || null, stageName,
+              0, 0, 0, 'Pcs', 'Pending', createdBy, createdBy,
+            ]
+          );
+        }
+      }
+    }
+
+    // If no stages but plan was created, create a single Daily Production entry
+    if (stages.length === 0) {
+      let customerName = '';
+      if (data.customer_id) {
+        const [[cust]] = await conn.query('SELECT name FROM customers WHERE id=?', [data.customer_id]);
+        if (cust) customerName = cust.name;
+      }
+      await conn.query(
+        `INSERT INTO production_status_orders
+         (order_no, production_plan_id, plan_date, customer_name, customer_id, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, created_by, updated_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          plan_no, planId, data.plan_date || null,
+          customerName, data.customer_id || null,
+          data.article || null, data.color || null, null,
+          0, 0, 0, 'Pcs', 'Pending', createdBy, createdBy,
         ]
       );
     }
@@ -310,8 +359,18 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
       );
     }
 
-    // Re-insert stages
+    // Re-insert stages and ensure Daily Production entries exist
     await conn.query(`DELETE FROM production_plan_stages WHERE plan_id = ?`, [id]);
+
+    // Get plan header info for Daily Production entries
+    const [[planHeader]] = await conn.query('SELECT plan_no, plan_date, customer_id, article, color FROM production_plans WHERE id=?', [id]);
+    let customerName = '';
+    if (data.customer_id || planHeader?.customer_id) {
+      const custId = data.customer_id || planHeader?.customer_id;
+      const [[cust]] = await conn.query('SELECT name FROM customers WHERE id=?', [custId]);
+      if (cust) customerName = cust.name;
+    }
+
     for (const stage of stages) {
       await conn.query(
         `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, issue_input_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
@@ -334,6 +393,28 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
           stage.remarks || null,
         ]
       );
+
+      // Auto-create Daily Production entry for this plan+stage if not exists
+      if (stage.stage_name || stage.stage_id) {
+        const stageName = stage.stage_name || '';
+        const [[existing]] = await conn.query(
+          `SELECT id FROM production_status_orders WHERE production_plan_id=? AND process_stage=? AND deleted_at IS NULL`,
+          [id, stageName]
+        );
+        if (!existing) {
+          await conn.query(
+            `INSERT INTO production_status_orders
+             (order_no, production_plan_id, plan_date, customer_name, customer_id, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, created_by, updated_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [
+              planHeader?.plan_no || null, id, data.plan_date || planHeader?.plan_date || null,
+              customerName, data.customer_id || planHeader?.customer_id || null,
+              data.article || planHeader?.article || null, data.color || planHeader?.color || null, stageName,
+              0, 0, 0, 'Pcs', 'Pending', updatedBy, updatedBy,
+            ]
+          );
+        }
+      }
     }
 
     await conn.commit();

@@ -127,26 +127,6 @@ export default function MonthlyBatchProcess() {
       {/* Date Selection */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">From Date</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              disabled={running}
-              className="px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 min-w-[180px]"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">To Date</label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              disabled={running}
-              className="px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 min-w-[180px]"
-            />
-          </div>
           <button
             onClick={handleExecute}
             disabled={running || !fromDate || !toDate}

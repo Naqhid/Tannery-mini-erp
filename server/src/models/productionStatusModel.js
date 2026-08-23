@@ -4,7 +4,7 @@ import pool from '../config/db.js';
 
 export async function getOrders({ process_stage, show_completed, status_filter, search, has_transactions, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
-  let where = 'o.deleted_at IS NULL';
+  let where = 'o.deleted_at IS NULL AND o.production_plan_id IS NOT NULL';
 
   if (process_stage && process_stage !== 'All') {
     where += ' AND o.process_stage = ?';
@@ -70,7 +70,7 @@ export async function createOrder(data, userId = null) {
       parseFloat(data.completed_qty) || 0,
       balanceQty,
       data.uom || 'Pcs',
-      data.status || 'In-Process',
+      data.status || 'Pending',
       data.remarks || null,
       data.production_plan_id || null,
       data.plan_date || null,
@@ -99,7 +99,7 @@ export async function updateOrder(id, data, userId = null) {
       parseFloat(data.completed_qty) || 0,
       balanceQty,
       data.uom || 'Pcs',
-      data.status || 'In-Process',
+      data.status || 'Pending',
       data.remarks || null,
       data.production_plan_id || null,
       data.plan_date || null,
@@ -129,13 +129,14 @@ export async function recalcOrderTotals(orderId) {
     [orderId]
   );
   const issuedQty = totals.total_input;
-  // Completed Qty = SUM(Output Qty)
   const completedQty = totals.total_output;
-  const balanceQty = Math.max(0, issuedQty - completedQty);
-
-  let status = 'In-Process';
-  if (issuedQty === 0 && completedQty === 0) status = 'Pending';
-  else if (balanceQty <= 0 && completedQty > 0) status = 'Completed';
+  const [[plan]] = await pool.query(`SELECT COALESCE(SUM(planned_qty),0) AS planned_qty FROM production_plan_stages WHERE plan_id=(SELECT production_plan_id FROM production_status_orders WHERE id=? LIMIT 1)`, [orderId]);
+  const plannedQty = Number(plan?.planned_qty || 0);
+  const balanceQty = Math.max(0, plannedQty - completedQty);
+  let status = 'Pending';
+  if (plannedQty > 0 && completedQty === 0) status = 'Planned';
+  else if (completedQty > 0 && completedQty < plannedQty) status = 'In Progress';
+  else if (plannedQty > 0 && completedQty >= plannedQty) status = 'Completed';
 
   // Don't overwrite status if already posted
   const [[current]] = await pool.query('SELECT posted_at FROM production_status_orders WHERE id=?', [orderId]);
@@ -206,6 +207,12 @@ export async function getNextTransactionNo() {
 
 export async function createTransaction(data, userId = null) {
   const transactionNo = data.transaction_no || await getNextTransactionNo();
+  const opening = Number(data.opening_qty || 0);
+  const input = Number(data.input_qty || 0);
+  const output = Number(data.output_qty || 0);
+  const rejection = Number(data.rejection_qty || 0);
+  if (output > input) throw new Error('Output Qty cannot be greater than Input Qty');
+  if (rejection > output) throw new Error('Rejection Qty cannot be greater than Output Qty');
 
   const [result] = await pool.query(
     `INSERT INTO production_status_transactions
@@ -233,6 +240,11 @@ export async function createTransaction(data, userId = null) {
 }
 
 export async function updateTransaction(id, data, userId = null) {
+  const input = Number(data.input_qty || 0);
+  const output = Number(data.output_qty || 0);
+  const rejection = Number(data.rejection_qty || 0);
+  if (output > input) throw new Error('Output Qty cannot be greater than Input Qty');
+  if (rejection > output) throw new Error('Rejection Qty cannot be greater than Output Qty');
   // Get the order id before update
   const [[existing]] = await pool.query('SELECT production_status_order_id FROM production_status_transactions WHERE id = ?', [id]);
   if (!existing) return false;

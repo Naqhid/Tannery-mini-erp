@@ -15,13 +15,13 @@ function createMasterRoutes(controller) {
   router.post('/bulk-delete', requireWriteAccess, controller.bulkDelete);
   router.post('/bulk-status', requireWriteAccess, controller.bulkStatus);
   router.post('/bulk-archive', requireWriteAccess, controller.bulkArchive);
-  router.get('/:id', validateId, controller.getOne);
-  router.get('/:id/audit', validateId, controller.audit);
   router.post('/', requireWriteAccess, controller.create);
   router.post('/:id/duplicate', validateId, requireWriteAccess, controller.duplicateRecord);
+  router.post('/:id/restore', validateId, requireWriteAccess, controller.restore);
+  router.get('/:id/audit', validateId, controller.audit);
+  router.get('/:id', validateId, controller.getOne);
   router.put('/:id', validateId, requireWriteAccess, controller.update);
   router.delete('/:id', validateId, requireWriteAccess, controller.remove);
-  router.post('/:id/restore', validateId, requireWriteAccess, controller.restore);
   router.delete('/:id/permanent', validateId, requireWriteAccess, controller.permanentDelete);
 
   return router;
@@ -61,10 +61,11 @@ export const taxMasterRoutes = createMasterRoutes(ctrl.taxMasterController);
 export const processStageRoutes = createMasterRoutes(ctrl.processStageController);
 
 // Group Master routes
-export const groupMasterRoutes = createMasterRoutes(ctrl.groupMasterController);
-
-// Override group master list to include category_name
-const originalGroupList = groupMasterRoutes.stack.find(r => r.route?.path === '/' && r.route?.methods?.get);
+export const groupMasterRoutes = Router();
+// Register custom group routes FIRST (before /:id)
+groupMasterRoutes.get('/', validatePagination, ctrl.groupMasterController.list);
+groupMasterRoutes.get('/dropdown', ctrl.groupMasterController.dropdown);
+groupMasterRoutes.get('/stats', ctrl.groupMasterController.stats);
 groupMasterRoutes.get('/with-category', validatePagination, async (req, res, next) => {
   try {
     const { search, status, sortBy, sortOrder } = req.query;
@@ -90,8 +91,6 @@ groupMasterRoutes.get('/with-category', validatePagination, async (req, res, nex
     res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (err) { next(err); }
 });
-
-// Add a filtered dropdown endpoint for group master (filter by category_id)
 groupMasterRoutes.get('/dropdown/by-category/:categoryId', async (req, res, next) => {
   try {
     const categoryId = req.params.categoryId;
@@ -102,6 +101,18 @@ groupMasterRoutes.get('/dropdown/by-category/:categoryId', async (req, res, next
     res.json({ data: rows });
   } catch (err) { next(err); }
 });
+groupMasterRoutes.post('/check-duplicate', ctrl.groupMasterController.checkDuplicate);
+groupMasterRoutes.post('/bulk-delete', requireWriteAccess, ctrl.groupMasterController.bulkDelete);
+groupMasterRoutes.post('/bulk-status', requireWriteAccess, ctrl.groupMasterController.bulkStatus);
+groupMasterRoutes.post('/bulk-archive', requireWriteAccess, ctrl.groupMasterController.bulkArchive);
+groupMasterRoutes.post('/', requireWriteAccess, ctrl.groupMasterController.create);
+groupMasterRoutes.post('/:id/duplicate', validateId, requireWriteAccess, ctrl.groupMasterController.duplicateRecord);
+groupMasterRoutes.post('/:id/restore', validateId, requireWriteAccess, ctrl.groupMasterController.restore);
+groupMasterRoutes.get('/:id/audit', validateId, ctrl.groupMasterController.audit);
+groupMasterRoutes.get('/:id', validateId, ctrl.groupMasterController.getOne);
+groupMasterRoutes.put('/:id', validateId, requireWriteAccess, ctrl.groupMasterController.update);
+groupMasterRoutes.delete('/:id', validateId, requireWriteAccess, ctrl.groupMasterController.remove);
+groupMasterRoutes.delete('/:id/permanent', validateId, requireWriteAccess, ctrl.groupMasterController.permanentDelete);
 
 // Machine routes
 export const machineRoutes = createMasterRoutes(ctrl.machineController);

@@ -255,7 +255,9 @@ export default function ProductionStatusForm() {
   // Transaction CRUD
   const openAddTxn = () => {
     setEditingTxn(null);
-    const newForm = { production_date: new Date().toISOString().split('T')[0], opening_qty: '', input_qty: '', output_qty: '', rejection_qty: '', wip_qty: '', remarks: '' };
+    // Default opening to 0; carry-forward logic will be handled when previous WIP exists
+    const lastWip = Number(txnSummary.total_wip_qty) || 0;
+    const newForm = { production_date: new Date().toISOString().split('T')[0], opening_qty: lastWip > 0 ? lastWip.toFixed(2) : '0', input_qty: '', output_qty: '', rejection_qty: '', wip_qty: '', remarks: '' };
     newForm.wip_qty = calcWip(newForm.opening_qty, newForm.input_qty, newForm.output_qty, newForm.rejection_qty);
     setTxnForm(newForm);
     setShowTxnForm(true);
@@ -279,6 +281,14 @@ export default function ProductionStatusForm() {
 
   const handleSaveTxn = async () => {
     if (!txnForm.production_date) { toast.error('Production date is required'); return; }
+    // Validation: Output + Rejection <= Opening + Input
+    const opening = parseFloat(txnForm.opening_qty) || 0;
+    const input = parseFloat(txnForm.input_qty) || 0;
+    const output = parseFloat(txnForm.output_qty) || 0;
+    const rejection = parseFloat(txnForm.rejection_qty) || 0;
+    const available = opening + input;
+    if (output > available) { toast.error(`Output Qty (${output.toFixed(2)}) cannot exceed available qty (${available.toFixed(2)})`); return; }
+    if (output + rejection > available) { toast.error(`Output (${output.toFixed(2)}) + Rejection (${rejection.toFixed(2)}) cannot exceed available qty (${available.toFixed(2)})`); return; }
     setTxnSaving(true);
     try {
       if (editingTxn) {
@@ -429,20 +439,20 @@ export default function ProductionStatusForm() {
         {isEdit && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-4 border-t border-gray-100">
             <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <p className="text-xs text-gray-500 font-medium">Planned Qty</p>
-              <p className="text-lg font-bold text-blue-700 mt-1">{formatNumber(Number(form.issued_qty))}</p>
+              <p className="text-xs text-gray-500 font-medium">Input Qty</p>
+              <p className="text-lg font-bold text-blue-700 mt-1">{formatNumber(txnSummary.total_input_qty)}</p>
             </div>
             <div className="text-center p-3 bg-purple-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">Output Qty</p>
               <p className="text-lg font-bold text-purple-700 mt-1">{formatNumber(txnSummary.total_output_qty)}</p>
             </div>
-            <div className="text-center p-3 bg-emerald-50 rounded-lg">
-              <p className="text-xs text-gray-500 font-medium">Completed Qty</p>
-              <p className="text-lg font-bold text-emerald-700 mt-1">{formatNumber(Number(form.completed_qty))}</p>
+            <div className="text-center p-3 bg-rose-50 rounded-lg">
+              <p className="text-xs text-gray-500 font-medium">Rejection Qty</p>
+              <p className="text-lg font-bold text-rose-700 mt-1">{formatNumber(txnSummary.total_rejection_qty)}</p>
             </div>
             <div className="text-center p-3 bg-amber-50 rounded-lg">
-              <p className="text-xs text-gray-500 font-medium">Balance Qty</p>
-              <p className="text-lg font-bold text-amber-700 mt-1">{formatNumber(Number(form.balance_qty))}</p>
+              <p className="text-xs text-gray-500 font-medium">WIP</p>
+              <p className="text-lg font-bold text-amber-700 mt-1">{formatNumber(txnSummary.total_wip_qty)}</p>
             </div>
           </div>
         )}

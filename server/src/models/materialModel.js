@@ -84,6 +84,14 @@ async function resolveWarehouseId(warehouseName) {
 
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
+
+  // Always resolve UOM name from primary_uom_id
+  let uomText = data.uom || '';
+  if (data.primary_uom_id) {
+    const [[uomRow]] = await pool.query('SELECT name FROM uom WHERE id=?', [data.primary_uom_id]);
+    if (uomRow) uomText = uomRow.name;
+  }
+
   const [result] = await pool.query(
     `INSERT INTO materials (
       code, name, type, uom, primary_uom_id, secondary_uom_id, currency,
@@ -98,7 +106,7 @@ export async function create(data, createdBy = null) {
       code,
       data.name,
       data.type || 'Wet-end',
-      data.uom || '',
+      uomText,
       data.primary_uom_id || null,
       data.secondary_uom_id || null,
       data.currency || 'INR',
@@ -162,6 +170,13 @@ export async function create(data, createdBy = null) {
 }
 
 export async function update(id, data, updatedBy = null) {
+  // Always resolve UOM name from primary_uom_id
+  let uomText = data.uom || '';
+  if (data.primary_uom_id) {
+    const [[uomRow]] = await pool.query('SELECT name FROM uom WHERE id=?', [data.primary_uom_id]);
+    if (uomRow) uomText = uomRow.name;
+  }
+
   const [result] = await pool.query(
     `UPDATE materials SET
       name=?, type=?, uom=?, primary_uom_id=?, secondary_uom_id=?, currency=?,
@@ -175,7 +190,7 @@ export async function update(id, data, updatedBy = null) {
     [
       data.name,
       data.type || 'Wet-end',
-      data.uom || '',
+      uomText,
       data.primary_uom_id || null,
       data.secondary_uom_id || null,
       data.currency || 'INR',

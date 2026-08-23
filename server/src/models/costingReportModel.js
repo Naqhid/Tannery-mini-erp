@@ -138,3 +138,64 @@ export async function getFilterOptions() {
     colors: colors.map(r => r.color),
   };
 }
+
+/**
+ * Actual standard cost detail for a production-status order.  The detail is
+ * stage-wise and uses the production plan/status as the single source of truth.
+ */
+export async function getActualCostDetail(orderId) {
+  const [[seed]] = await pool.query(
+    `SELECT id, order_no, customer_name, article, color, uom
+     FROM production_status_orders WHERE id=? AND deleted_at IS NULL`,
+    [orderId]
+  );
+  if (!seed) return null;
+
+  const [stages] = await pool.query(
+    `SELECT id, process_stage, uom, plan_date, customer_name, article, color,
+            order_no, issued_qty AS order_qty, completed_qty, balance_qty,
+            status
+     FROM production_status_orders
+     WHERE deleted_at IS NULL AND order_no=? AND article=? AND COALESCE(color,'')=COALESCE(?, '')
+     ORDER BY id`,
+    [seed.order_no, seed.article, seed.color]
+  );
+
+  const orderQty = stages.reduce((m, r) => Math.max(m, Number(r.order_qty) || 0), 0);
+  const completedQty = stages.reduce((m, r) => Math.max(m, Number(r.completed_qty) || 0), 0);
+  const balanceQty = Math.max(0, orderQty - completedQty);
+
+  const stageDetails = [];
+  for (const stage of stages) {
+    const [generalRows] = await pool.query(
+      `SELECT 'General Cost' AS cost_group, i.cost_category, i.uom,
+              COALESCE(SUM(i.amount),0) AS actual_cost
+       FROM general_cost_headers h
+       JOIN general_cost_items i ON i.general_cost_id=h.id
+       WHERE h.production_plan_id=?
+       GROUP BY i.cost_category, i.uom
+       ORDER BY i.sort_order, i.id`, [stage.id]
+    );
+    const [machineRows] = await pool.query(
+      `SELECT 'Machine Cost' AS cost_group, i.machine_name AS cost_category, i.uom,
+              COALESCE(SUM(i.amount),0) AS actual_cost
+       FROM machine_cost_headers h
+       JOIN machine_cost_items i ON i.machine_cost_id=h.id
+       WHERE h.production_plan_id=?
+       GROUP BY i.machine_name, i.uom
+       ORDER BY i.sort_order, i.id`, [stage.id]
+    );
+    const outputQty = Number(stage.completed_qty) || 0;
+    const rows = [...generalRows, ...machineRows].map(r => ({
+      ...r,
+      actual_cost: Number(r.actual_cost) || 0,
+      cost_per_uom: outputQty > 0 ? (Number(r.actual_cost) || 0) / outputQty : 0,
+    }));
+    stageDetails.push({ ...stage, rows });
+  }
+
+  return {
+    order: { ...seed, order_qty: orderQty, completed_qty: completedQty, balance_qty: balanceQty },
+    stages: stageDetails,
+  };
+}

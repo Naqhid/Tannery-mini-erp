@@ -16,3 +16,11 @@ export async function getFilters(req, res, next) {
     res.json({ data: filters });
   } catch (err) { next(err); }
 }
+
+export async function getDetail(req, res, next) {
+  try {
+    const data = await model.getActualCostDetail(req.params.id);
+    if (!data) return res.status(404).json({ error: 'Production plan not found' });
+    res.json({ data });
+  } catch (err) { next(err); }
+}

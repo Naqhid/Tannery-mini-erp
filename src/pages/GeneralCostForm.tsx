@@ -49,6 +49,7 @@ interface CostComponentOption {
   name: string;
   uom: string;
   primary_uom_name: string;
+  rate: number;
 }
 
 export default function GeneralCostForm() {
@@ -96,7 +97,7 @@ export default function GeneralCostForm() {
   // Fetch cost component options (materials with category = 'Cost Component')
   useEffect(() => {
     api<{ data: any[] }>('/materials?limit=500&category=Cost Component')
-      .then(res => setCostComponents((res.data || []).map((m: any) => ({ id: m.id, name: m.name, uom: m.uom || '', primary_uom_name: m.primary_uom_name || m.uom || '' }))))
+      .then(res => setCostComponents((res.data || []).map((m: any) => ({ id: m.id, name: m.name, uom: m.uom || m.primary_uom_name || '', primary_uom_name: m.uom || m.primary_uom_name || '', rate: Number(m.rate || m.last_purchase_price || m.standard_cost || 0) }))))
       .catch(() => {});
   }, []);
 
@@ -141,15 +142,23 @@ export default function GeneralCostForm() {
   }, [id, isNew, planId]);
 
   useEffect(() => {
-    if (!formData.production_plan_id || !formData.production_date) return;
-    api<{ data: { planned_qty: number; output_qty: number } }>(`/production-status/orders/${formData.production_plan_id}/date-summary?date=${formData.production_date}`)
-      .then((res) => setFormData((prev) => ({
-        ...prev,
-        planned_qty: Number(res.data.planned_qty || 0),
-        output_qty: Number(res.data.output_qty || 0),
-      })))
+    if (!formData.production_plan_id) return;
+    // Fetch total output from Daily Production (all dates combined)
+    api<{ data: any }>(`/production-status/orders/${formData.production_plan_id}`)
+      .then((res) => {
+        const d = res.data;
+        if (d) {
+          const outputQty = Number(d.completed_qty || 0);
+          const plannedQty = formData.order_qty || formData.planned_qty || 0;
+          setFormData((prev) => ({
+            ...prev,
+            output_qty: outputQty,
+            balance_qty: Math.max(0, (prev.order_qty || prev.planned_qty) - outputQty),
+          }));
+        }
+      })
       .catch(() => {});
-  }, [formData.production_plan_id, formData.production_date]);
+  }, [formData.production_plan_id]);
 
   const recalculate = useCallback((items: CostItem[]) => {
     const totalAmount = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
@@ -176,19 +185,22 @@ export default function GeneralCostForm() {
     const items = [...formData.items];
     items[index] = { ...items[index], [field]: value };
 
-    // When cost_category_id changes, auto-populate name and UOM
+    // When cost_category_id changes, auto-populate name, UOM, and amount from rate
     if (field === 'cost_category_id') {
       const comp = costComponents.find(c => c.id === Number(value));
       if (comp) {
         items[index].cost_category = comp.name;
         items[index].uom = comp.primary_uom_name || comp.uom || 'Sq.Ft.';
+        items[index].amount = comp.rate || 0;
+        const divideBy = formData.output_qty || formData.planned_qty || 1;
+        items[index].cost_per_piece = divideBy > 0 ? Number((items[index].amount / divideBy).toFixed(2)) : 0;
       }
     }
 
-    // cost_per_piece = amount / production_qty
+    // cost_per_piece = amount / output_qty
     if (field === 'amount') {
-      const divideBy = formData.production_qty || formData.planned_qty || 1;
-      items[index].cost_per_piece = Number((Number(value) / divideBy).toFixed(2));
+      const divideBy = formData.output_qty || formData.planned_qty || 1;
+      items[index].cost_per_piece = divideBy > 0 ? Number((Number(value) / divideBy).toFixed(2)) : 0;
     }
 
     recalculate(items);
@@ -363,26 +375,9 @@ export default function GeneralCostForm() {
             <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.output_qty || 0)}</p>
           </div>
           <div>
-            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Production Qty</label>
-            {isPosted ? (
-              <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.production_qty || 0)}</p>
-            ) : (
-              <input type="number" value={formData.production_qty || ''} onChange={e => {
-                const prodQty = Number(e.target.value) || 0;
-                const plannedQty = formData.planned_qty || formData.order_qty;
-                if (prodQty > plannedQty) { toast.error('Production qty cannot exceed planned qty'); return; }
-                setFormData(prev => ({ ...prev, production_qty: prodQty, balance_qty: Math.max(0, (prev.planned_qty || prev.order_qty) - (prev.completed_qty + prodQty)) }));
-              }} placeholder="0" className="w-full px-2 py-1.5 text-xs md:text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 tabular-nums font-semibold" />
-            )}
-          </div>
-          <div>
-            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Completed Qty</label>
-            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.completed_qty)}</p>
-          </div>
-          <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Balance Qty</label>
-            <p className={`text-sm md:text-base font-bold tabular-nums ${formData.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
-              {new Intl.NumberFormat('en-IN').format(formData.balance_qty)}
+            <p className={`text-sm md:text-base font-bold tabular-nums ${(formData.planned_qty - formData.output_qty) > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+              {new Intl.NumberFormat('en-IN').format(Math.max(0, formData.planned_qty - formData.output_qty))}
             </p>
           </div>
         </div>

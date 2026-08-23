@@ -126,10 +126,6 @@ export default function ProductionStatus() {
           </div>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button onClick={() => navigate('/production-status/new')}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-            <Factory size={14} /> New Entry
-          </button>
           <button onClick={fetchData}
             className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
@@ -193,6 +189,7 @@ export default function ProductionStatus() {
                   <th onClick={() => handleSort('order_no')} className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
                   </th>
+                  <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Plan Date</th>
                   <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Customer</th>
                   <th onClick={() => handleSort('article')} className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
@@ -222,6 +219,7 @@ export default function ProductionStatus() {
                     onClick={() => navigate(`/production-status/${row.id}`)}
                   >
                     <td className="px-3 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-600">{row.plan_date ? new Date(row.plan_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
                     <td className="px-3 py-3.5 text-sm text-gray-700">{(row as any).customer_name || '—'}</td>
                     <td className="px-3 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                     <td className="px-3 py-3.5 text-sm text-gray-600">{(row as any).process_stage || '—'}</td>

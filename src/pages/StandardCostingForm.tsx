@@ -286,12 +286,12 @@ export default function StandardCostingForm() {
         <h2 className="text-sm font-bold text-blue-800 mb-4 border-b border-blue-100 pb-2">Standard Cost Sheet Details</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>
-            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Product *</label>
+            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Article *</label>
             <SearchableSelect
               value={String(formData.product_id || '')}
               onChange={handleProductChange}
               options={products.map(p => ({ value: String(p.id), label: p.name }))}
-              placeholder="Select Product"
+              placeholder="Select Article"
               disabled={isPosted}
             />
           </div>
@@ -334,7 +334,7 @@ export default function StandardCostingForm() {
             </select>
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Approved Status</label>
+            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Approval Status</label>
             <span className={`inline-flex items-center px-2.5 py-[7px] text-xs font-semibold rounded-lg border ${formData.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : formData.status === 'Completed' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
               {formData.status}
             </span>
@@ -343,7 +343,7 @@ export default function StandardCostingForm() {
         {/* Row 2 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mt-4">
           <div>
-            <label className="block text-[11px] font-semibold text-gray-600 mb-1">Effective From *</label>
+            <label className="block text-[11px] font-semibold text-gray-600 mb-1"></label>
             <input type="date" value={formData.effective_from || ''} onChange={(e) => setFormData(prev => ({ ...prev, effective_from: e.target.value }))} disabled={isPosted}
               className="w-full px-2.5 py-[7px] text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/30 disabled:bg-gray-50" />
           </div>

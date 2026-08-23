@@ -111,18 +111,11 @@ export default function StandardCosting() {
             <FileText size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Standard Costing</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Standard Cost (Actual)</h1>
             <p className="text-xs md:text-sm text-gray-500 mt-0.5">Order-wise cost analysis with material, machine & general cost summary.</p>
           </div>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 rounded-lg shadow-md transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg active:scale-95'}`}
-            onClick={canWrite ? () => navigate('/standard-costing/new') : undefined}
-            disabled={isReadOnly}
-          >
-            <Plus size={14} /> New Cost Sheet
-          </button>
           <button className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
             <Download size={14} /> Export
           </button>
@@ -181,11 +174,11 @@ export default function StandardCosting() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gradient-to-r from-slate-50 to-indigo-50/40">
+                  <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
+                    <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
+                  </th>
                   <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
                     <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
-                  </th>
-                  <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1">Order No <SortIcon field="order_no" /></span>
                   </th>
                   <th onClick={() => handleSort('article')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
@@ -212,9 +205,9 @@ export default function StandardCosting() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {rows.map((row, idx) => (
-                  <tr key={row.id} className={`transition-colors hover:bg-indigo-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
+                  <tr key={row.id} onClick={() => navigate(`/standard-costing/actual/${row.id}`)} className={`transition-colors cursor-pointer hover:bg-indigo-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
                     <td className="px-4 py-3.5 text-sm text-indigo-700 font-mono font-medium">{row.order_no || '—'}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.order_qty_sqft)}</td>
