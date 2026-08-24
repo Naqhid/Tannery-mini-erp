@@ -174,7 +174,7 @@ export async function getActualCostDetail(orderId) {
        JOIN general_cost_items i ON i.general_cost_id=h.id
        WHERE h.production_plan_id=?
        GROUP BY i.cost_category, i.uom
-       ORDER BY i.sort_order, i.id`, [stage.id]
+       ORDER BY MIN(i.sort_order), MIN(i.id)`, [stage.id]
     );
     const [machineRows] = await pool.query(
       `SELECT 'Machine Cost' AS cost_group, i.machine_name AS cost_category, i.uom,
@@ -183,7 +183,7 @@ export async function getActualCostDetail(orderId) {
        JOIN machine_cost_items i ON i.machine_cost_id=h.id
        WHERE h.production_plan_id=?
        GROUP BY i.machine_name, i.uom
-       ORDER BY i.sort_order, i.id`, [stage.id]
+       ORDER BY MIN(i.sort_order), MIN(i.id)`, [stage.id]
     );
     const outputQty = Number(stage.completed_qty) || 0;
     const rows = [...generalRows, ...machineRows].map(r => ({

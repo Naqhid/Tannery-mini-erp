@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X } from 'lucide-react';
+import { toast } from 'react-toastify';
 import api from '../lib/api';
 
 type CostRow = { cost_group: string; cost_category: string; uom: string; actual_cost: number; cost_per_uom: number };
@@ -14,7 +15,39 @@ const fmtQty = (n:number) => new Intl.NumberFormat('en-IN',{maximumFractionDigit
 export default function ActualStandardCostSheet(){
   const { id } = useParams<{id:string}>(); const navigate=useNavigate();
   const [data,setData]=useState<Detail|null>(null); const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
   const [effectiveFrom,setEffectiveFrom]=useState(new Date().toISOString().slice(0,10));
+  const [description,setDescription]=useState('');
+  const [currency,setCurrency]=useState('INR');
+  const [status,setStatus]=useState('Draft');
+
+  const handleSave = async () => {
+    if(!data) return;
+    setSaving(true);
+    try {
+      const payload = {
+        production_plan_id: Number(id),
+        effective_from: effectiveFrom,
+        prepared_by: user?.name || user?.full_name || 'Costing Dept.',
+        description,
+        currency,
+        status,
+        order_no: data.order.order_no,
+        customer_name: data.order.customer_name,
+        article: data.order.article,
+        color: data.order.color,
+        order_qty: data.order.order_qty,
+        completed_qty: data.order.completed_qty,
+        balance_qty: data.order.balance_qty,
+        total_amount: totals.amount,
+        total_cost_per_uom: totals.costPerUom,
+      };
+      await api('/standard-costs', { method: 'POST', body: JSON.stringify(payload) });
+      toast.success('Standard Cost Sheet saved successfully!');
+      navigate('/standard-costing');
+    } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
+    finally { setSaving(false); }
+  };
   const user=JSON.parse(localStorage.getItem('tannery_user')||'{}');
   useEffect(()=>{ api<{data:Detail}>(`/costing-report/${id}/detail`).then(r=>setData(r.data)).finally(()=>setLoading(false)); },[id]);
   const totals=useMemo(()=>{
@@ -28,17 +61,17 @@ export default function ActualStandardCostSheet(){
   return <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 bg-[#fafbfe] min-h-full">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost Sheet</h1><span className="px-3 py-1 rounded bg-amber-50 text-amber-700 text-sm font-semibold border border-amber-200">Draft</span></div>
-      <div className="flex gap-3"><button onClick={()=>navigate('/standard-costing')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold"><X size={16}/>Cancel</button><button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-semibold"><Save size={16}/>Save</button></div>
+      <div className="flex gap-3"><button onClick={()=>navigate('/standard-costing')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold"><X size={16}/>Cancel</button><button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"><Save size={16}/>{saving?'Saving...':'Save'}</button></div>
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
       <h2 className="font-bold text-slate-700 mb-3">Standard Cost Sheet Details</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
         <Field label="Effective From *"><input type="date" value={effectiveFrom} onChange={e=>setEffectiveFrom(e.target.value)} className="field"/></Field>
         <Field label="Prepared By *"><input value={user?.name||user?.full_name||'Costing Dept.'} readOnly className="field bg-slate-50"/></Field>
-        <Field label="Description / Note"><input placeholder="Standard cost prepared for export orders..." className="field"/></Field>
+        <Field label="Description / Note"><input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Standard cost prepared for export orders..." className="field"/></Field>
         <Field label="Cost Sheet No."><input value="(Auto-generated)" readOnly className="field bg-slate-50"/></Field>
-        <Field label="Currency"><select className="field" defaultValue="INR"><option>INR</option><option>USD</option><option>EUR</option></select></Field>
-        <Field label="Status"><select className="field" defaultValue="Draft"><option>Draft</option><option>Approved</option></select></Field>
+        <Field label="Currency"><select className="field" value={currency} onChange={e=>setCurrency(e.target.value)}><option>INR</option><option>USD</option><option>EUR</option></select></Field>
+        <Field label="Status"><select className="field" value={status} onChange={e=>setStatus(e.target.value)}><option>Draft</option><option>Approved</option></select></Field>
       </div>
       <div className="mt-4 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 border border-slate-200 rounded-lg overflow-hidden">
         <Metric label="Customer" value={data.order.customer_name}/><Metric label="Article" value={data.order.article}/><Metric label="Color" value={data.order.color}/><Metric label="Order No." value={data.order.order_no}/><Metric label="Order Qty" value={`${fmtQty(data.order.order_qty)} ${data.order.uom||''}`}/><Metric label="Completed Qty" value={`${fmtQty(data.order.completed_qty)} ${data.order.uom||''}`} tone="green"/><Metric label="Balance Qty" value={`${fmtQty(data.order.balance_qty)} ${data.order.uom||''}`} tone="amber"/>

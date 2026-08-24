@@ -74,6 +74,7 @@ export default function ProductionPlanDetail() {
   const [processStages, setProcessStages] = useState<ProcessStage[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [deleteStageKey, setDeleteStageKey] = useState<string | null>(null);
 
   const fetchDropdowns = useCallback(async () => {
     try {
@@ -210,10 +211,43 @@ export default function ProductionPlanDetail() {
   const handleSave = async () => {
     if (!plan.plan_date) { toast.error('Plan date is required'); return; }
     if (!plan.article) { toast.error('Article is required'); return; }
+
+    // If all stages are deleted on an existing plan, just save with empty stages (plan stays, stages removed)
+    if (!isNew && stages.length === 0) {
+      setSaving(true);
+      try {
+        const autoStatus = 'Pending';
+        const payload = {
+          ...plan,
+          status: autoStatus,
+          sales_order_id: plan.sales_order_id ? Number(plan.sales_order_id) : null,
+          customer_id: plan.customer_id ? Number(plan.customer_id) : null,
+          product_id: null,
+          warehouse_id: null,
+          uom: 'Pcs',
+          order_qty: parseFloat(plan.order_qty) || 0,
+          sales_order_qty: salesOrderQty,
+          expected_yield: parseFloat(plan.expected_yield) || 92,
+          completed_qty: completedQty,
+          planned_qty: 0,
+          batch_qty: 0,
+          items: [],
+          stages: [],
+        };
+        await api(`/production-plans/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success('All stages removed. Plan updated.');
+        navigate('/production-plan');
+      } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
+      finally { setSaving(false); }
+      return;
+    }
+
     setSaving(true);
     try {
+      const autoStatus = totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress';
       const payload = {
         ...plan,
+        status: autoStatus,
         sales_order_id: plan.sales_order_id ? Number(plan.sales_order_id) : null,
         customer_id: plan.customer_id ? Number(plan.customer_id) : null,
         product_id: null,
@@ -279,8 +313,8 @@ export default function ProductionPlanDetail() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-gray-900">Production Requirement Plan</h1>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_COLORS[plan.status] || 'bg-gray-100 text-gray-700'}`}>
-                {plan.status}
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_COLORS[totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'] || 'bg-gray-100 text-gray-700'}`}>
+                {totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'}
               </span>
             </div>
           </div>
@@ -361,13 +395,14 @@ export default function ProductionPlanDetail() {
               value={plan.sales_order_id}
               onChange={handleOrderChange}
               placeholder="Search order..."
+              disabled={!isNew}
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-            <select value={plan.status} onChange={(e) => update('status', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-medium">
+              {totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'}
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Remarks</label>
@@ -417,7 +452,8 @@ export default function ProductionPlanDetail() {
                   <td className="py-3 px-3 text-center text-xs text-gray-600 font-medium">{stage.uom || '—'}</td>
                   <td className="py-3 px-3">
                     <input type="number" value={stage.planned_qty} onChange={(e) => updateStage(stage._key, 'planned_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                      disabled={(parseFloat(stage.output_qty) || 0) > 0}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${(parseFloat(stage.output_qty) || 0) > 0 ? 'bg-gray-50 cursor-not-allowed' : ''}`} />
                   </td>
                   <td className="py-3 px-3">
                     <input type="number" value={stage.issue_input_qty} readOnly
@@ -439,15 +475,14 @@ export default function ProductionPlanDetail() {
                   </td>
                   <td className="py-3 px-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => {
-                        const newStatus = stage.status === 'In-Process' ? 'Completed' : 'In-Process';
-                        updateStage(stage._key, 'status', newStatus);
-                      }} className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={() => setStages((prev) => prev.filter((s) => s._key !== stage._key))} className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all">
-                        <Trash2 size={14} />
-                      </button>
+                      {(parseFloat(stage.output_qty) || 0) === 0 && (
+                        <button onClick={() => setDeleteStageKey(stage._key)} className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                      {(parseFloat(stage.output_qty) || 0) > 0 && (
+                        <span className="text-[10px] text-gray-400">Locked</span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -484,6 +519,22 @@ export default function ProductionPlanDetail() {
           </div>
         </div>
       </div>
+
+      {/* Delete Stage Confirmation Dialog */}
+      {deleteStageKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDeleteStageKey(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center"><Trash2 size={20} className="text-red-600" /></div>
+              <div><h3 className="text-lg font-bold text-gray-900">Delete Stage</h3><p className="text-sm text-gray-500">Are you sure you want to delete this stage?</p></div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteStageKey(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200">Cancel</button>
+              <button onClick={() => { setStages(prev => prev.filter(s => s._key !== deleteStageKey)); setDeleteStageKey(null); }} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

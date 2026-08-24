@@ -22,8 +22,7 @@ export async function getOne(req, res, next) {
 
 export async function create(req, res, next) {
   try {
-    if (!req.body.product_id) return res.status(400).json({ error: 'product_id is required' });
-    if (!req.body.bom_id) return res.status(400).json({ error: 'bom_id is required' });
+    if (!req.body.product_id && !req.body.production_plan_id) return res.status(400).json({ error: 'product_id or production_plan_id is required' });
     const userId = req.user?.id || null;
     const result = await model.create(req.body, userId);
     res.status(201).json({ data: result, message: 'Standard Cost Sheet created successfully!' });

@@ -7,7 +7,7 @@ async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQ
   const params = [productionPlanId];
   let exclude = '';
   if (currentId) { exclude = ' AND id <> ?'; params.push(currentId); }
-  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM ${table} WHERE production_plan_id=?${exclude}`, params);
+  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM machine_cost_headers WHERE production_plan_id=?${exclude}`, params);
   const max = Number(plan.issued_qty) || 0;
   const requested = Number(productionQty) || 0;
   if (requested > Math.max(0, max - (Number(used.qty) || 0)) + 0.000001) {
@@ -125,7 +125,8 @@ export async function create(data, userId = null) {
     const transactionNo = await getNextTransactionNo();
     const items = data.items || [];
     const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const totalCostPerPiece = items.reduce((sum, item) => sum + (Number(item.cost_per_piece) || 0), 0);
+    const outputQty = data.output_qty || data.production_qty || 1;
+    const totalCostPerPiece = outputQty > 0 ? Number((totalAmount / outputQty).toFixed(2)) : 0;
 
     const [result] = await conn.query(
       `INSERT INTO machine_cost_headers

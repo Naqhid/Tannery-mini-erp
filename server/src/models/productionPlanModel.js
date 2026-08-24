@@ -31,7 +31,12 @@ export async function getAll({ search, status, customer_id, product_id, article,
        pp.order_qty, pp.planned_qty, pp.batch_qty, pp.no_of_batches,
        pp.balance_qty, pp.output_qty, pp.output_percent, pp.wip_qty,
        pp.article, pp.color, pp.finish, pp.customer_order_no,
-       pp.priority, pp.status, pp.uom, pp.created_at,
+       pp.priority, pp.uom, pp.created_at,
+       CASE
+         WHEN COALESCE(pp.planned_qty, 0) <= 0 THEN 'Pending'
+         WHEN COALESCE(pp.planned_qty, 0) >= COALESCE(pp.order_qty, 0) AND COALESCE(pp.order_qty, 0) > 0 THEN 'Completed'
+         ELSE 'In Progress'
+       END AS status,
        c.id AS customer_id, c.name AS customer_name,
        p.id AS product_id, p.name AS product_name, p.code AS product_code,
        so.order_no AS sales_order_no
