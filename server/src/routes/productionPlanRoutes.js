@@ -8,6 +8,7 @@ const router = Router();
 router.get('/stats', ctrl.stats);
 router.get('/next-no', ctrl.nextNo);
 router.get('/filter-options', ctrl.filterOptions);
+router.get('/sales-order-items', validatePagination, ctrl.salesOrderItems);
 router.get('/', validatePagination, ctrl.list);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', requireWriteAccess, ctrl.create);

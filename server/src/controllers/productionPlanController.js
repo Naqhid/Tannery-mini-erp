@@ -75,3 +75,12 @@ export async function filterOptions(_req, res, next) {
     res.json({ data });
   } catch (err) { next(err); }
 }
+
+export async function salesOrderItems(req, res, next) {
+  try {
+    const { search, status, customer_id, article, color } = req.query;
+    const { page, limit } = req;
+    const { rows, total } = await model.getSalesOrderItems({ search, status, customer_id, article, color, page, limit });
+    res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (err) { next(err); }
+}

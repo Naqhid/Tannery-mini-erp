@@ -17,6 +17,7 @@ interface TaxOption { id: number; name: string; gst_percent: number; cess_percen
 interface GroupMasterOption { id: number; code: string; name: string; hsn_code: string; gst_rate: number; }
 interface SalesOrderItem {
   _key?: string;
+  product_id?: number | null;
   item_code: string;
   item_description: string;
   leather_type: string;
@@ -32,6 +33,7 @@ interface DeliveryNote { id?: number; delivery_no?: string; delivery_date: strin
 interface PaymentReceipt { id?: number; receipt_no?: string; receipt_date: string; payment_mode: string; amount: number; remarks: string; }
 interface Invoice { id?: number; invoice_no?: string; invoice_date?: string; invoice_amount: number; paid_amount: number; balance: number; status: string; due_date?: string; }
 interface Attachment { id?: number; file_name: string; file_path?: string; file_type?: string; category: string; uploaded_at?: string; remarks?: string; }
+interface ProductDropdown { id: number; code: string; name: string; leather_type: string; thickness: string; uom: string; leather_type_name?: string; uom_name?: string; thickness_name?: string; color_name?: string; finish_type_name?: string; }
 
 interface SalesOrderFull {
   id?: number;
@@ -74,7 +76,7 @@ const emptyOrder: SalesOrderFull = {
 };
 
 const emptyItem: SalesOrderItem = {
-  _key: '', item_code: '', item_description: '', leather_type: '', finish_color: '',
+  _key: '', product_id: null, item_code: '', item_description: '', leather_type: '', finish_color: '',
   thickness: '', uom: 'Sq.Ft.', quantity: 0, unit_price: 0, discount_percent: 0, amount: 0,
 };
 
@@ -157,6 +159,14 @@ export default function SalesOrderDetail() {
     } catch { setGroupOptions([]); }
   }, []);
 
+  const [products, setProducts] = useState<ProductDropdown[]>([]);
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await api<{ data: ProductDropdown[] }>('/products/dropdown');
+      setProducts(res.data || []);
+    } catch { setProducts([]); }
+  }, []);
+
   const fetchOrder = useCallback(async () => {
     if (isNew) return;
     try {
@@ -184,7 +194,7 @@ export default function SalesOrderDetail() {
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
-  useEffect(() => { fetchCustomers(); fetchTaxOptions(); fetchGroupOptions(); fetchOrder(); }, [fetchCustomers, fetchTaxOptions, fetchGroupOptions, fetchOrder]);
+  useEffect(() => { fetchCustomers(); fetchTaxOptions(); fetchGroupOptions(); fetchProducts(); fetchOrder(); }, [fetchCustomers, fetchTaxOptions, fetchGroupOptions, fetchProducts, fetchOrder]);
 
   const updateField = (field: keyof SalesOrderFull, value: any) => {
     setOrder(prev => {
@@ -596,40 +606,41 @@ export default function SalesOrderDetail() {
                         <tr key={item._key || i} className="hover:bg-blue-50/40 transition-colors">
                           <td className="py-2.5 px-3.5 text-gray-400 font-medium">{i + 1}</td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.item_code} onChange={(e) => {
-                              const newItems = order.items.map(it => it._key === item._key ? { ...it, item_code: e.target.value } : it);
-                              setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[90px]" placeholder="Code" />
+                            <input value={item.item_code} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[90px] cursor-not-allowed" placeholder="Code" />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.item_description} onChange={(e) => {
-                              const newItems = order.items.map(it => it._key === item._key ? { ...it, item_description: e.target.value } : it);
+                            <select value={item.product_id || ''} onChange={(e) => {
+                              const productId = Number(e.target.value);
+                              const product = products.find(p => p.id === productId);
+                              const newItems = order.items.map(it => it._key === item._key ? {
+                                ...it,
+                                product_id: productId || null,
+                                item_code: product?.code || '',
+                                item_description: product?.name || '',
+                                leather_type: product?.leather_type_name || product?.leather_type || '',
+                                finish_color: [product?.finish_type_name, product?.color_name].filter(Boolean).join(' / ') || '',
+                                thickness: product?.thickness_name || product?.thickness || '',
+                                uom: product?.uom_name || product?.uom || '',
+                              } : it);
                               setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" placeholder="Article" />
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[160px]">
+                              <option value="">-- Select Article --</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.leather_type} onChange={(e) => {
-                              const newItems = order.items.map(it => it._key === item._key ? { ...it, leather_type: e.target.value } : it);
-                              setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[80px]" placeholder="Type" />
+                            <input value={item.leather_type} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Type" />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.finish_color} onChange={(e) => {
-                              const newItems = order.items.map(it => it._key === item._key ? { ...it, finish_color: e.target.value } : it);
-                              setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[80px]" placeholder="Color" />
+                            <input value={item.finish_color} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Color" />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.thickness} onChange={(e) => {
-                              const newItems = order.items.map(it => it._key === item._key ? { ...it, thickness: e.target.value } : it);
-                              setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="mm" />
+                            <input value={item.thickness} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="mm" />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.uom} onChange={(e) => {
-                              const newItems = order.items.map(it => it._key === item._key ? { ...it, uom: e.target.value } : it);
-                              setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="UOM" />
+                            <input value={item.uom} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="UOM" />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input type="number" value={item.quantity} onChange={(e) => {

@@ -194,7 +194,7 @@ export default function TransactionListPage({
         fetchData();
       } catch (err) { toast.error('Bulk delete failed: ' + (err as Error).message); }
     } else if (id && onDelete) {
-      try { await onDelete(id); fetchData(); } catch {}
+      try { await onDelete(id); fetchData(); } catch (err) { toast.error('Delete failed: ' + (err as Error).message); }
     }
   };
 

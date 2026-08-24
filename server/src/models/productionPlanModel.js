@@ -452,17 +452,95 @@ export async function bulkDelete(ids, deletedBy = null) {
 // Get dropdown data for filters
 export async function getFilterOptions() {
   const [articles] = await pool.query(
-    `SELECT DISTINCT article FROM production_plans WHERE article IS NOT NULL AND article != '' AND deleted_at IS NULL ORDER BY article`
+    `SELECT DISTINCT soi.item_description AS article FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     WHERE soi.item_description IS NOT NULL AND soi.item_description != '' AND so.status NOT IN ('Cancelled')
+     ORDER BY soi.item_description`
   );
   const [colors] = await pool.query(
-    `SELECT DISTINCT color FROM production_plans WHERE color IS NOT NULL AND color != '' AND deleted_at IS NULL ORDER BY color`
+    `SELECT DISTINCT soi.finish_color AS color FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     WHERE soi.finish_color IS NOT NULL AND soi.finish_color != '' AND so.status NOT IN ('Cancelled')
+     ORDER BY soi.finish_color`
   );
   const [finishes] = await pool.query(
-    `SELECT DISTINCT finish FROM production_plans WHERE finish IS NOT NULL AND finish != '' AND deleted_at IS NULL ORDER BY finish`
+    `SELECT DISTINCT soi.leather_type AS finish FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     WHERE soi.leather_type IS NOT NULL AND soi.leather_type != '' AND so.status NOT IN ('Cancelled')
+     ORDER BY soi.leather_type`
   );
   return {
     articles: articles.map(r => r.article),
     colors: colors.map(r => r.color),
     finishes: finishes.map(r => r.finish),
   };
+}
+
+// Get sales order items as production requirement source
+export async function getSalesOrderItems({ search, status, customer_id, article, color, page = 1, limit = 10 } = {}) {
+  const params = [];
+  let where = 'so.status NOT IN ("Cancelled")';
+
+  if (search) {
+    where += ' AND (so.order_no LIKE ? OR c.name LIKE ? OR soi.item_description LIKE ? OR so.customer_po_no LIKE ?)';
+    const t = `%${search}%`;
+    params.push(t, t, t, t);
+  }
+  if (customer_id) { where += ' AND so.customer_id = ?'; params.push(customer_id); }
+  if (article) { where += ' AND soi.item_description LIKE ?'; params.push(`%${article}%`); }
+  if (color) { where += ' AND soi.finish_color LIKE ?'; params.push(`%${color}%`); }
+  if (status) {
+    if (status === 'Pending') {
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) = 0';
+    } else if (status === 'In Progress') {
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) > 0';
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) < soi.quantity';
+    } else if (status === 'Completed') {
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) >= soi.quantity';
+    }
+  }
+
+  const offset = (page - 1) * limit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       soi.id AS item_id,
+       so.id AS sales_order_id,
+       so.order_no AS sales_order_no,
+       so.customer_po_no AS customer_order_no,
+       c.name AS customer_name,
+       c.id AS customer_id,
+       soi.item_description AS article,
+       soi.item_code AS article_code,
+       soi.finish_color AS color,
+       soi.leather_type AS finish,
+       soi.quantity AS order_qty,
+       soi.uom,
+       COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) AS planned_qty,
+       soi.quantity - COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) AS balance_qty,
+       (SELECT pp2.id FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL ORDER BY pp2.id DESC LIMIT 1) AS plan_id,
+       CASE
+         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) = 0 THEN 'Pending'
+         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) >= soi.quantity THEN 'Completed'
+         ELSE 'In Progress'
+       END AS status
+     FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     LEFT JOIN customers c ON so.customer_id = c.id
+     WHERE ${where}
+     ORDER BY so.id DESC, soi.id ASC
+     LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     LEFT JOIN customers c ON so.customer_id = c.id
+     WHERE ${where}`,
+    params
+  );
+
+  return { rows, total };
 }

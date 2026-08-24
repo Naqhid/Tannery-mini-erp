@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Factory, Plus, Search, Filter, ChevronLeft, ChevronRight,
+  Factory, Search, Filter, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, Trash2, Edit2, RefreshCw, X,
   FileSpreadsheet, Download,
 } from 'lucide-react';
@@ -82,12 +82,10 @@ export default function ProductionPlan() {
       const params = new URLSearchParams();
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
-      params.set('sortBy', 'id');
-      params.set('sortOrder', 'desc');
       for (const [k, v] of Object.entries(activeParams)) {
         if (v) params.set(k, v);
       }
-      const res = await api<{ data: any[]; total: number; totalPages: number }>(`/production-plans?${params}`);
+      const res = await api<{ data: any[]; total: number; totalPages: number }>(`/production-plans/sales-order-items?${params}`);
       setData(res.data || []);
       setTotalRecords(res.total || 0);
       setTotalPages(res.totalPages || 0);
@@ -150,14 +148,6 @@ export default function ProductionPlan() {
             <Filter size={16} />
             <span className="text-sm font-bold">Filters</span>
           </div>
-          <button
-            onClick={canWrite ? () => navigate('/production-plan/new') : undefined}
-            disabled={isReadOnly}
-            title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
-            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg transition-all shadow-sm ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
-          >
-            <Plus size={14} /> New Requirement Plan
-          </button>
           <button onClick={fetchData} className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all">
             <RefreshCw size={14} /> Refresh
           </button>
@@ -296,9 +286,15 @@ export default function ProductionPlan() {
               ) : (
                 data.map((row, i) => (
                   <tr
-                    key={row.id}
+                    key={row.item_id}
                     className="hover:bg-blue-50/40 transition-all cursor-pointer"
-                    onClick={() => navigate(`/production-plan/${row.id}`)}
+                    onClick={() => {
+                      if (row.plan_id) {
+                        navigate(`/production-plan/${row.plan_id}`);
+                      } else {
+                        navigate(`/production-plan/new?sales_order_id=${row.sales_order_id}&article=${encodeURIComponent(row.article || '')}&color=${encodeURIComponent(row.color || '')}&customer_id=${row.customer_id || ''}&order_qty=${row.order_qty || 0}`);
+                      }
+                    }}
                   >
                     <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
                     <td className="py-2.5 px-3 text-xs font-medium text-blue-700">{row.sales_order_no || '—'}</td>
@@ -334,7 +330,13 @@ export default function ProductionPlan() {
             </div>
           ) : (
             data.map((row, i) => (
-              <div key={row.id} onClick={() => navigate(`/production-plan/${row.id}`)} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
+              <div key={row.item_id} onClick={() => {
+                if (row.plan_id) {
+                  navigate(`/production-plan/${row.plan_id}`);
+                } else {
+                  navigate(`/production-plan/new?sales_order_id=${row.sales_order_id}&article=${encodeURIComponent(row.article || '')}&color=${encodeURIComponent(row.color || '')}&customer_id=${row.customer_id || ''}&order_qty=${row.order_qty || 0}`);
+                }
+              }} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>

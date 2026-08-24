@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, ArrowLeft, Printer, Plus, Edit2, MoreHorizontal, Send, Trash2 } from 'lucide-react';
 import api from '../lib/api';
@@ -64,6 +64,7 @@ const fmtCurrency = (n: number) => new Intl.NumberFormat('en-IN', { minimumFract
 export default function ProductionPlanDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isNew = !id || id === 'new';
   const { canWrite, isReadOnly } = usePermission();
 
@@ -95,6 +96,23 @@ export default function ProductionPlanDetail() {
         const res = await api<{ data: { plan_no: string } }>('/production-plans/next-no');
         setPlan((p) => ({ ...p, plan_no: res.data.plan_no }));
       } catch {}
+      // Pre-fill from query params (from sales order items list)
+      const soId = searchParams.get('sales_order_id');
+      const articleParam = searchParams.get('article');
+      const colorParam = searchParams.get('color');
+      const custId = searchParams.get('customer_id');
+      const orderQty = searchParams.get('order_qty');
+      if (soId || articleParam) {
+        setPlan((p) => ({
+          ...p,
+          sales_order_id: soId || '',
+          article: articleParam || '',
+          color: colorParam || '',
+          customer_id: custId || '',
+          order_qty: orderQty || '',
+          sales_order_qty: orderQty || '',
+        }));
+      }
       return;
     }
     try {
@@ -144,7 +162,7 @@ export default function ProductionPlanDetail() {
       }
     } catch { toast.error('Failed to load plan'); navigate('/production-plan'); }
     finally { setLoading(false); }
-  }, [id, isNew, navigate]);
+  }, [id, isNew, navigate, searchParams]);
 
   useEffect(() => { fetchDropdowns(); fetchPlan(); }, [fetchDropdowns, fetchPlan]);
 
