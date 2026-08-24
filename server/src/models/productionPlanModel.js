@@ -491,12 +491,12 @@ export async function getSalesOrderItems({ search, status, customer_id, article,
   if (color) { where += ' AND soi.finish_color LIKE ?'; params.push(`%${color}%`); }
   if (status) {
     if (status === 'Pending') {
-      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) = 0';
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) = 0';
     } else if (status === 'In Progress') {
-      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) > 0';
-      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) < soi.quantity';
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) > 0';
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) < soi.quantity';
     } else if (status === 'Completed') {
-      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) >= soi.quantity';
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) >= soi.quantity';
     }
   }
 
@@ -516,12 +516,12 @@ export async function getSalesOrderItems({ search, status, customer_id, article,
        soi.leather_type AS finish,
        soi.quantity AS order_qty,
        soi.uom,
-       COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) AS planned_qty,
-       soi.quantity - COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) AS balance_qty,
-       (SELECT pp2.id FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL ORDER BY pp2.id DESC LIMIT 1) AS plan_id,
+       COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) AS planned_qty,
+       soi.quantity - COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) AS balance_qty,
+       (SELECT pp2.id FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL ORDER BY pp2.id DESC LIMIT 1) AS plan_id,
        CASE
-         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) = 0 THEN 'Pending'
-         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article = soi.item_description AND pp2.deleted_at IS NULL), 0) >= soi.quantity THEN 'Completed'
+         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) = 0 THEN 'Pending'
+         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) >= soi.quantity THEN 'Completed'
          ELSE 'In Progress'
        END AS status
      FROM sales_order_items soi
