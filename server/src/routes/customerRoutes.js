@@ -8,6 +8,7 @@ const router = Router();
 router.get('/', validatePagination, ctrl.list);
 router.get('/stats', ctrl.stats);
 router.get('/dropdown', ctrl.dropdown);
+router.get('/next-code', ctrl.nextCode);
 router.post('/check-duplicate', ctrl.checkDuplicate);
 router.post('/bulk-delete', requireWriteAccess, ctrl.bulkDelete);
 router.post('/bulk-status', requireWriteAccess, ctrl.bulkStatus);

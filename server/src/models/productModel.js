@@ -75,10 +75,14 @@ export async function getById(id) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query("SELECT code FROM products ORDER BY id DESC LIMIT 1");
-  if (!row) return 'PRD-00001';
-  const num = parseInt(row.code.split('-')[1], 10) + 1;
-  return `PRD-${String(num).padStart(5, '0')}`;
+  const [rows] = await pool.query("SELECT code FROM products WHERE code LIKE 'PRD-%'");
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `PRD-${String(maxNum + 1).padStart(5, '0')}`;
 }
 
 export async function create(data, createdBy = null) {
@@ -196,7 +200,11 @@ export async function getDropdown() {
     LEFT JOIN finish_types ft ON p.finish_type_id = ft.id
     WHERE p.status='Active' ORDER BY p.name ASC LIMIT 500`
   );
-  return rows;
+  // Build a display name concatenating product name with color and finish
+  return rows.map(r => {
+    const parts = [r.name, r.color_name, r.finish_type_name].filter(Boolean);
+    return { ...r, display_name: parts.join(' - ') };
+  });
 }
 
 export async function softDelete(id) {

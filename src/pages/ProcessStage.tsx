@@ -40,6 +40,8 @@ export default function ProcessStage() {
       pdfAccentColor={[59, 130, 246]}
       modalSize="max-w-2xl"
       formRoute="/process-stage"
+      defaultSortBy="seq"
+      defaultSortOrder="asc"
     />
   );
 }

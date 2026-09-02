@@ -52,7 +52,13 @@ export default function SupplierMasterForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const fetchSupplier = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/suppliers/next-code');
+        if (res.data?.code) setForm((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: SupplierData }>(`/suppliers/${id}`);

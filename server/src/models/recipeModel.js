@@ -62,10 +62,14 @@ export async function getByCode(code) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query("SELECT code FROM recipes ORDER BY id DESC LIMIT 1");
-  if (!row) return 'RC-00001';
-  const num = parseInt(row.code.split('-')[1], 10) + 1;
-  return `RC-${String(num).padStart(5, '0')}`;
+  const [rows] = await pool.query("SELECT code FROM recipes WHERE code LIKE 'RC-%'");
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `RC-${String(maxNum + 1).padStart(5, '0')}`;
 }
 
 export async function create(data, createdBy = null) {

@@ -60,7 +60,13 @@ export default function ProductMasterForm() {
   const [filteredGroups, setFilteredGroups] = useState<GroupOption[]>([]);
 
   const fetchProduct = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/products/next-code');
+        if (res.data?.code) setForm((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: any }>(`/products/${id}`);

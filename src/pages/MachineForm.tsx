@@ -44,7 +44,14 @@ export default function MachineForm() {
   }, []);
 
   const fetchMachine = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code?: string; next_code?: string } }>('/machines/next-code');
+        const code = res.data?.code || res.data?.next_code;
+        if (code) setForm((p) => ({ ...p, code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: any }>(`/machines/${id}`);

@@ -100,7 +100,13 @@ export default function MaterialMasterForm() {
   }, []);
 
   const fetchMaterial = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/materials/next-code');
+        if (res.data?.code) setForm((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: MaterialData }>(`/materials/${id}`);
@@ -136,7 +142,8 @@ export default function MaterialMasterForm() {
         const filtered = dropdowns['group-master'].data.filter(
           (g: any) => String(g.category_id) === String(cat.id)
         );
-        setFilteredGroups(filtered as unknown as GroupOption[]);
+        // Fall back to showing all groups when no group is linked to the category
+        setFilteredGroups((filtered.length > 0 ? filtered : dropdowns['group-master'].data) as unknown as GroupOption[]);
       } else {
         // Show all groups if category not matched
         setFilteredGroups(dropdowns['group-master'].data as unknown as GroupOption[]);

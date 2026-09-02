@@ -35,7 +35,14 @@ export default function GroupMasterForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const fetchRecord = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code?: string; next_code?: string } }>('/group-master/next-code');
+        const code = res.data?.code || res.data?.next_code;
+        if (code) setForm((p) => ({ ...p, code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: GroupData }>(`/group-master/${id}`);

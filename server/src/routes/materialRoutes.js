@@ -6,6 +6,7 @@ import { requireWriteAccess } from '../middleware/auth.js';
 const router = Router();
 
 router.get('/dropdown', ctrl.dropdown);
+router.get('/next-code', ctrl.nextCode);
 router.get('/stats', ctrl.stats);
 router.get('/', ctrl.list);
 router.get('/:id', validateId, ctrl.getOne);

@@ -10,6 +10,7 @@ function createMasterRoutes(controller) {
 
   router.get('/', validatePagination, controller.list);
   router.get('/dropdown', controller.dropdown);
+  router.get('/next-code', controller.nextCode);
   router.get('/stats', controller.stats);
   router.post('/check-duplicate', controller.checkDuplicate);
   router.post('/bulk-delete', requireWriteAccess, controller.bulkDelete);
@@ -65,6 +66,7 @@ export const groupMasterRoutes = Router();
 // Register custom group routes FIRST (before /:id)
 groupMasterRoutes.get('/', validatePagination, ctrl.groupMasterController.list);
 groupMasterRoutes.get('/dropdown', ctrl.groupMasterController.dropdown);
+groupMasterRoutes.get('/next-code', ctrl.groupMasterController.nextCode);
 groupMasterRoutes.get('/stats', ctrl.groupMasterController.stats);
 groupMasterRoutes.get('/with-category', validatePagination, async (req, res, next) => {
   try {

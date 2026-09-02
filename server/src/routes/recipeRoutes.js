@@ -21,6 +21,7 @@ const router = Router();
 
 router.get('/', validatePagination, ctrl.list);
 router.get('/stats', ctrl.stats);
+router.get('/next-code', ctrl.nextCode);
 router.get('/bom-items/:productId', validateId, ctrl.getBOMItems);
 router.get('/stage-parameters/:processStageId', validateId, ctrl.getStageParameters);
 router.get('/:id', validateId, ctrl.getOne);

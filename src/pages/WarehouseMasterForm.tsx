@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Save, X, ArrowLeft, Upload, Trash2, FileText,
-  Building2, Settings, Grid3X3, Users, Plus, Download, AlertCircle,
+  Save, X, ArrowLeft, Trash2,
+  Settings, Grid3X3, Users, Plus,
   Warehouse,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
@@ -40,16 +40,6 @@ interface WarehouseData {
   notes: string;
   remarks: string;
   status: string;
-  attachments?: Attachment[];
-}
-
-interface Attachment {
-  id: number;
-  document_type: string;
-  file_name: string;
-  file_path: string;
-  file_type: string;
-  uploaded_at: string;
 }
 
 interface BinRack {
@@ -72,13 +62,6 @@ interface UserAccess {
   can_issue: boolean;
   can_transfer: boolean;
   can_adjust: boolean;
-}
-
-interface WarehouseOption {
-  id: number;
-  code: string;
-  name: string;
-  warehouse_type: string;
 }
 
 const empty: WarehouseData = {
@@ -149,24 +132,20 @@ export default function WarehouseMasterForm() {
   const isNew = !id || id === 'new';
 
   const [form, setForm] = useState<WarehouseData>(empty);
-  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('capacity');
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
   const [bins, setBins] = useState<BinRack[]>([]);
   const [userAccess, setUserAccess] = useState<UserAccess[]>([]);
 
-  const fetchWarehouses = useCallback(async () => {
-    try {
-      const res = await api<{ data: WarehouseOption[] }>('/warehouses/dropdown');
-      setWarehouses((res.data || []).filter((w) => w.id !== Number(id)));
-    } catch { setWarehouses([]); }
-  }, [id]);
-
   const fetchWarehouse = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/warehouses/next-code');
+        if (res.data?.code) setForm((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: WarehouseData & { bins?: any[]; user_access?: any[] } }>(`/warehouses/${id}`);
@@ -195,7 +174,7 @@ export default function WarehouseMasterForm() {
     finally { setLoading(false); }
   }, [id, isNew]);
 
-  useEffect(() => { fetchWarehouse(); fetchWarehouses(); }, [fetchWarehouse, fetchWarehouses]);
+  useEffect(() => { fetchWarehouse(); }, [fetchWarehouse]);
 
   const update = (key: string, value: any) => setForm((p) => ({ ...p, [key]: value }));
 
@@ -232,33 +211,6 @@ export default function WarehouseMasterForm() {
       navigate('/warehouse-master');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { setSaving(false); }
-  };
-
-  const handleUpload = async (file: File) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const token = localStorage.getItem('tannery_token');
-      const res = await fetch(`${import.meta.env.VITE_API_BASE || '/api'}/warehouses/${id}/attachments`, {
-        method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      toast.success('File uploaded!');
-      fetchWarehouse();
-    } catch { toast.error('Upload failed'); }
-    finally { setUploading(false); }
-  };
-
-  const handleDeleteAttachment = async (attachmentId: number) => {
-    try {
-      await api(`/warehouses/${id}/attachments/${attachmentId}`, { method: 'DELETE' });
-      toast.success('Attachment deleted');
-      fetchWarehouse();
-    } catch { toast.error('Delete failed'); }
   };
 
   // Bin/Rack handlers
@@ -317,14 +269,6 @@ export default function WarehouseMasterForm() {
           <Select label="Status" required options={STATUS_OPTIONS} value={form.status} onChange={(e) => update('status', e.target.value)} />
           {/* Row 2 */}
           <Select label="Warehouse Type" required options={WH_TYPES} value={form.warehouse_type} onChange={(e) => update('warehouse_type', e.target.value)} />
-          <Select
-            label="Parent Warehouse"
-            options={[{ value: '', label: '-- Select (if any) --' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]}
-            value={form.parent_warehouse_id}
-            onChange={(e) => update('parent_warehouse_id', e.target.value)}
-          />
-          {/* location_address spans this cell */}
-          <Select label="Default Warehouse" options={YES_NO} value={form.is_default} onChange={(e) => update('is_default', e.target.value)} />
           {/* Row 3 */}
           <Input label="Short Name" value={form.short_name} onChange={(e) => update('short_name', e.target.value)} placeholder="e.g. RMW" />
           <Input label="Store Keeper / Incharge" value={form.store_keeper} onChange={(e) => update('store_keeper', e.target.value)} placeholder="Keeper name" />
@@ -400,17 +344,6 @@ export default function WarehouseMasterForm() {
                 <Select label="Storage Condition" options={STORAGE_CONDITIONS} value={form.storage_condition} onChange={(e) => update('storage_condition', e.target.value)} />
                 <Select label="Material Movement Type" options={MOVEMENT_TYPES} value={form.material_movement_type} onChange={(e) => update('material_movement_type', e.target.value)} />
                 <Select label="Temperature Control" options={YES_NO} value={form.temperature_control} onChange={(e) => update('temperature_control', e.target.value)} />
-                <div className="flex items-end pb-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.allow_negative_stock}
-                      onChange={(e) => update('allow_negative_stock', e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
-                    />
-                    <span className="text-xs font-medium text-gray-700">Allow Negative Stock</span>
-                  </label>
-                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-900 mb-1">Notes</label>
@@ -542,64 +475,6 @@ export default function WarehouseMasterForm() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Section 4: Documents / Attachments */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
-        <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">4. Documents / Attachments</h2>
-        {!isNew ? (
-          <div className="space-y-4">
-            {form.attachments && form.attachments.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-[11px] font-bold text-gray-600 uppercase">#</th>
-                      <th className="text-left py-3 px-4 text-[11px] font-bold text-gray-600 uppercase">Document Type</th>
-                      <th className="text-left py-3 px-4 text-[11px] font-bold text-gray-600 uppercase">File Name</th>
-                      <th className="text-left py-3 px-4 text-[11px] font-bold text-gray-600 uppercase">Uploaded On</th>
-                      <th className="text-center py-3 px-4 text-[11px] font-bold text-gray-600 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {form.attachments.map((att, idx) => (
-                      <tr key={att.id} className="hover:bg-blue-50/30">
-                        <td className="py-2.5 px-4 text-xs text-gray-500">{idx + 1}</td>
-                        <td className="py-2.5 px-4 text-xs text-gray-700">{att.document_type || 'General'}</td>
-                        <td className="py-2.5 px-4 text-xs text-gray-700">{att.file_name}</td>
-                        <td className="py-2.5 px-4 text-xs text-gray-500">{new Date(att.uploaded_at).toLocaleDateString('en-IN')}</td>
-                        <td className="py-2.5 px-4 text-center flex items-center justify-center gap-2">
-                          <a href={att.file_path} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50"><Download size={14} /></a>
-                          <button onClick={() => handleDeleteAttachment(att.id)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50"><Trash2 size={14} /></button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="py-6 text-center">
-                <FileText size={28} className="mx-auto text-gray-300 mb-2" />
-                <p className="text-sm text-gray-400">No documents uploaded yet.</p>
-              </div>
-            )}
-            <div>
-              <input ref={fileRef} type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])} />
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all disabled:opacity-50"
-              >
-                <Plus size={14} /> {uploading ? 'Uploading...' : 'Add Document'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="py-6 text-center">
-            <AlertCircle size={28} className="mx-auto text-gray-300 mb-2" />
-            <p className="text-sm text-gray-400">Save the warehouse first to upload documents.</p>
-          </div>
-        )}
       </div>
 
       {/* Sticky Bottom Bar */}

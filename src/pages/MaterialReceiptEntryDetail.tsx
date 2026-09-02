@@ -9,7 +9,7 @@ import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; }
 interface Supplier { id: number; code: string; name: string; }
-interface Material { id: number; code: string; name: string; uom: string; primary_uom_name?: string; secondary_uom_name?: string; currency?: string; }
+interface Material { id: number; code: string; name: string; uom: string; primary_uom_name?: string; secondary_uom_name?: string; currency?: string; category_name?: string; category?: string; group_name?: string; display_name?: string; }
 interface Item {
   _key: string;
   material_id: string;
@@ -413,7 +413,7 @@ export default function MaterialReceiptEntryDetail() {
                   <td className="py-2.5 px-3 text-xs text-gray-700 font-mono">{item.material_code || '-'}</td>
                   <td className="py-2.5 px-3">
                     <SearchableSelect
-                      options={materials.map((m) => ({ value: String(m.id), label: m.name }))}
+                      options={materials.map((m) => ({ value: String(m.id), label: m.display_name || (m.category_name ? `${m.name} (${m.category_name})` : m.name) }))}
                       value={item.material_id}
                       onChange={(val) => updateItem(item._key, 'material_id', val)}
                       placeholder="Search item..."

@@ -58,11 +58,14 @@ export async function getById(id) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query("SELECT code FROM materials ORDER BY id DESC LIMIT 1");
-  if (!row) return 'MAT-00001';
-  const parts = row.code.split('-');
-  const num = parseInt(parts[parts.length - 1], 10) + 1;
-  return `MAT-${String(num).padStart(5, '0')}`;
+  const [rows] = await pool.query("SELECT code FROM materials WHERE code LIKE 'MAT-%'");
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `MAT-${String(maxNum + 1).padStart(5, '0')}`;
 }
 
 async function resolveWarehouseId(warehouseName) {
@@ -285,16 +288,23 @@ export async function remove(id) {
 
 export async function getDropdown() {
   const [rows] = await pool.query(
-    `SELECT m.id, m.code, m.name, m.uom, m.type, m.category,
+    `SELECT m.id, m.code, m.name, m.uom, m.type, m.category, m.group_id,
        m.primary_uom_id, m.secondary_uom_id, m.currency,
        m.standard_cost, m.last_purchase_price, m.preferred_supplier_id,
-       pu.name AS primary_uom_name, su.name AS secondary_uom_name
+       pu.name AS primary_uom_name, su.name AS secondary_uom_name,
+       pc.name AS category_name, g.name AS group_name
      FROM materials m
      LEFT JOIN uom pu ON m.primary_uom_id = pu.id
      LEFT JOIN uom su ON m.secondary_uom_id = su.id
+     LEFT JOIN product_categories pc ON m.category = pc.id OR m.category = pc.name
+     LEFT JOIN group_master g ON m.group_id = g.id
      WHERE m.status='Active' ORDER BY m.name ASC`
   );
-  return rows;
+  // Build a display name concatenating material name with its category
+  return rows.map(r => {
+    const category = r.category_name || r.category || '';
+    return { ...r, display_name: category ? `${r.name} (${category})` : r.name };
+  });
 }
 
 export async function getStats() {

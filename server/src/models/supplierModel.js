@@ -49,10 +49,14 @@ export async function getById(id) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query("SELECT code FROM suppliers ORDER BY id DESC LIMIT 1");
-  if (!row) return 'SUP-00001';
-  const num = parseInt(row.code.split('-')[1], 10) + 1;
-  return `SUP-${String(num).padStart(5, '0')}`;
+  const [rows] = await pool.query("SELECT code FROM suppliers WHERE code LIKE 'SUP-%'");
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `SUP-${String(maxNum + 1).padStart(5, '0')}`;
 }
 
 export async function create(data, createdBy = null) {

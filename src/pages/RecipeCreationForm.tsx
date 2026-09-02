@@ -174,7 +174,13 @@ export default function RecipeCreationForm() {
   };
 
   const fetchRecipe = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/recipes/next-code');
+        if (res.data?.code) setFormData((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const detail = await api<{ data: Recipe & { items: RecipeItem[]; stages: ProcessStage[]; attachments: RecipeAttachment[] } }>(`/recipes/${id}`);

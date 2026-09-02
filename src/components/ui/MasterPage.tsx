@@ -63,6 +63,8 @@ interface MasterPageProps {
   enableArchive?: boolean;
   modalSize?: string;
   formRoute?: string;
+  defaultSortBy?: string;
+  defaultSortOrder?: 'asc' | 'desc';
   renderForm?: (props: { formData: any; setFormData: (d: any) => void; formErrors: Record<string, string>; selectedItem: any; statusToggle: boolean; setStatusToggle: (v: boolean) => void; setFormDirty: (v: boolean) => void }) => React.ReactNode;
 }
 
@@ -85,6 +87,8 @@ export default function MasterPage({
   enableArchive = true,
   modalSize,
   formRoute,
+  defaultSortBy,
+  defaultSortOrder = 'asc',
   renderForm,
 }: MasterPageProps) {
   const { canWrite, isReadOnly } = usePermission();
@@ -115,8 +119,8 @@ export default function MasterPage({
   const [totalPages, setTotalPages] = useState(0);
 
   // Sorting
-  const [sortBy, setSortBy] = useState<SortField | ''>('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [sortBy, setSortBy] = useState<SortField | ''>(defaultSortBy || '');
+  const [sortOrder, setSortOrder] = useState<SortOrder>(defaultSortBy ? defaultSortOrder : 'desc');
 
   // Row selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -262,6 +266,15 @@ export default function MasterPage({
       setStatusToggle(true);
       setAuditInfo(null);
       setShowAudit(false);
+      // Preview the auto-generated code so it shows immediately on "New"
+      if ('code' in (emptyData || {})) {
+        api<{ data: { code?: string; next_code?: string } }>(`${apiEndpoint}/next-code`)
+          .then((res) => {
+            const code = res.data?.code || res.data?.next_code;
+            if (code) setFormData((prev: any) => ({ ...prev, code }));
+          })
+          .catch(() => { /* ignore preview failure */ });
+      }
     }
     setFormErrors({});
     setFormDirty(false);

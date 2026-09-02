@@ -83,12 +83,19 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
   }
 
   async function getNextCode() {
-    const [[row]] = await pool.query(
-      `SELECT code FROM ${_tableName} ORDER BY id DESC LIMIT 1`
+    // Find the highest numeric suffix among codes that match this prefix.
+    // This is robust against legacy/malformed codes that would otherwise yield NaN.
+    const [rows] = await pool.query(
+      `SELECT code FROM ${_tableName} WHERE code LIKE ?`,
+      [`${_codePrefix}-%`]
     );
-    if (!row) return `${_codePrefix}-00001`;
-    const num = parseInt(row.code.split('-')[1], 10) + 1;
-    return `${_codePrefix}-${String(num).padStart(5, '0')}`;
+    let maxNum = 0;
+    for (const r of rows) {
+      const parts = String(r.code || '').split('-');
+      const n = parseInt(parts[parts.length - 1], 10);
+      if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+    }
+    return `${_codePrefix}-${String(maxNum + 1).padStart(5, '0')}`;
   }
 
   async function checkDuplicate(data, excludeId = null) {

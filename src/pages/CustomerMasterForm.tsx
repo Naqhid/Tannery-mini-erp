@@ -50,7 +50,13 @@ export default function CustomerMasterForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const fetchCustomer = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/customers/next-code');
+        if (res.data?.code) setForm((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: CustomerData }>(`/customers/${id}`);

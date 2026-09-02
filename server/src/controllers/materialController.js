@@ -86,3 +86,10 @@ export async function uploadAttachment(req, res, next) {
     res.json({ data: { file_path: filePath, file_name: req.file.originalname }, message: 'Attachment uploaded successfully!' });
   } catch (err) { next(err); }
 }
+
+export async function nextCode(_req, res, next) {
+  try {
+    const code = await model.getNextCode();
+    res.json({ data: { code, next_code: code } });
+  } catch (err) { next(err); }
+}

@@ -8,7 +8,7 @@ import { usePermission } from '../lib/usePermission';
 
 interface Customer { id: number; name: string; }
 interface SalesOrder { id: number; order_no: string; customer_id?: number; customer_name?: string; order_qty?: number; }
-interface ProcessStage { id: number; code: string; name: string; uom?: string; }
+interface ProcessStage { id: number; code: string; name: string; uom?: string; seq?: number; }
 
 interface PlanData {
   id?: number;
@@ -86,7 +86,18 @@ export default function ProductionPlanDetail() {
       ]);
       setCustomers(cust.data || []);
       setSalesOrders(so.data || []);
-      setProcessStages(ps.data || []);
+      // Sort process stages by sequence ascending (1, 2, 3...), fallback to name
+      const seqNum = (v: any) => {
+        const n = Number(v);
+        return Number.isFinite(n) && v !== null && v !== '' ? n : Number.MAX_SAFE_INTEGER;
+      };
+      const sortedStages = [...(ps.data || [])].sort((a, b) => {
+        const sa = seqNum(a.seq);
+        const sb = seqNum(b.seq);
+        if (sa !== sb) return sa - sb;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      setProcessStages(sortedStages);
     } catch { toast.error('Failed to load dropdowns'); }
   }, []);
 
