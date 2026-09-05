@@ -7,7 +7,7 @@ async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQ
   const params = [productionPlanId];
   let exclude = '';
   if (currentId) { exclude = ' AND id <> ?'; params.push(currentId); }
-  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM ${table} WHERE production_plan_id=?${exclude}`, params);
+  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM general_cost_headers WHERE production_plan_id=?${exclude}`, params);
   const max = Number(plan.issued_qty) || 0;
   const requested = Number(productionQty) || 0;
   if (requested > Math.max(0, max - (Number(used.qty) || 0)) + 0.000001) {
