@@ -53,7 +53,12 @@ export default function MachineCostForm() {
         setLoading(true);
         if (!isNew && id) {
           const res = await api<{ data: MachineCostData }>(`/machine-costs/${id}`);
-          setFormData(res.data);
+          const data = res.data;
+          // Normalize production_date: strip time portion so <input type="date"> renders correctly
+          if (data.production_date) {
+            data.production_date = data.production_date.toString().split('T')[0];
+          }
+          setFormData(data);
         } else if (planId) {
           const [planRes, noRes] = await Promise.all([
             api<{ data: any }>(`/production-status/orders/${planId}`),
@@ -72,6 +77,20 @@ export default function MachineCostForm() {
     };
     loadData();
   }, [id, isNew, planId]);
+
+  // Once machines are loaded, back-fill machine_id on existing items
+  // (items loaded from DB only have the string name, not the FK id)
+  useEffect(() => {
+    if (!machines.length) return;
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map(item => {
+        if (item.machine_id) return item; // already resolved
+        const match = machines.find(m => m.name === item.machine_name);
+        return match ? { ...item, machine_id: match.id } : item;
+      }),
+    }));
+  }, [machines]);
 
   // Fetch output from Daily Production (total, not date-specific)
   useEffect(() => {
