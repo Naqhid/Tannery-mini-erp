@@ -26,16 +26,57 @@ export async function getAll({ search, status, customer_id, product_id, article,
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * limit;
 
+  // Measurement stage = last stage by sequence for the plan. Its cumulative
+  // Daily Production output is the source of truth for output/completed qty.
+  const measurementOutputSql = `
+    COALESCE((
+      SELECT SUM(t.output_qty)
+      FROM production_status_orders pso
+      JOIN production_status_transactions t
+        ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name
+          FROM production_plan_stages s2
+          WHERE s2.plan_id = pp.id
+          ORDER BY s2.seq DESC, s2.id DESC
+          LIMIT 1
+        )
+    ), 0)`;
+
+  // Per-stage Daily Production output for this plan (one row per stage),
+  // used to derive status across ALL stages of the plan.
+  const stageOutputCte = `
+    SELECT s.plan_id, s.stage_name, s.planned_qty AS stage_planned,
+      COALESCE((
+        SELECT SUM(t.output_qty)
+        FROM production_status_orders pso
+        JOIN production_status_transactions t
+          ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+        WHERE pso.production_plan_id = s.plan_id AND pso.deleted_at IS NULL
+          AND pso.process_stage COLLATE utf8mb4_unicode_ci = s.stage_name COLLATE utf8mb4_unicode_ci
+      ), 0) AS stage_output
+    FROM production_plan_stages s`;
+
+  // Count of stages, stages with output > 0, and stages meeting planned qty.
+  const stageCountSql = `(SELECT COUNT(*) FROM production_plan_stages s0 WHERE s0.plan_id = pp.id)`;
+  const stagesWithOutputSql = `(SELECT COUNT(*) FROM (${stageOutputCte}) so1 WHERE so1.plan_id = pp.id AND so1.stage_output > 0)`;
+  const stagesCompletedSql = `(SELECT COUNT(*) FROM (${stageOutputCte}) so2 WHERE so2.plan_id = pp.id AND so2.stage_planned > 0 AND so2.stage_output >= so2.stage_planned)`;
+
   const [rows] = await pool.query(
     `SELECT pp.id, pp.plan_no, pp.plan_date, pp.planned_start_date, pp.planned_end_date,
        pp.order_qty, pp.planned_qty, pp.batch_qty, pp.no_of_batches,
-       pp.balance_qty, pp.output_qty, pp.output_percent, pp.wip_qty,
+       pp.output_percent,
        pp.article, pp.color, pp.finish, pp.customer_order_no,
        pp.priority, pp.uom, pp.created_at,
+       ${measurementOutputSql} AS output_qty,
+       ${measurementOutputSql} AS completed_qty,
+       GREATEST(0, COALESCE(pp.planned_qty, 0) - ${measurementOutputSql}) AS wip_qty,
+       GREATEST(0, COALESCE(pp.planned_qty, 0) - ${measurementOutputSql}) AS balance_qty,
        CASE
-         WHEN COALESCE(pp.planned_qty, 0) <= 0 THEN 'Pending'
-         WHEN COALESCE(pp.planned_qty, 0) >= COALESCE(pp.order_qty, 0) AND COALESCE(pp.order_qty, 0) > 0 THEN 'Completed'
-         ELSE 'In Progress'
+         WHEN ${stageCountSql} > 0 AND ${stagesCompletedSql} = ${stageCountSql} THEN 'Completed'
+         WHEN ${stagesWithOutputSql} > 0 THEN 'In Progress'
+         ELSE 'Planned'
        END AS status,
        c.id AS customer_id, c.name AS customer_name,
        p.id AS product_id, p.name AS product_name, p.code AS product_code,
@@ -502,6 +543,27 @@ export async function getSalesOrderItems({ search, status, customer_id, article,
 
   const offset = (page - 1) * limit;
 
+  // Planned qty across all matching plans (unchanged).
+  const plannedSql = `COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0)`;
+
+  // Completed qty = cumulative Daily Production output of each plan's
+  // measurement stage (last stage by sequence), summed across matching plans.
+  const completedSql = `COALESCE((
+    SELECT SUM(t.output_qty)
+    FROM production_plans pp2
+    JOIN production_status_orders pso
+      ON pso.production_plan_id = pp2.id AND pso.deleted_at IS NULL
+     AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+       SELECT s2.stage_name FROM production_plan_stages s2
+       WHERE s2.plan_id = pp2.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+     )
+    JOIN production_status_transactions t
+      ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+    WHERE pp2.sales_order_id = so.id
+      AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
+      AND pp2.deleted_at IS NULL
+  ), 0)`;
+
   const [rows] = await pool.query(
     `SELECT 
        soi.id AS item_id,
@@ -516,13 +578,13 @@ export async function getSalesOrderItems({ search, status, customer_id, article,
        soi.leather_type AS finish,
        soi.quantity AS order_qty,
        soi.uom,
-       COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) AS planned_qty,
-       COALESCE((SELECT SUM(pp2.completed_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) AS completed_qty,
-       soi.quantity - COALESCE((SELECT SUM(pp2.completed_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) AS balance_qty,
+       ${plannedSql} AS planned_qty,
+       ${completedSql} AS completed_qty,
+       GREATEST(0, soi.quantity - ${completedSql}) AS balance_qty,
        (SELECT pp2.id FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL ORDER BY pp2.id DESC LIMIT 1) AS plan_id,
        CASE
-         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) = 0 THEN 'Pending'
-         WHEN COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) >= soi.quantity THEN 'Completed'
+         WHEN ${completedSql} <= 0 THEN 'Pending'
+         WHEN ${completedSql} >= soi.quantity AND soi.quantity > 0 THEN 'Completed'
          ELSE 'In Progress'
        END AS status
      FROM sales_order_items soi

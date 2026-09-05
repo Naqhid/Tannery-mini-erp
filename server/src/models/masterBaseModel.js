@@ -126,6 +126,18 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       .map(([field]) => field)
   );
 
+  // Numeric fields: empty strings must become null so they don't fail
+  // strict-mode INT/DECIMAL columns (e.g. seq, gst_rate, *_id, rate_*).
+  const _numericFields = new Set([
+    'seq', 'rank', 'value_mm', 'gst_rate', 'capacity',
+    'rate_indian', 'rate_imported', 'min_value', 'max_value',
+    'category_id', 'company_id', 'country_id', 'state_id',
+    'process_stage_id', 'warehouse_id',
+    ...Object.entries(_extraColumns)
+      .filter(([, type]) => type === 'number')
+      .map(([field]) => field),
+  ]);
+
   function sanitizeValue(field, value) {
     if (_dateFields.has(field)) {
       if (!value || value === '') return null;
@@ -133,6 +145,11 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       const d = new Date(value);
       if (isNaN(d.getTime())) return null;
       return d.toISOString().split('T')[0];
+    }
+    if (_numericFields.has(field)) {
+      if (value === '' || value === null || value === undefined) return null;
+      const n = Number(value);
+      return Number.isNaN(n) ? null : n;
     }
     return value;
   }

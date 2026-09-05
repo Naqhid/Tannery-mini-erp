@@ -18,6 +18,7 @@ interface OrderData {
   article: string;
   color: string;
   process_stage: string;
+  planned_qty: string;
   issued_qty: string;
   completed_qty: string;
   balance_qty: string;
@@ -56,7 +57,7 @@ export default function ProductionStatusForm() {
 
   const [form, setForm] = useState<OrderData>({
     order_no: '', customer_name: '', customer_id: '', article: '', color: '',
-    process_stage: '', issued_qty: '0', completed_qty: '0', balance_qty: '0',
+    process_stage: '', planned_qty: '0', issued_qty: '0', completed_qty: '0', balance_qty: '0',
     uom: '', status: 'In-Process', remarks: '', production_plan_id: '', plan_date: '', posted_at: null,
   });
   const [loading, setLoading] = useState(false);
@@ -117,6 +118,7 @@ export default function ProductionStatusForm() {
           article: d.article || '',
           color: d.color || '',
           process_stage: d.process_stage || '',
+          planned_qty: String(d.planned_qty || 0),
           issued_qty: String(d.issued_qty || 0),
           completed_qty: String(d.completed_qty || 0),
           balance_qty: String(d.balance_qty || 0),
@@ -281,14 +283,6 @@ export default function ProductionStatusForm() {
 
   const handleSaveTxn = async () => {
     if (!txnForm.production_date) { toast.error('Production date is required'); return; }
-    // Validation: Output + Rejection <= Opening + Input
-    const opening = parseFloat(txnForm.opening_qty) || 0;
-    const input = parseFloat(txnForm.input_qty) || 0;
-    const output = parseFloat(txnForm.output_qty) || 0;
-    const rejection = parseFloat(txnForm.rejection_qty) || 0;
-    const available = opening + input;
-    if (output > available) { toast.error(`Output Qty (${output.toFixed(2)}) cannot exceed available qty (${available.toFixed(2)})`); return; }
-    if (output + rejection > available) { toast.error(`Output (${output.toFixed(2)}) + Rejection (${rejection.toFixed(2)}) cannot exceed available qty (${available.toFixed(2)})`); return; }
     setTxnSaving(true);
     try {
       if (editingTxn) {
@@ -419,6 +413,11 @@ export default function ProductionStatusForm() {
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 font-medium" />
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Planned Qty</label>
+            <input type="text" value={form.planned_qty} readOnly title="From Production Plan stage"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 font-medium" />
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} disabled={isPosted}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">
@@ -487,8 +486,8 @@ export default function ProductionStatusForm() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">Opening Qty</label>
-                  <input type="number" step="0.01" value={txnForm.opening_qty} onChange={e => updateTxnField('opening_qty', e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                  <input type="number" step="0.01" value={txnForm.opening_qty} readOnly disabled
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-gray-50 text-gray-700" placeholder="0" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">Input Qty</label>

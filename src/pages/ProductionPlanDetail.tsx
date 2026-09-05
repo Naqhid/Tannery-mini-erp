@@ -181,7 +181,10 @@ export default function ProductionPlanDetail() {
 
   // Derived calculations
   const salesOrderQty = parseFloat(plan.sales_order_qty) || 0;
-  const completedQty = parseFloat(plan.completed_qty) || 0;
+  // Completed Qty = cumulative output of the measurement stage (last stage by
+  // sequence). Stage output_qty is auto-populated from Daily Production.
+  const measurementStage = stages.length > 0 ? stages[stages.length - 1] : null;
+  const completedQty = measurementStage ? (parseFloat(measurementStage.output_qty) || 0) : 0;
   const balanceQty = Math.max(0, salesOrderQty - completedQty);
 
   const totalPlanQty = stages.reduce((s, st) => s + (parseFloat(st.planned_qty) || 0), 0);
@@ -409,7 +412,7 @@ export default function ProductionPlanDetail() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Completed Qty (Sq.Ft.)</label>
-            <input type="number" value={plan.completed_qty} onChange={(e) => update('completed_qty', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
+            <input type="number" value={completedQty} readOnly title="Cumulative output of the measurement (last) stage from Daily Production" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700" placeholder="0.00" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Balance Qty (Sq.Ft.)</label>

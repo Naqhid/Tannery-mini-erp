@@ -434,9 +434,6 @@ export default function SalesOrderDetail() {
                 <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
                   {isNew ? 'New Sales Order' : `Sales Order`}
                 </h1>
-                {order.order_no && (
-                  <span className="text-lg font-bold text-blue-600 font-mono bg-blue-50 px-3 py-1 rounded-lg">{order.order_no}</span>
-                )}
                 {!isNew && (
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border ${statusConfig.bg} ${statusConfig.color} shadow-sm`}>
                     <StatusIcon size={14} />
@@ -604,7 +601,7 @@ export default function SalesOrderDetail() {
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[160px]">
                               <option value="">-- Select Article --</option>
                               {products.map(p => (
-                                <option key={p.id} value={p.id}>{p.display_name || p.name}</option>
+                                <option key={p.id} value={p.id}>{p.name}</option>
                               ))}
                             </select>
                           </td>

@@ -48,7 +48,15 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
 
 export async function getOrderById(id) {
   const [[row]] = await pool.query(
-    `SELECT * FROM production_status_orders WHERE id = ? AND deleted_at IS NULL`, [id]
+    `SELECT o.*,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), 0) AS planned_qty
+     FROM production_status_orders o
+     WHERE o.id = ? AND o.deleted_at IS NULL`, [id]
   );
   return row || null;
 }
@@ -207,12 +215,6 @@ export async function getNextTransactionNo() {
 
 export async function createTransaction(data, userId = null) {
   const transactionNo = data.transaction_no || await getNextTransactionNo();
-  const opening = Number(data.opening_qty || 0);
-  const input = Number(data.input_qty || 0);
-  const output = Number(data.output_qty || 0);
-  const rejection = Number(data.rejection_qty || 0);
-  if (output > input) throw new Error('Output Qty cannot be greater than Input Qty');
-  if (rejection > output) throw new Error('Rejection Qty cannot be greater than Output Qty');
 
   const [result] = await pool.query(
     `INSERT INTO production_status_transactions
@@ -240,11 +242,6 @@ export async function createTransaction(data, userId = null) {
 }
 
 export async function updateTransaction(id, data, userId = null) {
-  const input = Number(data.input_qty || 0);
-  const output = Number(data.output_qty || 0);
-  const rejection = Number(data.rejection_qty || 0);
-  if (output > input) throw new Error('Output Qty cannot be greater than Input Qty');
-  if (rejection > output) throw new Error('Rejection Qty cannot be greater than Output Qty');
   // Get the order id before update
   const [[existing]] = await pool.query('SELECT production_status_order_id FROM production_status_transactions WHERE id = ?', [id]);
   if (!existing) return false;

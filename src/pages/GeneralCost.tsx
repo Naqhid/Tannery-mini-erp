@@ -7,8 +7,12 @@ import {
 } from 'lucide-react';
 import SkeletonLoader from '../components/ui/SkeletonLoader';
 import EmptyState from '../components/ui/EmptyState';
+import { ScanLine } from 'lucide-react';
 import { useDebounce } from '../lib/useDebounce';
 import api from '../lib/api';
+import BarcodeScanner from '../components/BarcodeScanner';
+
+interface StageOption { id: number; name: string; }
 
 interface OrderRow {
   id: number;
@@ -50,6 +54,8 @@ export default function GeneralCost() {
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
+  const [stageOptions, setStageOptions] = useState<StageOption[]>([]);
+  const [showScanner, setShowScanner] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -80,6 +86,16 @@ export default function GeneralCost() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setCurrentPage(1); }, [debouncedSearch, processStage, showCompleted, sortBy, sortOrder, activeTab]);
+
+  // Load process stages from master
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api<{ data: StageOption[] }>('/process-stages?limit=100');
+        setStageOptions(res.data || []);
+      } catch { setStageOptions([]); }
+    })();
+  }, []);
 
   const handleRowClick = (row: OrderRow) => {
     if (row.general_cost_id) {
@@ -138,9 +154,7 @@ export default function GeneralCost() {
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[130px]"
             >
               <option value="All">All</option>
-              <option value="Wet End">Wet End</option>
-              <option value="Finishing">Finishing</option>
-              <option value="Packing">Packing</option>
+              {stageOptions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
           </div>
 
@@ -162,18 +176,34 @@ export default function GeneralCost() {
 
           <div className="flex-1" />
 
-          <div className="relative w-full sm:w-auto">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search customer, order no..."
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-64 md:w-72 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
-            />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-none">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search customer, order no..."
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-64 md:w-72 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
+              />
+            </div>
+            <button
+              onClick={() => setShowScanner(true)}
+              title="Scan to search"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors whitespace-nowrap"
+            >
+              <ScanLine size={16} /> Scan
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Barcode Scanner */}
+      <BarcodeScanner
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScan={(value) => setSearchInput(value)}
+      />
 
       {/* Desktop Table (hidden on mobile) */}
       <div className="hidden md:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">

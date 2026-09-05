@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import {
   Factory, Search, Filter, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, RefreshCw,
-  FileSpreadsheet, Plus, ChevronDown,
+  FileSpreadsheet, Plus, ChevronDown, Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -13,8 +13,6 @@ import { usePermission } from '../lib/usePermission';
 
 const STATUS_COLORS: Record<string, string> = {
   Pending: 'bg-slate-100 text-slate-700',
-  'In Progress': 'bg-amber-100 text-amber-700',
-  Completed: 'bg-emerald-100 text-emerald-700',
   Draft: 'bg-slate-100 text-slate-700',
   Planned: 'bg-blue-100 text-blue-700',
   'In Progress': 'bg-amber-100 text-amber-700',
@@ -61,7 +59,7 @@ export default function ProductionPlan() {
   const [activeParams, setActiveParams] = useState<Record<string, string>>({});
 
   // Delete
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; itemId?: number; plan_row?: any }>({ open: false, id: null });
 
   // Accordion
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -172,6 +170,8 @@ export default function ProductionPlan() {
     try {
       await api(`/production-plans/${deleteConfirm.id}`, { method: 'DELETE' });
       toast.success('Production plan deleted!');
+      // Refresh the accordion plans for the affected row, and the main list
+      if (deleteConfirm.plan_row) fetchRowPlans(deleteConfirm.plan_row);
       fetchData();
     } catch (err) {
       toast.error('Failed to delete: ' + (err as Error).message);
@@ -384,7 +384,6 @@ export default function ProductionPlan() {
                                   <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan No.</th>
                                   <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan Date</th>
                                   <th className="text-right py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
-                                  <th className="text-right py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Output Qty</th>
                                   <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Status</th>
                                   <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Action</th>
                                 </tr>
@@ -395,19 +394,29 @@ export default function ProductionPlan() {
                                     <td className="py-2 px-4 text-xs font-medium text-blue-700">{plan.plan_no || '—'}</td>
                                     <td className="py-2 px-4 text-xs text-gray-700">{plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN') : '—'}</td>
                                     <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-right">{formatQty(plan.planned_qty)}</td>
-                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-right">{formatQty(plan.output_qty)}</td>
                                     <td className="py-2 px-4 text-center">
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_COLORS[plan.status] || 'bg-gray-100 text-gray-700'}`}>
                                         {plan.status}
                                       </span>
                                     </td>
                                     <td className="py-2 px-4 text-center">
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${plan.id}`); }}
-                                        className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-all"
-                                      >
-                                        Open
-                                      </button>
+                                      <div className="flex items-center justify-center gap-1.5">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${plan.id}`); }}
+                                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-all"
+                                        >
+                                          Open
+                                        </button>
+                                        {canWrite && (plan.status === 'Pending' || plan.status === 'Planned') && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, id: plan.id, itemId: row.item_id, plan_row: row }); }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-rose-600 bg-white border border-rose-200 rounded-md hover:bg-rose-50 transition-all"
+                                            title="Delete plan (available before production starts)"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )}
+                                      </div>
                                     </td>
                                   </tr>
                                 ))}

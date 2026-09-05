@@ -11,7 +11,7 @@ export default function LeatherTypeForm() {
       listRoute="/leather-type"
       formFields={[
         { key: 'code', label: 'Code', placeholder: 'Auto-generated', disabled: true },
-        { key: 'name', label: 'Name', required: true, placeholder: 'Enter leather type name' },
+        { key: 'name', label: 'Name', required: true, placeholder: 'Enter name' },
         { key: 'description', label: 'Description', type: 'textarea' },
       ]}
       emptyData={{ code: '', name: '', description: '', status: 'Active' }}

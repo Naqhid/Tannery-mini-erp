@@ -94,6 +94,19 @@ export default function ProductMasterForm() {
 
   useEffect(() => { fetchProduct(); }, [fetchProduct]);
 
+  // Auto-populate product name = leather type + finish type + color
+  useEffect(() => {
+    const leather = dropdowns['leather-types']?.data?.find((o: any) => String(o.id) === form.leather_type_id);
+    const finish = dropdowns['finish-types']?.data?.find((o: any) => String(o.id) === form.finish_type_id);
+    const color = dropdowns['colors']?.data?.find((o: any) => String(o.id) === form.color_id);
+    const parts = [leather?.name, finish?.name, color?.name].filter(Boolean);
+    const autoName = parts.join(' ');
+    setForm(p => (p.name === autoName ? p : { ...p, name: autoName }));
+  }, [
+    form.leather_type_id, form.finish_type_id, form.color_id,
+    dropdowns['leather-types']?.data, dropdowns['finish-types']?.data, dropdowns['colors']?.data,
+  ]);
+
   // Filter groups by selected category (show all if no category selected)
   useEffect(() => {
     if (dropdowns['group-master']?.data) {
@@ -200,7 +213,7 @@ export default function ProductMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Product Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Input label="Product Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter product name" />
+          <Input label="Product Name" required value={form.name} disabled readOnly error={errors.name} placeholder="Auto: Leather Type + Finish Type + Color" />
           <Select label="Customer" options={[{ value: '', label: 'Select customer' }, ...(dropdowns['customers']?.options || [])]} value={form.customer_id} onChange={(e) => update('customer_id', e.target.value)} />
           <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} />
           <Select

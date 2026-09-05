@@ -39,11 +39,14 @@ const STATUS_COLORS: Record<string, string> = {
   Planned: 'bg-slate-50 text-slate-700 border border-slate-200',
 };
 
+interface StageOption { id: number; name: string; uom?: string; }
+
 export default function ProductionStatus() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [processStage, setProcessStage] = useState('All');
+  const [stageOptions, setStageOptions] = useState<StageOption[]>([]);
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
@@ -77,6 +80,16 @@ export default function ProductionStatus() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setCurrentPage(1); }, [processStage, statusFilter, sortBy, sortOrder, activeTab]);
+
+  // Load process stages from master
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api<{ data: StageOption[] }>('/process-stages?limit=100');
+        setStageOptions(res.data || []);
+      } catch { setStageOptions([]); }
+    })();
+  }, []);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -112,6 +125,10 @@ export default function ProductionStatus() {
 
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
 
+  const selectedStageUom = processStage !== 'All'
+    ? (stageOptions.find(s => s.name === processStage)?.uom || '')
+    : '';
+
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
       {/* Header */}
@@ -141,11 +158,17 @@ export default function ProductionStatus() {
             <select value={processStage} onChange={e => setProcessStage(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[180px]">
               <option value="All">All Stages</option>
-              <option value="Wet End">Wet End</option>
-              <option value="Finishing">Finishing</option>
-              <option value="Packing">Packing</option>
+              {stageOptions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
           </div>
+          {selectedStageUom && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">UOM</label>
+              <div className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 min-w-[120px]">
+                {selectedStageUom}
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
