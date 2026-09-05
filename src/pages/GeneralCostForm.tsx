@@ -107,7 +107,12 @@ export default function GeneralCostForm() {
         setLoading(true);
         if (!isNew && id) {
           const res = await api<{ data: GeneralCostData }>(`/general-costs/${id}`);
-          setFormData(res.data);
+          const data = res.data;
+          // Normalize production_date: strip time portion so <input type="date"> renders correctly
+          if (data.production_date) {
+            data.production_date = data.production_date.toString().split('T')[0];
+          }
+          setFormData(data);
         } else if (planId) {
           const [planRes, noRes] = await Promise.all([
             api<{ data: any }>(`/production-status/orders/${planId}`),
@@ -140,6 +145,20 @@ export default function GeneralCostForm() {
     };
     loadData();
   }, [id, isNew, planId]);
+
+  // Once costComponents are loaded, back-fill cost_category_id on existing items
+  // (items loaded from DB only have the string name, not the FK id)
+  useEffect(() => {
+    if (!costComponents.length) return;
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map(item => {
+        if (item.cost_category_id) return item; // already resolved
+        const match = costComponents.find(c => c.name === item.cost_category);
+        return match ? { ...item, cost_category_id: match.id } : item;
+      }),
+    }));
+  }, [costComponents]);
 
   useEffect(() => {
     if (!formData.production_plan_id) return;
