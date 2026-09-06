@@ -171,6 +171,44 @@ export default function MaterialIssueToBatchDetail() {
   useEffect(() => { fetchWarehouses(); fetchPlans(); fetchStages(); fetchDepartments(); fetchMaterials(); fetchIssue(); }, [fetchWarehouses, fetchPlans, fetchStages, fetchDepartments, fetchMaterials, fetchIssue]);
   useEffect(() => { if (issue.warehouse_id) fetchStock(issue.warehouse_id); }, [issue.warehouse_id, fetchStock]);
 
+  // When the warehouse changes, refresh available stock + rate for every already
+  // selected item so the "Insufficient Stock" check uses real balances.
+  useEffect(() => {
+    if (!issue.warehouse_id) return;
+    const selected = items.filter((it) => it.material_id);
+    if (selected.length === 0) return;
+    (async () => {
+      const results = await Promise.all(
+        selected.map(async (it) => {
+          try {
+            const info = await api<{ data: { available_qty: number; avg_rate: number } }>(
+              `/material-issues/item-info/${it.material_id}?warehouse_id=${issue.warehouse_id}&date=${issue.issue_date}`
+            );
+            return { key: it._key, available_qty: info.data.available_qty || 0, avg_rate: info.data.avg_rate || 0 };
+          } catch {
+            return null;
+          }
+        })
+      );
+      const byKey = new Map(results.filter(Boolean).map((r) => [r!.key, r!]));
+      setItems((prev) => prev.map((it) => {
+        const r = byKey.get(it._key);
+        if (!r) return it;
+        const qty = parseFloat(it.issue_qty) || 0;
+        const stock_error = qty > r.available_qty + 0.001 && r.available_qty >= 0
+          ? `Insufficient Stock\nAvailable: ${r.available_qty.toFixed(2)} ${it.uom || 'Kg'}`
+          : '';
+        return {
+          ...it,
+          available_qty: r.available_qty,
+          unit_cost: it.unit_cost || r.avg_rate.toFixed(2),
+          stock_error,
+        };
+      }));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue.warehouse_id, issue.issue_date]);
+
   // Plan No is only relevant when issuing to the Production department.
   const isProductionDept = (issue.department || '').trim().toLowerCase() === 'production';
 
@@ -353,10 +391,13 @@ export default function MaterialIssueToBatchDetail() {
         const cost = parseFloat(updated.unit_cost) || 0;
         updated.amount = parseFloat((qty * cost).toFixed(2));
       }
-      // Stock validation
+      // Stock validation — only meaningful once a warehouse is selected and the
+      // item's available stock has actually been loaded from the server. Before
+      // that, available_qty is just its default (0) and would show a false
+      // "Insufficient Stock" for every entry.
       if (field === 'issue_qty') {
         const qty = parseFloat(value) || 0;
-        if (qty > updated.available_qty + 0.001 && updated.available_qty >= 0) {
+        if (issue.warehouse_id && qty > updated.available_qty + 0.001 && updated.available_qty >= 0) {
           updated.stock_error = `Insufficient Stock\nAvailable: ${updated.available_qty.toFixed(2)} ${updated.uom || 'Kg'}`;
         } else {
           updated.stock_error = '';
@@ -576,7 +617,7 @@ export default function MaterialIssueToBatchDetail() {
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-2.5 px-3">
                     <SearchableSelect
-                      options={materials.map((m) => ({ value: String(m.id), label: `${m.code} - ${m.name}` }))}
+                      options={materials.map((m) => ({ value: String(m.id), label: m.name }))}
                       value={item.material_id}
                       onChange={(val) => handleMaterialChange(item._key, val)}
                       placeholder="Search item..."
@@ -586,18 +627,18 @@ export default function MaterialIssueToBatchDetail() {
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.required_qty} onChange={(e) => updateItem(item._key, 'required_qty', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.issue_qty} onChange={(e) => updateItem(item._key, 'issue_qty', e.target.value)}
-                      className={`w-full px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 min-w-[80px] text-right ${item.stock_error ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500 bg-red-50' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`} placeholder="0.00" />
+                      className={`w-16 px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 text-right ${item.stock_error ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500 bg-red-50' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`} placeholder="0.00" />
                     {item.stock_error && (
                       <div className="mt-1 text-[10px] text-red-600 font-medium leading-tight whitespace-pre-line">{item.stock_error}</div>
                     )}
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
+                      className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">

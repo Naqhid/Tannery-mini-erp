@@ -31,6 +31,17 @@ interface OrderRow {
   cost_status: string | null;
 }
 
+interface TxnRow {
+  id: number;
+  general_cost_id: number;
+  transaction_no: string;
+  production_date: string;
+  cost_category: string;
+  uom: string;
+  amount: number;
+  cost_per_piece: number;
+}
+
 type SortField = 'customer_name' | 'order_no' | 'article' | 'color' | 'order_qty' | 'status';
 type SortOrder = 'asc' | 'desc';
 
@@ -46,6 +57,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function GeneralCost() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<OrderRow[]>([]);
+  const [txnRows, setTxnRows] = useState<TxnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 350);
@@ -72,13 +84,21 @@ export default function GeneralCost() {
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) { params.set('sortBy', sortBy); params.set('sortOrder', sortOrder); }
-      if (activeTab === 'transaction') params.set('has_entry', 'true');
-      const res = await api<{ data: OrderRow[]; total: number; totalPages: number }>(`/general-costs?${params.toString()}`);
-      setRows(res.data || []);
-      setTotalRecords(res.total || 0);
-      setTotalPages(res.totalPages || 0);
+      if (activeTab === 'transaction') {
+        params.set('view', 'transaction');
+        const res = await api<{ data: TxnRow[]; total: number; totalPages: number }>(`/general-costs?${params.toString()}`);
+        setTxnRows(res.data || []);
+        setTotalRecords(res.total || 0);
+        setTotalPages(res.totalPages || 0);
+      } else {
+        const res = await api<{ data: OrderRow[]; total: number; totalPages: number }>(`/general-costs?${params.toString()}`);
+        setRows(res.data || []);
+        setTotalRecords(res.total || 0);
+        setTotalPages(res.totalPages || 0);
+      }
     } catch {
       setRows([]);
+      setTxnRows([]);
     } finally {
       setLoading(false);
     }
@@ -209,6 +229,41 @@ export default function GeneralCost() {
       <div className="hidden md:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
         {loading ? (
           <div className="p-6"><SkeletonLoader rows={8} /></div>
+        ) : activeTab === 'transaction' ? (
+          txnRows.length === 0 ? (
+            <EmptyState title="No transactions found" description="No general cost transactions match your current filters." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Transaction No.</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Production Date</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cost Category</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">UOM</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount (₹)</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Cost / Piece (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {txnRows.map((row, idx) => (
+                    <tr
+                      key={row.id}
+                      onClick={() => navigate(`/general-cost/${row.general_cost_id}`)}
+                      className={`cursor-pointer transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
+                    >
+                      <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.transaction_no || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-700">{row.production_date ? new Date(row.production_date).toLocaleDateString('en-IN') : '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.cost_category || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-700">{row.uom || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.amount)}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.cost_per_piece)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         ) : rows.length === 0 ? (
           <EmptyState title="No orders found" description="No production plans match your current filters." />
         ) : (
@@ -321,6 +376,36 @@ export default function GeneralCost() {
               </div>
             ))}
           </div>
+        ) : activeTab === 'transaction' ? (
+          txnRows.length === 0 ? (
+            <EmptyState title="No transactions found" description="No general cost transactions match your current filters." />
+          ) : (
+            <>
+              {txnRows.map(row => (
+                <div
+                  key={row.id}
+                  onClick={() => navigate(`/general-cost/${row.general_cost_id}`)}
+                  className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm active:bg-blue-50 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <p className="text-xs text-blue-700 font-mono font-medium">{row.transaction_no || '—'}</p>
+                    <p className="text-[10px] text-gray-500">{row.production_date ? new Date(row.production_date).toLocaleDateString('en-IN') : '—'}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-900 mb-2">{row.cost_category || '—'} <span className="text-xs font-normal text-gray-500">({row.uom || '—'})</span></p>
+                  <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Amount (₹)</p>
+                      <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.amount)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Cost / Piece (₹)</p>
+                      <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.cost_per_piece)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )
         ) : rows.length === 0 ? (
           <EmptyState title="No orders found" description="No production plans match your current filters." />
         ) : (

@@ -4,12 +4,14 @@ import { toast } from 'react-toastify';
 import { ArrowLeft, Plus, Trash2, Printer, Download, Send, Save, ChevronDown } from 'lucide-react';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { usePermission } from '../lib/usePermission';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
 interface CostItem {
   id?: number;
   cost_category: string;
   cost_category_id: number;
+  group_name: string;
   uom: string;
   amount: number;
   cost_per_piece: number;
@@ -50,6 +52,7 @@ interface CostComponentOption {
   uom: string;
   primary_uom_name: string;
   rate: number;
+  group_name: string;
 }
 
 export default function GeneralCostForm() {
@@ -98,7 +101,7 @@ export default function GeneralCostForm() {
   // Fetch cost component options (materials with category = 'Cost Component')
   useEffect(() => {
     api<{ data: any[] }>('/materials?limit=500&category=Cost Component')
-      .then(res => setCostComponents((res.data || []).map((m: any) => ({ id: m.id, name: m.name, uom: m.uom || m.primary_uom_name || '', primary_uom_name: m.uom || m.primary_uom_name || '', rate: Number(m.rate || m.last_purchase_price || m.standard_cost || 0) }))))
+      .then(res => setCostComponents((res.data || []).map((m: any) => ({ id: m.id, name: m.name, uom: m.uom || m.primary_uom_name || '', primary_uom_name: m.uom || m.primary_uom_name || '', rate: Number(m.rate || m.last_purchase_price || m.standard_cost || 0), group_name: m.group_name || m.chemical_group || '' }))))
       .catch(() => {});
   }, []);
 
@@ -164,7 +167,7 @@ export default function GeneralCostForm() {
       const items = prev.items.map(item => {
         if (item.cost_category_id) return item; // already resolved
         const match = costComponents.find(c => c.name === item.cost_category);
-        if (match) { changed = true; return { ...item, cost_category_id: match.id }; }
+        if (match) { changed = true; return { ...item, cost_category_id: match.id, group_name: item.group_name || match.group_name || '' }; }
         return item;
       });
       return changed ? { ...prev, items } : prev;
@@ -203,7 +206,7 @@ export default function GeneralCostForm() {
   }, []);
 
   const addLine = () => {
-    const newItem: CostItem = { cost_category: '', cost_category_id: 0, uom: 'Sq.Ft.', amount: 0, cost_per_piece: 0, remarks: '' };
+    const newItem: CostItem = { cost_category: '', cost_category_id: 0, group_name: '', uom: 'Sq.Ft.', amount: 0, cost_per_piece: 0, remarks: '' };
     recalculate([...formData.items, newItem]);
   };
 
@@ -220,6 +223,7 @@ export default function GeneralCostForm() {
       const comp = costComponents.find(c => c.id === Number(value));
       if (comp) {
         items[index].cost_category = comp.name;
+        items[index].group_name = comp.group_name || '';
         items[index].uom = comp.primary_uom_name || comp.uom || 'Sq.Ft.';
         items[index].amount = comp.rate || 0;
         const divideBy = formData.output_qty || formData.planned_qty || 1;
@@ -448,10 +452,11 @@ export default function GeneralCostForm() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-10">#</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-40">Group</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[200px]">Cost Category</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-32">UOM</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-40">Amount (INR)</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-40">Cost / Piece (INR)</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-24">UOM</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-28">Amount (INR)</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-28">Cost / Piece (INR)</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[180px]">Remarks</th>
                 {!isPosted && canWrite && <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-16">Action</th>}
               </tr>
@@ -459,7 +464,7 @@ export default function GeneralCostForm() {
             <tbody className="divide-y divide-gray-100">
               {formData.items.length === 0 ? (
                 <tr>
-                  <td colSpan={isPosted ? 6 : 7} className="px-4 py-12 text-center">
+                  <td colSpan={isPosted ? 7 : 8} className="px-4 py-12 text-center">
                     <div className="text-gray-400">
                       <Plus size={32} className="mx-auto mb-2 opacity-40" />
                       <p className="text-sm font-medium">No cost components added</p>
@@ -472,14 +477,18 @@ export default function GeneralCostForm() {
                   <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30`}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-400">{idx + 1}</td>
                     <td className="px-4 py-3">
+                      <span className="text-sm text-gray-700">{item.group_name || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3">
                       {isPosted ? (
                         <span className="text-sm font-medium text-gray-900">{item.cost_category}</span>
                       ) : (
-                        <select value={item.cost_category_id || ''} onChange={e => updateLine(idx, 'cost_category_id', Number(e.target.value))}
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
-                          <option value="">Select Cost Component</option>
-                          {costComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
+                        <SearchableSelect
+                          options={[{ value: '', label: 'Select Cost Component' }, ...costComponents.map(c => ({ value: String(c.id), label: c.name }))]}
+                          value={item.cost_category_id ? String(item.cost_category_id) : ''}
+                          onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
+                          placeholder="Search cost category..."
+                        />
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -488,13 +497,13 @@ export default function GeneralCostForm() {
                     <td className="px-4 py-3">
                       {isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span> : (
                         <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} placeholder="0.00"
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
+                          className="w-24 px-2 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.cost_per_piece)}</span> : (
                         <input type="number" step="0.01" value={item.cost_per_piece || ''} onChange={e => updateLine(idx, 'cost_per_piece', Number(e.target.value))} placeholder="0.00"
-                          className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
+                          className="w-24 px-2 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -540,15 +549,20 @@ export default function GeneralCostForm() {
 
                   <div className="space-y-3">
                     <div>
+                      <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Group</label>
+                      <p className="text-sm text-gray-700">{item.group_name || '—'}</p>
+                    </div>
+                    <div>
                       <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost Category</label>
                       {isPosted ? (
                         <p className="text-sm font-medium text-gray-900">{item.cost_category}</p>
                       ) : (
-                        <select value={item.cost_category_id || ''} onChange={e => updateLine(idx, 'cost_category_id', Number(e.target.value))}
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
-                          <option value="">Select Cost Component</option>
-                          {costComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
+                        <SearchableSelect
+                          options={[{ value: '', label: 'Select Cost Component' }, ...costComponents.map(c => ({ value: String(c.id), label: c.name }))]}
+                          value={item.cost_category_id ? String(item.cost_category_id) : ''}
+                          onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
+                          placeholder="Search cost category..."
+                        />
                       )}
                     </div>
 

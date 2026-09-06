@@ -73,6 +73,52 @@ export async function getOrders({ search, status, process_stage, show_completed,
 }
 
 /**
+ * Get general cost TRANSACTION LINES (one row per cost line) for the
+ * Transaction tab. Columns: transaction no, production date, cost category,
+ * uom, amount, cost/piece.
+ */
+export async function getTransactionLines({ search, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
+  const params = [];
+  let where = 'gch.id IS NOT NULL';
+
+  if (search) {
+    where += ' AND (gch.transaction_no LIKE ? OR i.cost_category LIKE ?)';
+    const t = `%${search}%`;
+    params.push(t, t);
+  }
+  if (process_stage && process_stage !== 'All') {
+    where += ' AND gch.process_stage = ?';
+    params.push(process_stage);
+  }
+
+  const allowedSort = { transaction_no: 'gch.transaction_no', production_date: 'gch.production_date', cost_category: 'i.cost_category', amount: 'i.amount', cost_per_piece: 'i.cost_per_piece' };
+  const col = allowedSort[sortBy] || 'gch.production_date';
+  const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+  const offset = (page - 1) * limit;
+
+  const [rows] = await pool.query(
+    `SELECT i.id, gch.id AS general_cost_id, gch.transaction_no, gch.production_date,
+       i.cost_category, i.uom, i.amount, i.cost_per_piece
+     FROM general_cost_items i
+     JOIN general_cost_headers gch ON i.general_cost_id = gch.id
+     WHERE ${where}
+     ORDER BY ${col} ${ord}, i.id ASC
+     LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM general_cost_items i
+     JOIN general_cost_headers gch ON i.general_cost_id = gch.id
+     WHERE ${where}`,
+    params
+  );
+
+  return { rows, total };
+}
+
+/**
  * Get a single general cost entry by ID (with items)
  */
 export async function getById(id) {

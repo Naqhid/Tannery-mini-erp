@@ -2,8 +2,15 @@ import * as model from '../models/generalCostModel.js';
 
 export async function listOrders(req, res, next) {
   try {
-    const { search, status, process_stage, show_completed, has_entry, sortBy, sortOrder } = req.query;
+    const { search, status, process_stage, show_completed, has_entry, view, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
+    // Transaction tab shows one row per cost line (transaction no, production
+    // date, cost category, uom, amount, cost/piece).
+    if (view === 'transaction') {
+      const { rows, total } = await model.getTransactionLines({ search, process_stage, page, limit, sortBy, sortOrder });
+      const totalPages = Math.ceil(total / limit);
+      return res.json({ data: rows, total, page, limit, totalPages });
+    }
     const { rows, total } = await model.getOrders({ search, status, process_stage, show_completed, has_entry, page, limit, sortBy, sortOrder });
     const totalPages = Math.ceil(total / limit);
     res.json({ data: rows, total, page, limit, totalPages });
