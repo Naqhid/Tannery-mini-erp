@@ -47,15 +47,20 @@ export async function getReport({ search, customer, article, color, page = 1, li
   const offset = (page - 1) * limit;
 
   // Main query: pull from production_status_orders
-  // Link to sales_orders via order_no to get selling price and production_plan costs
+  // Sales order is linked via the production plan:
+  //   production_status_orders.production_plan_id -> production_plans.id
+  //   production_plans.sales_order_id -> sales_orders.id
+  // Order No, Customer, Article, Color, Order Date and Delivery Date are sourced
+  // from the sales order (falling back to the planning values when unlinked).
   const [rows] = await pool.query(
     `SELECT 
        o.id,
-       COALESCE(so_info.customer_name, o.customer_name) AS customer_name,
-       o.order_no,
-       COALESCE(so_info.article, o.article) AS article,
-       COALESCE(so_info.color, o.color) AS color,
-       so_info.delivery_date,
+       COALESCE(so2.customer_name_resolved, o.customer_name) AS customer_name,
+       COALESCE(so2.sales_order_no, o.order_no) AS order_no,
+       COALESCE(so_item.article, o.article) AS article,
+       COALESCE(so_item.color, o.color) AS color,
+       so2.order_date,
+       so_item.delivery_date,
        o.issued_qty AS order_qty_sqft,
        o.completed_qty AS completed_qty_sqft,
        COALESCE(cost_agg.total_general_cost, 0) AS total_general_cost,
@@ -97,20 +102,24 @@ export async function getReport({ search, customer, article, color, page = 1, li
        JOIN sales_order_items soi ON soi.sales_order_id = so.id
        GROUP BY so.order_no
      ) so_agg ON so_agg.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
+     LEFT JOIN production_plans pp2 ON pp2.id = o.production_plan_id AND pp2.deleted_at IS NULL
      LEFT JOIN (
-       SELECT so.order_no,
-         soi.item_description AS article,
-         soi.finish_color AS color,
-         MAX(c.name) AS customer_name,
-         MAX(soi.delivery_date) AS delivery_date
+       SELECT so.id AS sales_order_id, so.order_no AS sales_order_no, so.order_date,
+         c.name AS customer_name_resolved
        FROM sales_orders so
        LEFT JOIN customers c ON so.customer_id = c.id
-       JOIN sales_order_items soi ON soi.sales_order_id = so.id
-       GROUP BY so.order_no, soi.item_description, soi.finish_color
-     ) so_info
-       ON so_info.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
-       AND so_info.article COLLATE utf8mb4_0900_ai_ci = o.article
-       AND COALESCE(so_info.color, '') COLLATE utf8mb4_0900_ai_ci = COALESCE(o.color, '')
+     ) so2 ON so2.sales_order_id = pp2.sales_order_id
+     LEFT JOIN (
+       SELECT soi.sales_order_id,
+         soi.item_description AS article,
+         soi.finish_color AS color,
+         MAX(soi.delivery_date) AS delivery_date
+       FROM sales_order_items soi
+       GROUP BY soi.sales_order_id, soi.item_description, soi.finish_color
+     ) so_item
+       ON so_item.sales_order_id = pp2.sales_order_id
+       AND so_item.article COLLATE utf8mb4_0900_ai_ci = o.article COLLATE utf8mb4_0900_ai_ci
+       AND COALESCE(so_item.color, '') COLLATE utf8mb4_0900_ai_ci = COALESCE(o.color, '') COLLATE utf8mb4_0900_ai_ci
      WHERE ${where}
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
