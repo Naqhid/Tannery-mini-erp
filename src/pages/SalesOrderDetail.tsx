@@ -102,6 +102,14 @@ function calcItem(item: SalesOrderItem): SalesOrderItem {
   return { ...item, amount };
 }
 
+// Older records stored the color as "<finish> / <color>". Show only the color
+// part (the segment after the last "/") so the Color column matches the master.
+function colorOnly(value: string): string {
+  if (!value) return '';
+  const parts = value.split('/');
+  return parts[parts.length - 1].trim();
+}
+
 function calcTotals(items: SalesOrderItem[], discount: number, freight: number, taxPercent: number) {
   const subTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
   const taxable = subTotal - discount + freight;
@@ -609,7 +617,7 @@ export default function SalesOrderDetail() {
                             />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.finish_color} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Color" />
+                            <input value={colorOnly(item.finish_color)} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Color" />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input value={item.thickness} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="mm" />
