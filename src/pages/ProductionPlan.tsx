@@ -415,17 +415,17 @@ export default function ProductionPlan() {
                           ) : (
                             <table className="w-full text-sm table-fixed">
                               <colgroup>
-                                <col className="w-1/4" />
-                                <col className="w-1/4" />
-                                <col className="w-1/4" />
-                                <col className="w-1/8" />
-                                <col className="w-1/8" />
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
                               </colgroup>
                               <thead>
                                 <tr className="border-b border-gray-100">
                                   <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan No.</th>
                                   <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan Date</th>
-                                  <th className="text-right py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
+                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
                                   <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Status</th>
                                   <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Action</th>
                                 </tr>
@@ -435,7 +435,7 @@ export default function ProductionPlan() {
                                   <tr key={plan.id} className="hover:bg-blue-50/40">
                                     <td className="py-2 px-4 text-xs font-medium text-blue-700">{plan.plan_no || '—'}</td>
                                     <td className="py-2 px-4 text-xs text-gray-700">{plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN') : '—'}</td>
-                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-right">{formatQty(plan.planned_qty)}</td>
+                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-left">{formatQty(plan.planned_qty)}</td>
                                     <td className="py-2 px-4 text-center">
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_COLORS[plan.status] || 'bg-gray-100 text-gray-700'}`}>
                                         {plan.status}

@@ -489,10 +489,11 @@ export default function SalesOrderDetail() {
               />
             </div>
             <Input label="Order Date" required type="date" value={order.order_date} onChange={(e) => updateField('order_date', e.target.value)} />
-            <Input label="Customer PO No." value={order.customer_po_no} placeholder="PO reference number" onChange={(e) => updateField('customer_po_no', e.target.value)} />
+            <Input label="Delivery Date" type="date" value={order.delivery_date} onChange={(e) => updateField('delivery_date', e.target.value)} />
           </div>
           {/* Row 2 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Input label="Customer PO No." value={order.customer_po_no} placeholder="PO reference number" onChange={(e) => updateField('customer_po_no', e.target.value)} />
             <Select label="Order Type" options={ORDER_TYPE_OPTS.map(o => ({ value: o, label: o }))} value={order.order_type} onChange={(e) => updateField('order_type', e.target.value)} />
             <Input label="Contact Person" value={order.contact_person} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
             <Select label="Payment Terms" options={[{ value: '', label: 'Select terms' }, ...PAYMENT_TERMS_OPTS.map(o => ({ value: o, label: o }))]} value={order.payment_terms} onChange={(e) => updateField('payment_terms', e.target.value)} />
