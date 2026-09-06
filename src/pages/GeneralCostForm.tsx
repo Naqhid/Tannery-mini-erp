@@ -154,19 +154,22 @@ export default function GeneralCostForm() {
     loadData();
   }, [id, isNew, planId]);
 
-  // Once costComponents are loaded, back-fill cost_category_id on existing items
-  // (items loaded from DB only have the string name, not the FK id)
+  // Back-fill cost_category_id on existing items (items loaded from DB only have
+  // the string name, not the FK id). This must react to BOTH costComponents and
+  // the items loading, since the order of the two async loads is not guaranteed.
   useEffect(() => {
-    if (!costComponents.length) return;
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.map(item => {
+    if (!costComponents.length || !formData.items.length) return;
+    setFormData(prev => {
+      let changed = false;
+      const items = prev.items.map(item => {
         if (item.cost_category_id) return item; // already resolved
         const match = costComponents.find(c => c.name === item.cost_category);
-        return match ? { ...item, cost_category_id: match.id } : item;
-      }),
-    }));
-  }, [costComponents]);
+        if (match) { changed = true; return { ...item, cost_category_id: match.id }; }
+        return item;
+      });
+      return changed ? { ...prev, items } : prev;
+    });
+  }, [costComponents, formData.items]);
 
   useEffect(() => {
     if (!formData.production_plan_id) return;

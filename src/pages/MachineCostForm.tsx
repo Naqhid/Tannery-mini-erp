@@ -78,19 +78,22 @@ export default function MachineCostForm() {
     loadData();
   }, [id, isNew, planId]);
 
-  // Once machines are loaded, back-fill machine_id on existing items
-  // (items loaded from DB only have the string name, not the FK id)
+  // Back-fill machine_id on existing items (items loaded from DB only have the
+  // string name, not the FK id). This must react to BOTH machines and the items
+  // loading, since the order of the two async loads is not guaranteed.
   useEffect(() => {
-    if (!machines.length) return;
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.map(item => {
+    if (!machines.length || !formData.items.length) return;
+    setFormData(prev => {
+      let changed = false;
+      const items = prev.items.map(item => {
         if (item.machine_id) return item; // already resolved
         const match = machines.find(m => m.name === item.machine_name);
-        return match ? { ...item, machine_id: match.id } : item;
-      }),
-    }));
-  }, [machines]);
+        if (match) { changed = true; return { ...item, machine_id: match.id }; }
+        return item;
+      });
+      return changed ? { ...prev, items } : prev;
+    });
+  }, [machines, formData.items]);
 
   // Fetch output from Daily Production (total, not date-specific)
   useEffect(() => {
