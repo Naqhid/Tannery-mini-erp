@@ -78,6 +78,26 @@ export default function ProductionPlan() {
     }
   }, [expandedRow]);
 
+  // Fetch all plans created for a given sales-order-item row (there can be multiple)
+  // Declared before the effects that depend on it to avoid a temporal-dead-zone
+  // "Cannot access before initialization" crash in the minified build.
+  const fetchRowPlans = useCallback(async (row: any) => {
+    setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: true }));
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', '100');
+      if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
+      if (row.article) params.set('article', row.article);
+      if (row.color) params.set('color', row.color);
+      const res = await api<{ data: any[] }>(`/production-plans?${params}`);
+      setRowPlans((prev) => ({ ...prev, [row.item_id]: res.data || [] }));
+    } catch {
+      setRowPlans((prev) => ({ ...prev, [row.item_id]: [] }));
+    } finally {
+      setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: false }));
+    }
+  }, []);
+
   // When data finishes loading and there's a restored expandedRow, fetch its plans
   useEffect(() => {
     if (!loading && expandedRow !== null && data.length > 0) {
@@ -99,24 +119,6 @@ export default function ProductionPlan() {
       createNewPlan(row);
     }
   };
-
-  // Fetch all plans created for a given sales-order-item row (there can be multiple)
-  const fetchRowPlans = useCallback(async (row: any) => {
-    setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: true }));
-    try {
-      const params = new URLSearchParams();
-      params.set('limit', '100');
-      if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
-      if (row.article) params.set('article', row.article);
-      if (row.color) params.set('color', row.color);
-      const res = await api<{ data: any[] }>(`/production-plans?${params}`);
-      setRowPlans((prev) => ({ ...prev, [row.item_id]: res.data || [] }));
-    } catch {
-      setRowPlans((prev) => ({ ...prev, [row.item_id]: [] }));
-    } finally {
-      setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: false }));
-    }
-  }, []);
 
   const toggleRow = (row: any) => {
     const willExpand = expandedRow !== row.item_id;
