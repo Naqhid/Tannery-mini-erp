@@ -17,6 +17,8 @@ interface ReportRow {
   order_no: string;
   article: string;
   color: string;
+  order_date: string | null;
+  delivery_date: string | null;
   order_qty_sqft: number;
   completed_qty_sqft: number;
   cost_per_sqft: number;
@@ -186,6 +188,8 @@ export default function StandardCosting() {
                   <th onClick={() => handleSort('color')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider">Order Date</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider">Delivery Date</th>
                   <th onClick={() => handleSort('order_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Order Qty (Sq.ft) <SortIcon field="order_qty_sqft" /></span>
                   </th>
@@ -210,6 +214,8 @@ export default function StandardCosting() {
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.order_date ? new Date(row.order_date).toLocaleDateString('en-IN') : '—'}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.delivery_date ? new Date(row.delivery_date).toLocaleDateString('en-IN') : '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.order_qty_sqft)}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.completed_qty_sqft)}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.cost_per_sqft)}</td>
@@ -286,9 +292,14 @@ export default function StandardCosting() {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 mb-3 text-xs text-gray-600">
+                <div className="flex items-center gap-3 mb-2 text-xs text-gray-600">
                   <span className="truncate">{row.article || '—'}</span>
                   {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
+                </div>
+
+                <div className="flex items-center gap-4 mb-3 text-[11px] text-gray-500">
+                  <span>Order: <span className="font-medium text-gray-700">{row.order_date ? new Date(row.order_date).toLocaleDateString('en-IN') : '—'}</span></span>
+                  <span>Delivery: <span className="font-medium text-gray-700">{row.delivery_date ? new Date(row.delivery_date).toLocaleDateString('en-IN') : '—'}</span></span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
