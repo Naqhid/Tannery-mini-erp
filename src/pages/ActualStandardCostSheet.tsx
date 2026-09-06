@@ -7,13 +7,13 @@ import api from '../lib/api';
 
 type CostRow = { cost_group: string; cost_category: string; uom: string; actual_cost: number; cost_per_uom: number };
 type Stage = { id:number; process_stage:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; rows:CostRow[] };
-type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number }; stages:Stage[] };
+type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[] };
 
 const fmt = (n:number) => new Intl.NumberFormat('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);
 const fmtQty = (n:number) => new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(Number(n)||0);
 
 export default function ActualStandardCostSheet(){
-  const { id } = useParams<{id:string}>(); const navigate=useNavigate();
+  const { id, planId } = useParams<{id?:string; planId?:string}>(); const navigate=useNavigate();
   const [data,setData]=useState<Detail|null>(null); const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [effectiveFrom,setEffectiveFrom]=useState(new Date().toISOString().slice(0,10));
@@ -26,7 +26,7 @@ export default function ActualStandardCostSheet(){
     setSaving(true);
     try {
       const payload = {
-        production_plan_id: Number(id),
+        production_plan_id: data.order.production_plan_id ?? (planId ? Number(planId) : Number(id)),
         effective_from: effectiveFrom,
         prepared_by: user?.name || user?.full_name || 'Costing Dept.',
         description,
@@ -49,7 +49,10 @@ export default function ActualStandardCostSheet(){
     finally { setSaving(false); }
   };
   const user=JSON.parse(localStorage.getItem('tannery_user')||'{}');
-  useEffect(()=>{ api<{data:Detail}>(`/costing-report/${id}/detail`).then(r=>setData(r.data)).finally(()=>setLoading(false)); },[id]);
+  useEffect(()=>{
+    const endpoint = planId ? `/costing-report/plan/${planId}/detail` : `/costing-report/${id}/detail`;
+    api<{data:Detail}>(endpoint).then(r=>setData(r.data)).finally(()=>setLoading(false));
+  },[id, planId]);
   const totals=useMemo(()=>{
     const rows=data?.stages.flatMap(s=>s.rows)||[];
     const amount=rows.reduce((a,r)=>a+Number(r.actual_cost||0),0);

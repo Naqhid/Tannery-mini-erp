@@ -24,3 +24,11 @@ export async function getDetail(req, res, next) {
     res.json({ data });
   } catch (err) { next(err); }
 }
+
+export async function getDetailByPlan(req, res, next) {
+  try {
+    const data = await model.getActualCostDetailByPlan(req.params.planId);
+    if (!data) return res.status(404).json({ error: 'Production plan not found' });
+    res.json({ data });
+  } catch (err) { next(err); }
+}

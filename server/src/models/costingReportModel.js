@@ -61,7 +61,7 @@ export async function getReport({ search, customer, article, color, page = 1, li
        COALESCE(so_item.color, o.color) AS color,
        so2.order_date,
        so_item.delivery_date,
-       o.issued_qty AS order_qty_sqft,
+       COALESCE(so_item.order_qty, o.issued_qty) AS order_qty_sqft,
        o.completed_qty AS completed_qty_sqft,
        COALESCE(cost_agg.total_general_cost, 0) AS total_general_cost,
        COALESCE(cost_agg.total_machine_cost, 0) AS total_machine_cost,
@@ -113,6 +113,7 @@ export async function getReport({ search, customer, article, color, page = 1, li
        SELECT soi.sales_order_id,
          soi.item_description AS article,
          soi.finish_color AS color,
+         SUM(soi.quantity) AS order_qty,
          MAX(soi.delivery_date) AS delivery_date
        FROM sales_order_items soi
        GROUP BY soi.sales_order_id, soi.item_description, soi.finish_color
@@ -169,16 +170,70 @@ export async function getFilterOptions() {
  */
 export async function getActualCostDetail(orderId) {
   const [[seed]] = await pool.query(
-    `SELECT id, order_no, customer_name, article, color, uom
+    `SELECT id, order_no, customer_name, article, color, uom, production_plan_id
      FROM production_status_orders WHERE id=? AND deleted_at IS NULL`,
     [orderId]
   );
   if (!seed) return null;
+  return buildDetailFromSeed(seed);
+}
 
+/**
+ * Resolve the actual standard cost detail directly from a production plan.
+ * Picks any one production_status_orders row seeded by production_plan_id, then
+ * reuses the SAME aggregation logic (grouping on order_no + article + color).
+ */
+export async function getActualCostDetailByPlan(planId) {
+  const [[seed]] = await pool.query(
+    `SELECT id, order_no, customer_name, article, color, uom, production_plan_id
+     FROM production_status_orders
+     WHERE production_plan_id=? AND deleted_at IS NULL
+     ORDER BY id LIMIT 1`,
+    [planId]
+  );
+
+  // No production_status_orders row exists yet for this plan. Fall back to the
+  // production plan itself so the detail page can still render header info.
+  if (!seed) {
+    const [[plan]] = await pool.query(
+      `SELECT pp.id AS production_plan_id, pp.article,
+              so.order_no AS order_no, c.name AS customer_name
+       FROM production_plans pp
+       LEFT JOIN sales_orders so ON so.id = pp.sales_order_id
+       LEFT JOIN customers c ON c.id = so.customer_id
+       WHERE pp.id=? AND pp.deleted_at IS NULL`,
+      [planId]
+    );
+    if (!plan) return null;
+    return {
+      order: {
+        production_plan_id: Number(planId),
+        order_no: plan.order_no || '',
+        customer_name: plan.customer_name || '',
+        article: plan.article || '',
+        color: '',
+        uom: '',
+        order_qty: 0,
+        completed_qty: 0,
+        balance_qty: 0,
+      },
+      stages: [],
+    };
+  }
+
+  return buildDetailFromSeed(seed);
+}
+
+/**
+ * Shared aggregation: given a seed production_status_orders row, group all
+ * matching rows on order_no + article + color and build the stage-wise cost
+ * detail. Used by both getActualCostDetail and getActualCostDetailByPlan.
+ */
+async function buildDetailFromSeed(seed) {
   const [stages] = await pool.query(
     `SELECT id, process_stage, uom, plan_date, customer_name, article, color,
             order_no, issued_qty AS order_qty, completed_qty, balance_qty,
-            status
+            status, production_plan_id
      FROM production_status_orders
      WHERE deleted_at IS NULL AND order_no=? AND article=? AND COALESCE(color,'')=COALESCE(?, '')
      ORDER BY id`,
@@ -219,7 +274,13 @@ export async function getActualCostDetail(orderId) {
   }
 
   return {
-    order: { ...seed, order_qty: orderQty, completed_qty: completedQty, balance_qty: balanceQty },
+    order: {
+      ...seed,
+      production_plan_id: seed.production_plan_id,
+      order_qty: orderQty,
+      completed_qty: completedQty,
+      balance_qty: balanceQty,
+    },
     stages: stageDetails,
   };
 }

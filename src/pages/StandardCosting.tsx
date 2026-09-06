@@ -1,113 +1,107 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
-  ChevronsLeft, ChevronsRight, ArrowUp, ArrowDown, ChevronsUpDown,
-  FileText, Download, Plus,
+  ChevronsLeft, ChevronsRight, FileText, Download, Factory,
 } from 'lucide-react';
-import SkeletonLoader from '../components/ui/SkeletonLoader';
-import EmptyState from '../components/ui/EmptyState';
 import { useDebounce } from '../lib/useDebounce';
-import { usePermission } from '../lib/usePermission';
 import api from '../lib/api';
 
-interface ReportRow {
-  id: number;
-  customer_name: string;
-  order_no: string;
-  article: string;
-  color: string;
-  order_date: string | null;
-  delivery_date: string | null;
-  order_qty_sqft: number;
-  completed_qty_sqft: number;
-  cost_per_sqft: number;
-  selling_price_per_sqft: number;
-  variance_per_sqft: number;
-  total_general_cost: number;
-  total_machine_cost: number;
-  total_material_cost: number;
-}
+const STATUS_COLORS: Record<string, string> = {
+  Pending: 'bg-slate-100 text-slate-700',
+  Draft: 'bg-slate-100 text-slate-700',
+  Planned: 'bg-blue-100 text-blue-700',
+  'In Progress': 'bg-amber-100 text-amber-700',
+  'In-Process': 'bg-amber-100 text-amber-700',
+  Completed: 'bg-emerald-100 text-emerald-700',
+  'On Hold': 'bg-violet-100 text-violet-700',
+  Cancelled: 'bg-rose-100 text-rose-600',
+};
 
-interface Filters {
-  customers: string[];
+interface FilterOptions {
   articles: string[];
   colors: string[];
+  finishes: string[];
 }
 
-type SortField = 'customer_name' | 'order_no' | 'article' | 'color' | 'order_qty_sqft' | 'completed_qty_sqft' | 'cost_per_sqft' | 'selling_price_per_sqft' | 'variance_per_sqft';
-type SortOrder = 'asc' | 'desc';
+interface Customer { id: number; name: string; }
 
 export default function StandardCosting() {
   const navigate = useNavigate();
-  const { canWrite, isReadOnly } = usePermission();
-  const [rows, setRows] = useState<ReportRow[]>([]);
+
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Filters
+  const [customerId, setCustomerId] = useState('');
+  const [article, setArticle] = useState('');
+  const [color, setColor] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 350);
 
-  const [customerFilter, setCustomerFilter] = useState('');
-  const [articleFilter, setArticleFilter] = useState('');
-  const [colorFilter, setColorFilter] = useState('');
-  const [filterOptions, setFilterOptions] = useState<Filters>({ customers: [], articles: [], colors: [] });
+  // Filter options
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({ articles: [], colors: [], finishes: [] });
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
-  const [sortBy, setSortBy] = useState<SortField | ''>('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-
-  // Fetch filter options
+  // Fetch filter options and customers
   useEffect(() => {
-    api<{ data: Filters }>('/costing-report/filters')
-      .then(res => setFilterOptions(res.data || { customers: [], articles: [], colors: [] }))
-      .catch(() => {});
+    (async () => {
+      try {
+        const [fo, cust] = await Promise.all([
+          api<{ data: FilterOptions }>('/production-plans/filter-options'),
+          api<{ data: Customer[] }>('/customers?limit=500'),
+        ]);
+        setFilterOptions(fo.data || { articles: [], colors: [], finishes: [] });
+        setCustomers(cust.data || []);
+      } catch {}
+    })();
   }, []);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (debouncedSearch) params.set('search', debouncedSearch);
-      if (customerFilter) params.set('customer', customerFilter);
-      if (articleFilter) params.set('article', articleFilter);
-      if (colorFilter) params.set('color', colorFilter);
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
-      if (sortBy) { params.set('sortBy', sortBy); params.set('sortOrder', sortOrder); }
-      const res = await api<{ data: ReportRow[]; total: number; totalPages: number }>(`/costing-report?${params.toString()}`);
-      setRows(res.data || []);
+      if (customerId) params.set('customer_id', customerId);
+      if (article) params.set('article', article);
+      if (color) params.set('color', color);
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      const res = await api<{ data: any[]; total: number; totalPages: number }>(`/production-plans/sales-order-items?${params}`);
+      setData(res.data || []);
       setTotalRecords(res.total || 0);
       setTotalPages(res.totalPages || 0);
     } catch {
-      setRows([]);
+      setData([]);
+      setTotalRecords(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, customerFilter, articleFilter, colorFilter, currentPage, pageSize, sortBy, sortOrder]);
+  }, [currentPage, pageSize, customerId, article, color, debouncedSearch]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, customerFilter, articleFilter, colorFilter, sortBy, sortOrder]);
+  useEffect(() => { setCurrentPage(1); }, [customerId, article, color, debouncedSearch]);
 
-  const handleSort = (field: SortField) => {
-    if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    else { setSortBy(field); setSortOrder('asc'); }
+  const openDetail = (row: any) => {
+    if (!row.plan_id) {
+      toast.info('No production plan / cost data yet for this item');
+      return;
+    }
+    navigate(`/standard-costing/actual/plan/${row.plan_id}`);
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortBy !== field) return <ChevronsUpDown size={12} className="text-gray-400" />;
-    return sortOrder === 'asc' ? <ArrowUp size={12} className="text-indigo-600" /> : <ArrowDown size={12} className="text-indigo-600" />;
-  };
-
-  const formatNumber = (n: number) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
-  const formatQty = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
+  const formatQty = (n: number) => n != null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) : '0.00';
 
   return (
-    <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-lg shadow-indigo-200/50">
             <FileText size={20} className="text-white" />
@@ -128,19 +122,19 @@ export default function StandardCosting() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 mb-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Customer</label>
-            <select value={customerFilter} onChange={e => setCustomerFilter(e.target.value)}
+            <select value={customerId} onChange={e => setCustomerId(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 min-w-[150px]">
               <option value="">All</option>
-              {filterOptions.customers.map(c => <option key={c} value={c}>{c}</option>)}
+              {customers.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Article</label>
-            <select value={articleFilter} onChange={e => setArticleFilter(e.target.value)}
+            <select value={article} onChange={e => setArticle(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 min-w-[150px]">
               <option value="">All</option>
               {filterOptions.articles.map(a => <option key={a} value={a}>{a}</option>)}
@@ -148,7 +142,7 @@ export default function StandardCosting() {
           </div>
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Color</label>
-            <select value={colorFilter} onChange={e => setColorFilter(e.target.value)}
+            <select value={color} onChange={e => setColor(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 min-w-[130px]">
               <option value="">All</option>
               {filterOptions.colors.map(c => <option key={c} value={c}>{c}</option>)}
@@ -165,185 +159,195 @@ export default function StandardCosting() {
         </div>
       </div>
 
-      {/* Desktop Table */}
-      <div className="hidden md:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="p-6"><SkeletonLoader rows={8} /></div>
-        ) : rows.length === 0 ? (
-          <EmptyState title="No data found" description="Add a new record to get started" />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gradient-to-r from-slate-50 to-indigo-50/40">
-                  <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
-                  </th>
-                  <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
-                  </th>
-                  <th onClick={() => handleSort('article')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
-                  </th>
-                  <th onClick={() => handleSort('color')} className="group px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
-                  </th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider">Order Date</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-indigo-600 uppercase tracking-wider">Delivery Date</th>
-                  <th onClick={() => handleSort('order_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Order Qty (Sq.ft) <SortIcon field="order_qty_sqft" /></span>
-                  </th>
-                  <th onClick={() => handleSort('completed_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Completed Qty (Sq.ft) <SortIcon field="completed_qty_sqft" /></span>
-                  </th>
-                  <th onClick={() => handleSort('cost_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Cost / Sq.ft <SortIcon field="cost_per_sqft" /></span>
-                  </th>
-                  <th onClick={() => handleSort('selling_price_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Selling Price / Sq.ft <SortIcon field="selling_price_per_sqft" /></span>
-                  </th>
-                  <th onClick={() => handleSort('variance_per_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-indigo-600 uppercase tracking-wider cursor-pointer hover:text-indigo-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Variance / Sq.ft <SortIcon field="variance_per_sqft" /></span>
-                  </th>
+      {/* Table Section */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-indigo-800">Standard Cost Sheets</h2>
+            <span className="text-xs text-gray-500">[Total: {totalRecords}]</span>
+          </div>
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-8" />
+              <col className="w-[12%]" />
+              <col className="w-[16%]" />
+              <col className="w-[14%]" />
+              <col className="w-[16%]" />
+              <col className="w-[10%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+            </colgroup>
+            <thead>
+              <tr className="bg-slate-50 border-b border-gray-200">
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sale Order No.</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer Order No.</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Article</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Color</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty<br />(Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Completed Qty<br />(Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Balance Qty<br />(Sq.Ft.)</th>
+                <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 10 }).map((_, j) => (
+                      <td key={j} className="py-3 px-3">
+                        <div className="h-4 bg-gray-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : data.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-16 text-center">
+                    <Factory size={32} className="mx-auto text-gray-300 mb-3" />
+                    <p className="text-sm font-medium text-gray-500">No cost sheets found</p>
+                    <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {rows.map((row, idx) => (
-                  <tr key={row.id} onClick={() => navigate(`/standard-costing/actual/${row.id}`)} className={`transition-colors cursor-pointer hover:bg-indigo-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                    <td className="px-4 py-3.5 text-sm text-indigo-700 font-mono font-medium">{row.order_no || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.order_date ? new Date(row.order_date).toLocaleDateString('en-IN') : '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.delivery_date ? new Date(row.delivery_date).toLocaleDateString('en-IN') : '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.order_qty_sqft)}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.completed_qty_sqft)}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.cost_per_sqft)}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.selling_price_per_sqft)}</td>
-                    <td className="px-4 py-3.5 text-sm text-right tabular-nums">
-                      <span className={`font-semibold ${row.variance_per_sqft > 0 ? 'text-red-600' : row.variance_per_sqft < 0 ? 'text-emerald-600' : 'text-gray-900'}`}>
-                        {row.variance_per_sqft > 0 ? '↑ ' : row.variance_per_sqft < 0 ? '↓ ' : ''}{formatNumber(Math.abs(row.variance_per_sqft))}
+              ) : (
+                data.map((row, i) => (
+                  <tr
+                    key={row.item_id}
+                    className="hover:bg-indigo-50/40 transition-all cursor-pointer"
+                    onClick={() => openDetail(row)}
+                  >
+                    <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
+                    <td className="py-2.5 px-3 text-xs font-medium text-indigo-700">{row.sales_order_no || '—'}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-800">{row.customer_name || '—'}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.customer_order_no || '—'}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.article || '—'}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.color || '—'}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.order_qty)}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.completed_qty)}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.balance_qty)}</td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>
+                        {row.status}
                       </span>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {/* Pagination */}
-        {!loading && totalRecords > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50">
-            <p className="text-xs text-gray-500">
-              Showing <span className="font-medium text-gray-700">{(currentPage - 1) * pageSize + 1}</span> to <span className="font-medium text-gray-700">{Math.min(currentPage * pageSize, totalRecords)}</span> of <span className="font-medium text-gray-700">{totalRecords}</span> entries
-            </p>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30"><ChevronsLeft size={14} /></button>
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30"><ChevronLeft size={14} /></button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const startPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
-                const page = startPage + i;
-                if (page > totalPages) return null;
-                return (
-                  <button key={page} onClick={() => setCurrentPage(page)}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${page === currentPage ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-gray-200 text-gray-700'}`}
-                  >{page}</button>
-                );
-              })}
-              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30"><ChevronRight size={14} /></button>
-              <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30"><ChevronsRight size={14} /></button>
-              <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="ml-3 px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white cursor-pointer">
-                <option value={10}>10 / page</option>
-                <option value={25}>25 / page</option>
-                <option value={50}>50 / page</option>
-              </select>
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-4 space-y-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="md:hidden space-y-3">
-        {loading ? (
-          <div className="space-y-3">
-            {[1,2,3,4].map(i => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-3" />
-                <div className="h-3 bg-gray-100 rounded w-1/2 mb-2" />
-                <div className="h-3 bg-gray-100 rounded w-2/3" />
-              </div>
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <EmptyState title="No data found" description="Add a new record to get started" />
-        ) : (
-          <>
-            {rows.map(row => (
-              <div key={row.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          ) : data.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm text-gray-500">No cost sheets found</p>
+            </div>
+          ) : (
+            data.map((row) => (
+              <div key={row.item_id} onClick={() => openDetail(row)} className="p-4 active:bg-indigo-50 transition-colors cursor-pointer">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
-                    <p className="text-xs text-indigo-700 font-mono mt-0.5">{row.order_no || '—'}</p>
+                    <p className="text-xs text-indigo-700 font-mono mt-0.5">{row.sales_order_no || '—'}</p>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${row.variance_per_sqft > 0 ? 'bg-red-50 text-red-700 border border-red-200' : row.variance_per_sqft < 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                    {row.variance_per_sqft > 0 ? '↑' : row.variance_per_sqft < 0 ? '↓' : '—'} {formatNumber(Math.abs(row.variance_per_sqft))}/sqft
-                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>{row.status}</span>
                 </div>
-
-                <div className="flex items-center gap-3 mb-2 text-xs text-gray-600">
+                <div className="flex items-center gap-2 text-xs text-gray-600 mb-2.5">
                   <span className="truncate">{row.article || '—'}</span>
                   {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
                 </div>
-
-                <div className="flex items-center gap-4 mb-3 text-[11px] text-gray-500">
-                  <span>Order: <span className="font-medium text-gray-700">{row.order_date ? new Date(row.order_date).toLocaleDateString('en-IN') : '—'}</span></span>
-                  <span>Delivery: <span className="font-medium text-gray-700">{row.delivery_date ? new Date(row.delivery_date).toLocaleDateString('en-IN') : '—'}</span></span>
-                </div>
-
                 <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
                   <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Order Sqft</p>
-                    <p className="text-sm font-bold text-gray-900 tabular-nums">{formatQty(row.order_qty_sqft)}</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
+                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.order_qty)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p>
-                    <p className="text-sm font-bold text-gray-900 tabular-nums">{formatQty(row.completed_qty_sqft)}</p>
+                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.completed_qty)}</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Cost/Sqft</p>
-                    <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.cost_per_sqft)}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Selling/Sqft</p>
-                    <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.selling_price_per_sqft)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Variance/Sqft</p>
-                    <p className={`text-sm font-bold tabular-nums ${row.variance_per_sqft > 0 ? 'text-red-600' : row.variance_per_sqft < 0 ? 'text-emerald-600' : 'text-gray-900'}`}>
-                      {formatNumber(row.variance_per_sqft)}
-                    </p>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
+                    <p className="text-xs font-bold text-amber-700 tabular-nums">{formatQty(row.balance_qty)}</p>
                   </div>
                 </div>
               </div>
-            ))}
+            ))
+          )}
+        </div>
 
-            {/* Mobile Pagination */}
-            {totalRecords > 0 && (
-              <div className="flex items-center justify-between pt-2">
-                <p className="text-xs text-gray-500">{(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords}</p>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"><ChevronLeft size={16} /></button>
-                  <span className="text-xs font-medium text-gray-700 px-2">{currentPage} / {totalPages}</span>
-                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"><ChevronRight size={16} /></button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Show</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+            <span className="text-xs text-gray-500">entries</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-all disabled:opacity-40"
+            >
+              <ChevronsLeft size={14} />
+            </button>
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-all disabled:opacity-40"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => totalPages <= 5 || p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+              .map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                    currentPage === p
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'hover:bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-all disabled:opacity-40"
+            >
+              <ChevronRight size={14} />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-all disabled:opacity-40"
+            >
+              <ChevronsRight size={14} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
