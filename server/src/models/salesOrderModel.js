@@ -122,13 +122,13 @@ export async function create(data, items = [], createdBy = null) {
         `INSERT INTO sales_order_items (
           sales_order_id, item_code, item_description, product_id,
           leather_type, finish_color, thickness, uom, quantity,
-          order_date, delivery_date, unit_price, discount_percent, amount
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          delivery_date, unit_price, discount_percent, amount
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           orderId, item.item_code || null, item.item_description || null, item.product_id || null,
           item.leather_type || null, item.finish_color || null, item.thickness || null,
           item.uom || null, item.quantity || 0,
-          item.order_date || null, item.delivery_date || null,
+          item.delivery_date || null,
           item.unit_price || 0, item.discount_percent || 0, item.amount || 0,
         ]
       );
@@ -174,13 +174,13 @@ export async function update(id, data, items = [], updatedBy = null) {
         `INSERT INTO sales_order_items (
           sales_order_id, item_code, item_description, product_id,
           leather_type, finish_color, thickness, uom, quantity,
-          order_date, delivery_date, unit_price, discount_percent, amount
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          delivery_date, unit_price, discount_percent, amount
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id, item.item_code || null, item.item_description || null, item.product_id || null,
           item.leather_type || null, item.finish_color || null, item.thickness || null,
           item.uom || null, item.quantity || 0,
-          item.order_date || null, item.delivery_date || null,
+          item.delivery_date || null,
           item.unit_price || 0, item.discount_percent || 0, item.amount || 0,
         ]
       );

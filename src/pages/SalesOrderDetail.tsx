@@ -27,7 +27,6 @@ interface SalesOrderItem {
   unit_price: number;
   discount_percent: number;
   amount: number;
-  order_date: string;
   delivery_date: string;
 }
 interface DeliveryNote { id?: number; delivery_no?: string; delivery_date: string; delivery_from: string; transporter: string; vehicle_no: string; lr_no: string; no_of_packages: number | string; delivery_to: string; delivery_instructions: string; status: string; }
@@ -79,7 +78,7 @@ const emptyOrder: SalesOrderFull = {
 const emptyItem: SalesOrderItem = {
   _key: '', product_id: null, item_code: '', item_description: '', leather_type: '', finish_color: '',
   thickness: '', uom: 'Sq.Ft.', quantity: 0, unit_price: 0, discount_percent: 0, amount: 0,
-  order_date: '', delivery_date: '',
+  delivery_date: '',
 };
 
 const STATUS_CONFIG: Record<string, { color: string; icon: any; bg: string }> = {
@@ -177,7 +176,7 @@ export default function SalesOrderDetail() {
         sub_total: Number(d.sub_total) || 0,
         tax_amount: Number(d.tax_amount) || 0,
         grand_total: Number(d.grand_total) || 0,
-        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, order_date: i.order_date?.split('T')[0] || '', delivery_date: i.delivery_date?.split('T')[0] || '' })),
+        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, delivery_date: i.delivery_date?.split('T')[0] || '' })),
         deliveries: d.deliveries || [],
         receipts: d.receipts || [],
         invoices: d.invoices || [],
@@ -576,14 +575,14 @@ export default function SalesOrderDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Order Date', 'Delivery Date', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
+                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Delivery Date', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
                           <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {order.items.length === 0 ? (
-                        <tr><td colSpan={13} className="py-12 text-center">
+                        <tr><td colSpan={12} className="py-12 text-center">
                           <Package size={32} className="mx-auto text-gray-300 mb-3" />
                           <p className="text-sm font-medium text-gray-500">No items added yet</p>
                           <p className="text-xs text-gray-400 mt-1">Click "Add Item" to add a row</p>
@@ -632,12 +631,6 @@ export default function SalesOrderDetail() {
                               const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
                               setOrder(prev => ({ ...prev, items: newItems, ...tots }));
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="0" />
-                          </td>
-                          <td className="py-2.5 px-3.5">
-                            <input type="date" value={item.order_date} onChange={(e) => {
-                              const newItems = order.items.map(it => it._key === item._key ? { ...it, order_date: e.target.value } : it);
-                              setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input type="date" value={item.delivery_date} onChange={(e) => {
