@@ -108,7 +108,7 @@ export async function getTransactionLines({ search, process_stage, page = 1, lim
        SELECT mm.name AS material_name, gm.name AS group_name
        FROM materials mm
        LEFT JOIN group_master gm ON mm.group_id = gm.id
-     ) m ON m.material_name = i.cost_category
+     ) m ON m.material_name COLLATE utf8mb4_0900_ai_ci = i.cost_category COLLATE utf8mb4_0900_ai_ci
      WHERE ${where}
      ORDER BY ${col} ${ord}, i.id ASC
      LIMIT ? OFFSET ?`,
