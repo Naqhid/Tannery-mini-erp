@@ -584,26 +584,26 @@ export default function SalesOrderDetail() {
                             <input value={item.item_code} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[90px] cursor-not-allowed" placeholder="Code" />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <select value={item.product_id || ''} onChange={(e) => {
-                              const productId = Number(e.target.value);
-                              const product = products.find(p => p.id === productId);
-                              const newItems = order.items.map(it => it._key === item._key ? {
-                                ...it,
-                                product_id: productId || null,
-                                item_code: product?.code || '',
-                                item_description: product?.name || '',
-                                leather_type: product?.leather_type_name || product?.leather_type || '',
-                                finish_color: product?.color_name || '',
-                                thickness: product?.thickness_name || product?.thickness || '',
-                                uom: product?.uom_name || product?.uom || '',
-                              } : it);
-                              setOrder(prev => ({ ...prev, items: newItems }));
-                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[160px]">
-                              <option value="">-- Select Article --</option>
-                              {products.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                              ))}
-                            </select>
+                            <SearchableSelect
+                              options={[{ value: '', label: '-- Select Article --' }, ...products.map(p => ({ value: String(p.id), label: p.name }))]}
+                              value={item.product_id ? String(item.product_id) : ''}
+                              onChange={(val) => {
+                                const productId = Number(val);
+                                const product = products.find(p => p.id === productId);
+                                const newItems = order.items.map(it => it._key === item._key ? {
+                                  ...it,
+                                  product_id: productId || null,
+                                  item_code: product?.code || '',
+                                  item_description: product?.name || '',
+                                  leather_type: product?.leather_type_name || product?.leather_type || '',
+                                  finish_color: product?.color_name || '',
+                                  thickness: product?.thickness_name || product?.thickness || '',
+                                  uom: product?.uom_name || product?.uom || '',
+                                } : it);
+                                setOrder(prev => ({ ...prev, items: newItems }));
+                              }}
+                              placeholder="Search article..."
+                            />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input value={item.leather_type} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Type" />

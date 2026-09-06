@@ -92,12 +92,20 @@ export default function GeneralCostForm() {
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [costComponents, setCostComponents] = useState<CostComponentOption[]>([]);
+  const [processStages, setProcessStages] = useState<{ id: number; name: string }[]>([]);
   const isPosted = formData.status === 'Posted';
 
   // Fetch cost component options (materials with category = 'Cost Component')
   useEffect(() => {
     api<{ data: any[] }>('/materials?limit=500&category=Cost Component')
       .then(res => setCostComponents((res.data || []).map((m: any) => ({ id: m.id, name: m.name, uom: m.uom || m.primary_uom_name || '', primary_uom_name: m.uom || m.primary_uom_name || '', rate: Number(m.rate || m.last_purchase_price || m.standard_cost || 0) }))))
+      .catch(() => {});
+  }, []);
+
+  // Fetch process stages for the Process Stage dropdown
+  useEffect(() => {
+    api<{ data: { id: number; name: string }[] }>('/process-stages/dropdown')
+      .then(res => setProcessStages(res.data || []))
       .catch(() => {});
   }, []);
 
@@ -385,6 +393,24 @@ export default function GeneralCostForm() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 md:gap-x-6 gap-y-3 md:gap-y-4">
+          <div>
+            <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>
+            {isPosted ? (
+              <p className="text-xs md:text-sm font-medium text-gray-900 truncate">{formData.process_stage || 'All'}</p>
+            ) : (
+              <select
+                value={formData.process_stage || 'All'}
+                onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))}
+                className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
+              >
+                <option value="All">All</option>
+                {formData.process_stage && formData.process_stage !== 'All' && !processStages.some(s => s.name === formData.process_stage) && (
+                  <option value={formData.process_stage}>{formData.process_stage}</option>
+                )}
+                {processStages.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            )}
+          </div>
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Planned Qty (Pcs)</label>
             <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.planned_qty || formData.order_qty)}</p>

@@ -94,6 +94,16 @@ export async function itemInfo(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function planStages(req, res, next) {
+  try {
+    const planNo = req.query.plan_no;
+    if (!planNo) return res.status(400).json({ error: 'plan_no is required' });
+    const data = await model.getPlanWithStagesByNo(planNo);
+    if (!data) return res.status(404).json({ error: 'Production plan not found' });
+    res.json({ data });
+  } catch (err) { next(err); }
+}
+
 export async function previousIssue(req, res, next) {
   try {
     const data = await model.getPreviousIssueByArticle(req.query.article, req.query.exclude_id || null);

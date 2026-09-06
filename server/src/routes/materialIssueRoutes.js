@@ -11,6 +11,7 @@ router.get('/next-no', ctrl.nextNo);
 router.get('/batches-dropdown', ctrl.batchesDropdown);
 router.get('/bom-items/:productId', ctrl.getBOMItems);
 router.get('/item-info/:itemId', ctrl.itemInfo);
+router.get('/plan-stages', ctrl.planStages);
 router.get('/previous-issue', ctrl.previousIssue);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', requireWriteAccess, ctrl.create);

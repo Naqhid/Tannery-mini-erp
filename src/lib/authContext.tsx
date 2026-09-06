@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import api from './api';
 
 interface User {
@@ -35,11 +35,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-  let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+  // Use a ref so the timer handle is stable across re-renders. A plain `let`
+  // is recreated on every render, which meant activity handlers were clearing
+  // a stale (undefined) timer and the original 30-min timer could still fire
+  // while the user was actively working — causing random logouts.
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetInactivityTimer = () => {
-    if (inactivityTimer) clearTimeout(inactivityTimer);
-    inactivityTimer = setTimeout(() => {
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    inactivityTimer.current = setTimeout(() => {
       // Auto-logout on inactivity
       const storedToken = localStorage.getItem(TOKEN_KEY);
       if (storedToken) {
@@ -61,8 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetInactivityTimer();
     return () => {
       events.forEach(e => window.removeEventListener(e, handleActivity));
-      if (inactivityTimer) clearTimeout(inactivityTimer);
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

@@ -18,6 +18,7 @@ import {
   companyModel,
   businessUnitModel,
   locationRackModel,
+  departmentModel,
 } from '../models/masterModels.js';
 
 export const productCategoryController = createMasterController(productCategoryModel, 'Product Category', [
@@ -84,3 +85,5 @@ export const businessUnitController = createMasterController(businessUnitModel, 
 ]);
 
 export const locationRackController = createMasterController(locationRackModel, 'Location/Rack', []);
+
+export const departmentController = createMasterController(departmentModel, 'Department', []);

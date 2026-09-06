@@ -189,3 +189,11 @@ export const locationRackModel = createMasterModel(
     filterableFields: ['warehouse_id'],
   }
 );
+
+export const departmentModel = createMasterModel(
+  'departments',
+  'DEPT',
+  ['id', 'code', 'name', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code'],
+  { uniqueFields: [{ fields: ['name'] }] }
+);

@@ -20,7 +20,6 @@ interface ProductData {
   id?: number;
   code: string;
   name: string;
-  customer_id: string;
   category_id: string;
   group_id: string;
   leather_type_id: string;
@@ -38,7 +37,7 @@ interface ProductData {
 }
 
 const empty: ProductData = {
-  code: '', name: '', customer_id: '', category_id: '', group_id: '', leather_type_id: '', primary_uom_id: '', secondary_uom_id: '',
+  code: '', name: '', category_id: '', group_id: '', leather_type_id: '', primary_uom_id: '', secondary_uom_id: '',
   thickness_id: '', standard_size_id: '', color_id: '', finish_type_id: '', grade_id: '',
   hsn_code_id: '', hsn_code_display: '', description: '', status: 'Active',
 };
@@ -50,7 +49,7 @@ export default function ProductMasterForm() {
 
   const dropdowns = useDropdowns([
     'product-categories', 'leather-types', 'uom', 'thickness',
-    'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes', 'group-master', 'customers',
+    'standard-sizes', 'colors', 'finish-types', 'grades', 'hsn-codes', 'group-master',
   ]);
 
   const [form, setForm] = useState<ProductData>(empty);
@@ -85,7 +84,6 @@ export default function ProductMasterForm() {
         finish_type_id: d.finish_type_id ? String(d.finish_type_id) : '',
         grade_id: d.grade_id ? String(d.grade_id) : '',
         hsn_code_id: d.hsn_code_id ? String(d.hsn_code_id) : '',
-        customer_id: d.customer_id ? String(d.customer_id) : '',
         hsn_code_display: d.group_hsn_code || '',
       });
     } catch { toast.error('Failed to load product'); navigate('/product-master'); }
@@ -214,7 +212,6 @@ export default function ProductMasterForm() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Product Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Input label="Product Name" required value={form.name} disabled readOnly error={errors.name} placeholder="Auto: Leather Type + Finish Type + Color" />
-          <Select label="Customer" options={[{ value: '', label: 'Select customer' }, ...(dropdowns['customers']?.options || [])]} value={form.customer_id} onChange={(e) => update('customer_id', e.target.value)} />
           <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} />
           <Select
             label="Group"

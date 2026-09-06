@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 
 // ─── Orders (main list) ──────────────────────────────────────────────────────
 
-export async function getOrders({ process_stage, show_completed, status_filter, search, has_transactions, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function getOrders({ process_stage, show_completed, status_filter, search, plan_no, has_transactions, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
   let where = 'o.deleted_at IS NULL AND o.production_plan_id IS NOT NULL';
 
@@ -22,6 +22,10 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
   if (has_transactions === 'true') {
     where += ' AND o.issued_qty > 0';
   }
+  if (plan_no) {
+    where += ' AND o.order_no LIKE ?';
+    params.push(`%${plan_no}%`);
+  }
   if (search) {
     where += ' AND (o.order_no LIKE ? OR o.article LIKE ? OR o.color LIKE ? OR o.customer_name LIKE ?)';
     const t = `%${search}%`;
@@ -29,12 +33,33 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
   }
 
   const allowedSort = ['order_no', 'article', 'color', 'issued_qty', 'completed_qty', 'balance_qty', 'status', 'customer_name'];
-  const col = allowedSort.includes(sortBy) ? `o.${sortBy}` : 'o.id';
+  const col = allowedSort.includes(sortBy) ? (sortBy === 'completed_qty' ? 'completed_qty' : `o.${sortBy}`) : 'o.id';
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * limit;
 
+  // Completed Qty on the main list reflects ONLY the measurement stage
+  // (the last stage by sequence for the plan) — its cumulative Daily
+  // Production output is the source of truth for completed qty.
+  const measurementCompletedSql = `
+    COALESCE((
+      SELECT SUM(t.output_qty)
+      FROM production_status_orders pso
+      JOIN production_status_transactions t
+        ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pso.production_plan_id = o.production_plan_id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name
+          FROM production_plan_stages s2
+          WHERE s2.plan_id = o.production_plan_id
+          ORDER BY s2.seq DESC, s2.id DESC
+          LIMIT 1
+        )
+    ), 0)`;
+
   const [rows] = await pool.query(
-    `SELECT o.* FROM production_status_orders o WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
+    `SELECT o.*, ${measurementCompletedSql} AS completed_qty
+       FROM production_status_orders o
+       WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
   );
 

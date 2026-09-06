@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET || 'tannery-erp-secret-key-2024';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 const REFRESH_SECRET = process.env.REFRESH_SECRET || 'tannery-erp-refresh-secret-2024';
-const REFRESH_EXPIRES_IN = process.env.REFRESH_EXPIRES_IN || '7d';
+const REFRESH_EXPIRES_IN = process.env.REFRESH_EXPIRES_IN || '30d';
 
 export function hashPassword(password) {
   return bcrypt.hashSync(password, 10);

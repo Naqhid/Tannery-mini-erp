@@ -28,6 +28,8 @@ interface OrderData {
   production_plan_id: string;
   plan_date: string;
   posted_at: string | null;
+  order_date: string;
+  delivery_date: string;
 }
 
 interface TransactionRow {
@@ -59,6 +61,7 @@ export default function ProductionStatusForm() {
     order_no: '', customer_name: '', customer_id: '', article: '', color: '',
     process_stage: '', planned_qty: '0', issued_qty: '0', completed_qty: '0', balance_qty: '0',
     uom: '', status: 'In-Process', remarks: '', production_plan_id: '', plan_date: '', posted_at: null,
+    order_date: '', delivery_date: '',
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -128,6 +131,8 @@ export default function ProductionStatusForm() {
           production_plan_id: String(d.production_plan_id || ''),
           plan_date: d.plan_date?.split('T')[0] || '',
           posted_at: d.posted_at || null,
+          order_date: d.order_date?.split('T')[0] || '',
+          delivery_date: d.delivery_date?.split('T')[0] || '',
         });
         // Set UOM from process stage
         if (d.process_stage) {
@@ -193,6 +198,18 @@ export default function ProductionStatusForm() {
     const ps = processStages.find(s => s.name === val);
     setForm(prev => ({ ...prev, process_stage: val, uom: ps?.uom || prev.uom }));
     setStageUom(ps?.uom || '');
+    // Auto-fetch planned qty for this stage from the production plan
+    if (form.production_plan_id && val) {
+      api<{ data: any }>(`/production-plans/${form.production_plan_id}`)
+        .then(res => {
+          const planStages = res.data?.stages || [];
+          const matchingStage = planStages.find((s: any) => s.stage_name === val || s.process_stage_name === val);
+          if (matchingStage) {
+            setForm(prev => ({ ...prev, process_stage: val, uom: ps?.uom || prev.uom, planned_qty: String(matchingStage.planned_qty || 0) }));
+          }
+        })
+        .catch(() => {});
+    }
   };
 
   const handleSave = async () => {
@@ -329,14 +346,12 @@ export default function ProductionStatusForm() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 max-w-[1000px] mx-auto">
-        <div className="animate-pulse space-y-4"><div className="h-8 bg-gray-200 rounded w-1/3" /><div className="h-60 bg-gray-100 rounded-xl" /></div>
-      </div>
+          <div className="animate-pulse space-y-4"><div className="h-8 bg-gray-200 rounded w-1/3" /><div className="h-60 bg-gray-100 rounded-xl" /></div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-[1000px] mx-auto">
+    <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -427,10 +442,21 @@ export default function ProductionStatusForm() {
               <option value="Posted">Posted</option>
             </select>
           </div>
-          <div className="sm:col-span-2 lg:col-span-1">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
             <input type="text" value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} disabled={isPosted}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" placeholder="Optional notes" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Order Date</label>
+            <input type="date" value={form.order_date} onChange={e => setForm({ ...form, order_date: e.target.value })} disabled={isPosted}
+              max={new Date().toISOString().split('T')[0]}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Date</label>
+            <input type="date" value={form.delivery_date} onChange={e => setForm({ ...form, delivery_date: e.target.value })} disabled={isPosted}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" />
           </div>
         </div>
 
@@ -482,6 +508,7 @@ export default function ProductionStatusForm() {
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">Date</label>
                   <input type="date" value={txnForm.production_date} onChange={e => updateTxnField('production_date', e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>

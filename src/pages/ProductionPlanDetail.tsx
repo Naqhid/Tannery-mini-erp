@@ -76,6 +76,7 @@ export default function ProductionPlanDetail() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [deleteStageKey, setDeleteStageKey] = useState<string | null>(null);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
@@ -352,7 +353,8 @@ export default function ProductionPlanDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+          <button className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+            onClick={() => setShowPrintPreview(true)}>
             <Printer size={13} /> Print
           </button>
           <button className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
@@ -405,18 +407,6 @@ export default function ProductionPlanDetail() {
               onChange={(val) => update('customer_id', val)}
               placeholder="Select customer..."
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Sales Order Qty (Sq.Ft.)</label>
-            <input type="number" value={plan.sales_order_qty} onChange={(e) => update('sales_order_qty', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Completed Qty (Sq.Ft.)</label>
-            <input type="number" value={completedQty} readOnly title="Cumulative output of the measurement (last) stage from Daily Production" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700" placeholder="0.00" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Balance Qty (Sq.Ft.)</label>
-            <input type="text" value={fmtCurrency(balanceQty)} readOnly className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg bg-blue-50 text-blue-800 font-bold" />
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -551,6 +541,98 @@ export default function ProductionPlanDetail() {
           </div>
         </div>
       </div>
+
+      {/* Print Preview Modal */}
+      {showPrintPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowPrintPreview(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-base font-bold text-gray-900">Print Preview — Production Requirement Plan</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Printer size={14} /> Print
+                </button>
+                <button onClick={() => setShowPrintPreview(false)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-200 transition-colors">
+                  <span className="text-lg leading-none">×</span>
+                </button>
+              </div>
+            </div>
+            {/* Printable Content */}
+            <div id="print-plan-content" className="overflow-y-auto p-8 flex-1 text-sm text-gray-800">
+              {/* Company / Title */}
+              <div className="text-center mb-6">
+                <h1 className="text-xl font-black text-gray-900 uppercase tracking-wide">Production Requirement Plan</h1>
+                <p className="text-gray-500 text-xs mt-1">Plan No: <span className="font-semibold text-gray-800">{plan.plan_no}</span></p>
+              </div>
+
+              {/* Plan Info Grid */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2 mb-6 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex justify-between"><span className="text-gray-500">Plan Date:</span><span className="font-medium">{plan.plan_date || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Status:</span><span className="font-medium">{totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Article:</span><span className="font-medium">{plan.article || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Color:</span><span className="font-medium">{plan.color || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Customer:</span><span className="font-medium">{customers.find(c => String(c.id) === plan.customer_id)?.name || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Order No:</span><span className="font-medium">{salesOrders.find(s => String(s.id) === plan.sales_order_id)?.order_no || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Remarks:</span><span className="font-medium">{plan.remarks || '—'}</span></div>
+              </div>
+
+              {/* Stages Table */}
+              <h3 className="text-sm font-bold text-gray-700 mb-2">Stage Wise Plan</h3>
+              <table className="w-full border-collapse border border-gray-300 text-xs mb-6">
+                <thead>
+                  <tr className="bg-gray-800 text-white">
+                    <th className="border border-gray-600 px-3 py-2 text-center">#</th>
+                    <th className="border border-gray-600 px-3 py-2 text-left">Process Stage</th>
+                    <th className="border border-gray-600 px-3 py-2 text-center">UOM</th>
+                    <th className="border border-gray-600 px-3 py-2 text-center">Plan Qty</th>
+                    <th className="border border-gray-600 px-3 py-2 text-center">Input Qty</th>
+                    <th className="border border-gray-600 px-3 py-2 text-center">Output Qty</th>
+                    <th className="border border-gray-600 px-3 py-2 text-center">Rejection</th>
+                    <th className="border border-gray-600 px-3 py-2 text-center">WIP</th>
+                    <th className="border border-gray-600 px-3 py-2 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stages.map((s, i) => (
+                    <tr key={s._key} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="border border-gray-200 px-3 py-2 text-center font-bold text-gray-500">{i + 1}</td>
+                      <td className="border border-gray-200 px-3 py-2 font-medium text-blue-800">{s.stage_name || '—'}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center">{s.uom || '—'}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center font-semibold">{fmt(parseFloat(s.planned_qty) || 0)}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center">{fmt(parseFloat(s.issue_input_qty) || 0)}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center">{fmt(parseFloat(s.output_qty) || 0)}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center">{fmt(parseFloat(s.rejection_qty) || 0)}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center font-bold text-amber-700">{fmt(s.wip_qty)}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center">{s.status}</td>
+                    </tr>
+                  ))}
+                  {stages.length === 0 && (
+                    <tr><td colSpan={9} className="border border-gray-200 px-3 py-4 text-center text-gray-400">No stages defined</td></tr>
+                  )}
+                </tbody>
+              </table>
+
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Sale Order Qty</p><p className="text-lg font-black text-gray-900">{fmtCurrency(salesOrderQty)}</p></div>
+                <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Completed Qty</p><p className="text-lg font-black text-emerald-700">{fmtCurrency(completedQty)}</p></div>
+                <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Balance Qty</p><p className="text-lg font-black text-amber-700">{fmtCurrency(balanceQty)}</p></div>
+              </div>
+
+              {/* Signature area */}
+              <div className="mt-10 grid grid-cols-3 gap-8 text-center text-xs text-gray-500">
+                <div><div className="border-t border-gray-400 pt-1 mt-8">Prepared By</div></div>
+                <div><div className="border-t border-gray-400 pt-1 mt-8">Checked By</div></div>
+                <div><div className="border-t border-gray-400 pt-1 mt-8">Approved By</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Stage Confirmation Dialog */}
       {deleteStageKey && (

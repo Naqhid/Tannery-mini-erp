@@ -4,9 +4,9 @@ import * as model from '../models/productionStatusModel.js';
 
 export async function listOrders(req, res, next) {
   try {
-    const { search, process_stage, show_completed, status_filter, has_transactions, sortBy, sortOrder } = req.query;
+    const { search, process_stage, show_completed, status_filter, plan_no, has_transactions, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const { rows, total } = await model.getOrders({ process_stage, show_completed, status_filter, search, has_transactions, page, limit, sortBy, sortOrder });
+    const { rows, total } = await model.getOrders({ process_stage, show_completed, status_filter, search, plan_no, has_transactions, page, limit, sortBy, sortOrder });
     res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (err) { next(err); }
 }

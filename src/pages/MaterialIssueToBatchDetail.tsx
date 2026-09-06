@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Save, X, ArrowLeft, Plus, Trash2, Factory, RotateCcw, Info, Minus, Send, ScanLine } from 'lucide-react';
+import { Save, X, ArrowLeft, Plus, Trash2, Factory, RotateCcw, Info, Minus, Send } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import SearchableSelect from '../components/ui/SearchableSelect';
-import BarcodeScanner from '../components/BarcodeScanner';
 import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; allow_negative_stock: number; }
@@ -52,6 +51,8 @@ interface IssueData {
 
 interface PlanOption { id: number; plan_no: string; article: string; color: string; planned_qty: number; product_id: number | null; uom: string; }
 interface StageOption { id: number; name: string; uom?: string; }
+interface DepartmentOption { id: number; code: string; name: string; }
+interface PlanStage { id: number; seq: number; stage_id: number | null; stage_name: string; planned_qty: number; stage_uom?: string; }
 
 const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', required_qty: '', issue_qty: '', unit_cost: '', amount: 0, remarks: '', available_qty: 0, stock_error: '' };
 
@@ -77,7 +78,12 @@ export default function MaterialIssueToBatchDetail() {
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [planOptions, setPlanOptions] = useState<PlanOption[]>([]);
   const [stageOptions, setStageOptions] = useState<StageOption[]>([]);
-  const [showScanner, setShowScanner] = useState(false);
+  const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
+  // Stages that belong to the currently selected production plan. When a plan
+  // has multiple stages the Stage dropdown lists all of them and the planned
+  // qty / uom follow the selected stage.
+  const [planStages, setPlanStages] = useState<PlanStage[]>([]);
+
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [isPosted, setIsPosted] = useState(false);
@@ -103,6 +109,11 @@ export default function MaterialIssueToBatchDetail() {
   const fetchStages = useCallback(async () => {
     try { const res = await api<{ data: StageOption[] }>('/process-stages?limit=100'); setStageOptions(res.data || []); }
     catch { setStageOptions([]); }
+  }, []);
+
+  const fetchDepartments = useCallback(async () => {
+    try { const res = await api<{ data: DepartmentOption[] }>('/departments/dropdown'); setDepartmentOptions(res.data || []); }
+    catch { setDepartmentOptions([]); }
   }, []);
 
   const fetchStock = useCallback(async (whId: string) => {
@@ -146,14 +157,86 @@ export default function MaterialIssueToBatchDetail() {
         amount: parseFloat(it.amount) || 0, remarks: it.remarks || '',
       })));
       fetchStock(String(d.warehouse_id));
+      // Reload the plan's stages so the Stage dropdown / planned qty work on edit.
+      if (d.production_batch) {
+        try {
+          const ps = await api<{ data: { stages: PlanStage[] } }>(`/material-issues/plan-stages?plan_no=${encodeURIComponent(d.production_batch)}`);
+          setPlanStages((ps.data.stages || []).map((s) => ({ ...s, planned_qty: Number(s.planned_qty) || 0 })));
+        } catch { /* ignore */ }
+      }
     } catch { toast.error('Failed to load issue'); }
     finally { setLoading(false); }
   }, [id, isNew, fetchStock]);
 
-  useEffect(() => { fetchWarehouses(); fetchPlans(); fetchStages(); fetchMaterials(); fetchIssue(); }, [fetchWarehouses, fetchPlans, fetchStages, fetchMaterials, fetchIssue]);
+  useEffect(() => { fetchWarehouses(); fetchPlans(); fetchStages(); fetchDepartments(); fetchMaterials(); fetchIssue(); }, [fetchWarehouses, fetchPlans, fetchStages, fetchDepartments, fetchMaterials, fetchIssue]);
   useEffect(() => { if (issue.warehouse_id) fetchStock(issue.warehouse_id); }, [issue.warehouse_id, fetchStock]);
 
+  // Plan No is only relevant when issuing to the Production department.
+  const isProductionDept = (issue.department || '').trim().toLowerCase() === 'production';
+
   const update = (key: string, value: any) => setIssue((p) => ({ ...p, [key]: value }));
+
+  // When department changes: if not Production, disable plan-based fields and
+  // clear the plan-derived values so stale data isn't submitted.
+  const handleDepartmentChange = (value: string) => {
+    setIssue((p) => {
+      const next = { ...p, department: value };
+      if (value.trim().toLowerCase() !== 'production') {
+        next.production_batch = '';
+        next.process_stage = '';
+        next.planned_date = '';
+        next.batch_qty = '';
+        next.batch_uom = '';
+      }
+      return next;
+    });
+    if (value.trim().toLowerCase() !== 'production') {
+      setPlanStages([]);
+    }
+  };
+
+  // Fetch the stages of the selected plan and auto-populate stage / planned
+  // date / planned qty / uom. Handles single and multiple stages.
+  const loadPlanStages = async (planNo: string) => {
+    if (!planNo) { setPlanStages([]); return; }
+    try {
+      const res = await api<{ data: { stages: PlanStage[]; planned_start_date?: string; plan_date?: string } }>(`/material-issues/plan-stages?plan_no=${encodeURIComponent(planNo)}`);
+      const stages = (res.data.stages || []).map((s) => ({
+        ...s,
+        planned_qty: Number(s.planned_qty) || 0,
+      }));
+      setPlanStages(stages);
+
+      const plannedDate = (res.data.planned_start_date || res.data.plan_date || '').split('T')[0] || '';
+      if (stages.length > 0) {
+        const first = stages[0];
+        setIssue((p) => ({
+          ...p,
+          process_stage: first.stage_name || '',
+          planned_date: plannedDate || p.planned_date,
+          batch_qty: first.planned_qty ? String(first.planned_qty) : p.batch_qty,
+          batch_uom: first.stage_uom || p.batch_uom,
+        }));
+      } else {
+        setIssue((p) => ({ ...p, planned_date: plannedDate || p.planned_date }));
+      }
+    } catch {
+      setPlanStages([]);
+    }
+  };
+
+  // When a stage is selected, planned qty and uom follow that stage.
+  const handleStageChange = (stageName: string) => {
+    const stage = planStages.find((s) => s.stage_name === stageName);
+    setIssue((p) => ({
+      ...p,
+      process_stage: stageName,
+      ...(stage ? {
+        batch_qty: stage.planned_qty ? String(stage.planned_qty) : p.batch_qty,
+        batch_uom: stage.stage_uom || p.batch_uom,
+      } : {}),
+    }));
+  };
 
   // Handle production plan selection (by plan_no) — populate article, color, planned qty
   const applyPlan = (plan: PlanOption | undefined, planNo: string) => {
@@ -180,6 +263,9 @@ export default function MaterialIssueToBatchDetail() {
   const handlePlanNoChange = (planNo: string) => {
     const plan = planOptions.find(p => p.plan_no.toLowerCase() === planNo.trim().toLowerCase());
     applyPlan(plan, planNo);
+    // Load the plan's stages so Stage / Planned Date / Planned Qty / UOM
+    // auto-populate. Only relevant for the Production department.
+    if (planNo.trim()) loadPlanStages(planNo.trim());
   };
 
   // Handle product change — load BOM items
@@ -385,36 +471,42 @@ export default function MaterialIssueToBatchDetail() {
               {issue.issue_no || <span className="italic">Will be auto-generated on save</span>}
             </div>
           </div>
-          <Select label="To Department / Process" required options={[{ value: '', label: 'Select department / process' }, ...stageOptions.map(s => ({ value: s.name, label: s.name }))]} value={issue.department} onChange={(e) => update('department', e.target.value)} />
+          <Select label="To Department" required options={[{ value: '', label: 'Select department' }, ...departmentOptions.map(d => ({ value: d.name, label: d.name }))]} value={issue.department} onChange={(e) => handleDepartmentChange(e.target.value)} />
 
-          {/* Row 2: Issue Date | Plan No (scan) | Stage | Planned Date */}
+          {/* Row 2: Issue Date | Plan No | Stage | Planned Date */}
           <Input label="Issue Date" type="date" required value={issue.issue_date} onChange={(e) => update('issue_date', e.target.value)} />
           <div>
-            <label className="block text-xs font-medium text-gray-900 mb-1">Plan No. <span className="text-rose-500">*</span></label>
-            <div className="flex gap-1.5">
-              <input
-                type="text"
+            <label className="block text-xs font-medium text-gray-900 mb-1">
+              Plan No.{isProductionDept && <span className="text-rose-500"> *</span>}
+            </label>
+            {isProductionDept ? (
+              <SearchableSelect
+                options={planOptions.map(p => ({ value: p.plan_no, label: p.plan_no }))}
                 value={issue.production_batch}
-                onChange={(e) => update('production_batch', e.target.value)}
-                onBlur={(e) => handlePlanNoChange(e.target.value)}
-                list="mi-plan-list"
-                placeholder="Scan or enter plan no"
-                className="flex-1 px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-0"
+                onChange={(val) => { update('production_batch', val); handlePlanNoChange(val); }}
+                placeholder="Select plan no"
               />
-              <datalist id="mi-plan-list">
-                {planOptions.map(p => <option key={p.id} value={p.plan_no} />)}
-              </datalist>
-              <button
-                type="button"
-                onClick={() => setShowScanner(true)}
-                title="Scan plan barcode"
-                className="shrink-0 px-2.5 py-2 rounded-lg text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-all"
-              >
-                <ScanLine size={16} />
-              </button>
-            </div>
+            ) : (
+              <div className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg bg-gray-100 text-gray-400 min-h-[34px] flex items-center cursor-not-allowed">
+                Available for Production dept
+              </div>
+            )}
           </div>
-          <Select label="Stage" options={[{ value: '', label: 'Select stage' }, ...stageOptions.map(s => ({ value: s.name, label: s.name }))]} value={issue.process_stage} onChange={(e) => update('process_stage', e.target.value)} />
+          {(() => {
+            // When the selected plan has stages, list them (single or multiple).
+            // Otherwise fall back to the master process-stage list.
+            const stageSelectOptions = planStages.length > 0
+              ? planStages.map(s => ({ value: s.stage_name, label: s.stage_name }))
+              : stageOptions.map(s => ({ value: s.name, label: s.name }));
+            return (
+              <Select
+                label="Stage"
+                options={[{ value: '', label: 'Select stage' }, ...stageSelectOptions]}
+                value={issue.process_stage}
+                onChange={(e) => handleStageChange(e.target.value)}
+              />
+            );
+          })()}
           <Input label="Planned Date" type="date" value={issue.planned_date} onChange={(e) => update('planned_date', e.target.value)} />
 
           {/* Row 3: Planned Qty + UOM | Article | Color | Warehouse */}
@@ -447,7 +539,7 @@ export default function MaterialIssueToBatchDetail() {
               <span className="text-xs text-gray-500">Add Item</span>
               <div className="relative">
                 <input type="text" value={searchItem} onChange={(e) => setSearchItem(e.target.value)}
-                  placeholder="Search item by code / name / barcode"
+                  placeholder="Search item by code / name"
                   className="w-64 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pl-8" />
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
@@ -635,12 +727,6 @@ export default function MaterialIssueToBatchDetail() {
         </div>
       )}
 
-      {/* Barcode Scanner for Plan No */}
-      <BarcodeScanner
-        isOpen={showScanner}
-        onClose={() => setShowScanner(false)}
-        onScan={(value) => { update('production_batch', value); handlePlanNoChange(value); }}
-      />
     </div>
   );
 }

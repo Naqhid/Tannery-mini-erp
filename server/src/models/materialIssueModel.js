@@ -87,14 +87,14 @@ export async function create(data, items = [], createdBy = null) {
 
     const [result] = await conn.query(
       `INSERT INTO material_issues (
-        issue_no, issue_date, department, job_order_no, production_batch, article, color, batch_qty,
+        issue_no, issue_date, department, job_order_no, production_batch, process_stage, article, color, batch_qty,
         batch_uom, batch_description, costing_method, warehouse_id, required_date, planned_date,
         issued_by, loading_unloading, other_charges, total_material_cost, grand_total,
         remarks, status, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         issue_no, data.issue_date, data.department || null, data.job_order_no || null,
-        data.production_batch || null, data.article || data.batch_description || null, data.color || null, data.batch_qty || 0, data.batch_uom || null,
+        data.production_batch || null, data.process_stage || null, data.article || data.batch_description || null, data.color || null, data.batch_qty || 0, data.batch_uom || null,
         data.batch_description || null, data.costing_method || 'FIFO', data.warehouse_id,
         data.required_date || data.planned_date || null, data.planned_date || data.required_date || null, data.issued_by || null, data.loading_unloading || 0,
         data.other_charges || 0, totalCost, grandTotal, data.remarks || null,
@@ -200,13 +200,13 @@ export async function update(id, data, items = [], updatedBy = null) {
 
     await conn.query(
       `UPDATE material_issues SET
-        issue_date=?, department=?, job_order_no=?, production_batch=?, article=?, color=?, batch_qty=?,
+        issue_date=?, department=?, job_order_no=?, production_batch=?, process_stage=?, article=?, color=?, batch_qty=?,
         batch_uom=?, batch_description=?, costing_method=?, warehouse_id=?, required_date=?, planned_date=?,
         issued_by=?, loading_unloading=?, other_charges=?, total_material_cost=?,
         grand_total=?, remarks=?, status=?, updated_by=? WHERE id=?`,
       [
         data.issue_date, data.department || null, data.job_order_no || null,
-        data.production_batch || null, data.article || data.batch_description || null, data.color || null, data.batch_qty || 0, data.batch_uom || null,
+        data.production_batch || null, data.process_stage || null, data.article || data.batch_description || null, data.color || null, data.batch_qty || 0, data.batch_uom || null,
         data.batch_description || null, data.costing_method || 'FIFO', data.warehouse_id,
         data.required_date || data.planned_date || null, data.planned_date || data.required_date || null, data.issued_by || null, data.loading_unloading || 0,
         data.other_charges || 0, totalCost, grandTotal, data.remarks || null, newStatus, updatedBy, id,
@@ -322,6 +322,30 @@ export async function getBOMItemsByProduct(productId) {
     [productId]
   );
   return rows;
+}
+
+// --- Production plan + its stages by plan_no (for Material Issue autopopulation) ---
+export async function getPlanWithStagesByNo(planNo) {
+  if (!planNo) return null;
+  const [[plan]] = await pool.query(
+    `SELECT id, plan_no, article, color, product_id, planned_qty, uom,
+       plan_date, planned_start_date, planned_end_date, warehouse_id
+     FROM production_plans
+     WHERE plan_no = ? AND deleted_at IS NULL
+     ORDER BY id DESC LIMIT 1`,
+    [planNo]
+  );
+  if (!plan) return null;
+  const [stages] = await pool.query(
+    `SELECT pps.id, pps.seq, pps.stage_id, pps.stage_name, pps.planned_qty,
+       ps.uom AS stage_uom, ps.name AS process_stage_name
+     FROM production_plan_stages pps
+     LEFT JOIN process_stages ps ON pps.stage_id = ps.id
+     WHERE pps.plan_id = ?
+     ORDER BY pps.seq ASC, pps.id ASC`,
+    [plan.id]
+  );
+  return { ...plan, stages };
 }
 
 export async function getPreviousIssueByArticle(article, excludeId = null) {

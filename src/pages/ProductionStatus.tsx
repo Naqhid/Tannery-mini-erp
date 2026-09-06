@@ -56,6 +56,7 @@ export default function ProductionStatus() {
   const [totalPages, setTotalPages] = useState(0);
   const [deletingId, setDeletingId] = useState<OrderRow | null>(null);
   const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
+  const [planSearch, setPlanSearch] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -63,6 +64,7 @@ export default function ProductionStatus() {
       const params = new URLSearchParams();
       if (processStage !== 'All') params.set('process_stage', processStage);
       if (statusFilter !== 'All') params.set('status_filter', statusFilter);
+      if (planSearch.trim()) params.set('plan_no', planSearch.trim());
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) { params.set('sortBy', sortBy); params.set('sortOrder', sortOrder); }
@@ -76,10 +78,10 @@ export default function ProductionStatus() {
     } finally {
       setLoading(false);
     }
-  }, [processStage, statusFilter, currentPage, pageSize, sortBy, sortOrder, activeTab]);
+  }, [processStage, statusFilter, planSearch, currentPage, pageSize, sortBy, sortOrder, activeTab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { setCurrentPage(1); }, [processStage, statusFilter, sortBy, sortOrder, activeTab]);
+  useEffect(() => { setCurrentPage(1); }, [processStage, statusFilter, planSearch, sortBy, sortOrder, activeTab]);
 
   // Load process stages from master
   useEffect(() => {
@@ -153,6 +155,16 @@ export default function ProductionStatus() {
       {/* Filters */}
       <div className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 mb-5 shadow-sm">
         <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 md:gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Search Plan Number</label>
+            <input
+              type="text"
+              value={planSearch}
+              onChange={e => setPlanSearch(e.target.value)}
+              placeholder="Search plan no..."
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[180px]"
+            />
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Process Stage</label>
             <select value={processStage} onChange={e => setProcessStage(e.target.value)}

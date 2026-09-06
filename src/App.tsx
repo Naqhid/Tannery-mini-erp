@@ -89,6 +89,8 @@ import MachineCostForm from './pages/MachineCostForm';
 import ProductionStatus from './pages/ProductionStatus';
 import ProductionStatusForm from './pages/ProductionStatusForm';
 import CostingReport from './pages/CostingReport';
+import DepartmentMaster from './pages/DepartmentMaster';
+import DepartmentMasterForm from './pages/DepartmentMasterForm';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -167,6 +169,9 @@ function App() {
             <Route path="machine" element={<Machine />} />
             <Route path="machine/new" element={<MachineForm />} />
             <Route path="machine/:id" element={<MachineForm />} />
+            <Route path="department-master" element={<DepartmentMaster />} />
+            <Route path="department-master/new" element={<DepartmentMasterForm />} />
+            <Route path="department-master/:id" element={<DepartmentMasterForm />} />
             {/* BOM / Recipe - BOM first, then Recipe */}
             <Route path="bom" element={<BOM />} />
             <Route path="bom/new" element={<BOMForm />} />
