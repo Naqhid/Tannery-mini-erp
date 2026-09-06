@@ -1,19 +1,7 @@
--- 06 Sep 2026: Per-item Order Date, Delivery Date and Input Qty on sales order items.
--- Dates and an input quantity are now captured per line item rather than at the
--- order level. Each column is added only if it does not already exist so the
--- migration is safe to re-run.
-
--- input_qty
-SET @col_exists := (
-  SELECT COUNT(*) FROM information_schema.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'sales_order_items'
-    AND COLUMN_NAME = 'input_qty'
-);
-SET @ddl := IF(@col_exists = 0,
-  'ALTER TABLE sales_order_items ADD COLUMN input_qty DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER quantity',
-  'SELECT 1');
-PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+-- 06 Sep 2026: Per-item Order Date and Delivery Date on sales order items.
+-- Dates are now captured per line item rather than at the order level. Each
+-- column is added only if it does not already exist so the migration is safe
+-- to re-run.
 
 -- order_date
 SET @col_exists := (
@@ -23,7 +11,7 @@ SET @col_exists := (
     AND COLUMN_NAME = 'order_date'
 );
 SET @ddl := IF(@col_exists = 0,
-  'ALTER TABLE sales_order_items ADD COLUMN order_date DATE NULL AFTER input_qty',
+  'ALTER TABLE sales_order_items ADD COLUMN order_date DATE NULL AFTER quantity',
   'SELECT 1');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
