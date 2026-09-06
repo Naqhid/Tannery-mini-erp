@@ -97,6 +97,8 @@ export default function GeneralCostForm() {
   const [costComponents, setCostComponents] = useState<CostComponentOption[]>([]);
   const [processStages, setProcessStages] = useState<{ id: number; name: string }[]>([]);
   const isPosted = formData.status === 'Posted';
+  // Cost cannot be entered without output quantity.
+  const outputZero = (Number(formData.output_qty) || 0) <= 0;
 
   // Fetch cost component options (materials with category = 'Cost Component')
   useEffect(() => {
@@ -245,7 +247,11 @@ export default function GeneralCostForm() {
       toast.error('No production plan linked');
       return;
     }
-    if (formData.items.length === 0) {
+    if (outputZero) {
+      toast.error('Cost cannot be updated without output quantity');
+      return;
+    }
+    if (formData.items.filter(i => i.cost_category_id || i.cost_category).length === 0) {
       toast.error('Add at least one cost component');
       return;
     }
@@ -440,11 +446,16 @@ export default function GeneralCostForm() {
         <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/50">
           <h2 className="text-sm md:text-base font-bold text-gray-900">Cost Components (Per Pc)</h2>
           {!isPosted && canWrite && (
-            <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20">
+            <button onClick={addLine} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
               <Plus size={14} /> Add Line
             </button>
           )}
         </div>
+        {!isPosted && outputZero && (
+          <div className="px-4 md:px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-xs font-medium text-amber-700">
+            Cost cannot be updated without output quantity.
+          </div>
+        )}
 
         {/* Desktop Table (hidden on mobile) */}
         <div className="hidden md:block overflow-x-auto">
@@ -488,6 +499,7 @@ export default function GeneralCostForm() {
                           value={item.cost_category_id ? String(item.cost_category_id) : ''}
                           onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
                           placeholder="Search cost category..."
+                          disabled={outputZero}
                         />
                       )}
                     </td>
@@ -562,6 +574,7 @@ export default function GeneralCostForm() {
                           value={item.cost_category_id ? String(item.cost_category_id) : ''}
                           onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
                           placeholder="Search cost category..."
+                          disabled={outputZero}
                         />
                       )}
                     </div>

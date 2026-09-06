@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { ArrowLeft, Plus, Trash2, Printer, Download, Send, Save, ChevronDown } from 'lucide-react';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { usePermission } from '../lib/usePermission';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
 interface CostItem { id?: number; machine_name: string; machine_id: number; uom: string; amount: number; cost_per_piece: number; remarks: string; }
@@ -39,6 +40,8 @@ export default function MachineCostForm() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [machines, setMachines] = useState<MachineOption[]>([]);
   const isPosted = formData.status === 'Posted';
+  // Cost cannot be entered without output quantity.
+  const outputZero = (Number(formData.output_qty) || 0) <= 0;
 
   useEffect(() => {
     // Fetch machines dropdown
@@ -160,12 +163,14 @@ export default function MachineCostForm() {
 
   const handleSave = async () => {
     if (!formData.production_plan_id) { toast.error('No production plan linked'); return; }
-    if (formData.items.length === 0) { toast.error('Add at least one machine'); return; }
+    if (outputZero) { toast.error('Cost cannot be updated without output quantity'); return; }
+    const validItems = formData.items.filter(i => i.machine_id);
+    if (validItems.length === 0) { toast.error('Add at least one machine'); return; }
     setSaving(true);
     try {
       const payload = { production_plan_id: formData.production_plan_id, production_date: formData.production_date,
         process_stage: formData.process_stage, remarks: formData.remarks,
-        items: formData.items.map(i => ({ machine_name: i.machine_name, machine_id: i.machine_id, uom: i.uom, amount: i.amount, cost_per_piece: i.cost_per_piece, remarks: i.remarks })),
+        items: validItems.map(i => ({ machine_name: i.machine_name, machine_id: i.machine_id, uom: i.uom, amount: i.amount, cost_per_piece: i.cost_per_piece, remarks: i.remarks })),
       };
       if (isNew) {
         const res = await api<{ data: any; message: string }>('/machine-costs', { method: 'POST', body: JSON.stringify(payload) });
@@ -233,8 +238,13 @@ export default function MachineCostForm() {
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/50">
           <h2 className="text-sm md:text-base font-bold text-gray-900">Machine Cost (Per Pc)</h2>
-          {!isPosted && canWrite && <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm"><Plus size={14} /> Add Line</button>}
+          {!isPosted && canWrite && <button onClick={addLine} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={14} /> Add Line</button>}
         </div>
+        {!isPosted && outputZero && (
+          <div className="px-4 md:px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-xs font-medium text-amber-700">
+            Cost cannot be updated without output quantity.
+          </div>
+        )}
 
         {/* Desktop Table */}
         <div className="hidden md:block overflow-x-auto">
@@ -254,7 +264,7 @@ export default function MachineCostForm() {
               ) : formData.items.map((item, idx) => (
                 <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30`}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-400">{idx + 1}</td>
-                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-medium text-gray-900">{item.machine_name}</span> : <select value={item.machine_id || ''} onChange={e => updateLine(idx, 'machine_id', Number(e.target.value))} className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"><option value="">Select Machine</option>{machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</td>
+                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-medium text-gray-900">{item.machine_name}</span> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} />}</td>
                   <td className="px-4 py-3"><span className="text-sm text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100 inline-block">{item.uom || '—'}</span></td>
                   <td className="px-4 py-3">{isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span> : <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} placeholder="0.00" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />}</td>
                   <td className="px-4 py-3"><span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.cost_per_piece)}</span></td>
@@ -279,7 +289,7 @@ export default function MachineCostForm() {
                     {!isPosted && canWrite && <button onClick={() => removeLine(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>}
                   </div>
                   <div className="space-y-3">
-                    <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Machine Name</label>{isPosted ? <p className="text-sm font-medium text-gray-900">{item.machine_name}</p> : <select value={item.machine_id || ''} onChange={e => updateLine(idx, 'machine_id', Number(e.target.value))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"><option value="">Select Machine</option>{machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</div>
+                    <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Machine Name</label>{isPosted ? <p className="text-sm font-medium text-gray-900">{item.machine_name}</p> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} />}</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">UOM</label><p className="text-sm text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100">{item.uom || '—'}</p></div>
                       <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Amount (INR)</label>{isPosted ? <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.amount)}</p> : <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg text-right bg-white tabular-nums" />}</div>
@@ -319,7 +329,12 @@ export default function MachineCostForm() {
       {/* Action Buttons */}
       <div className="flex items-center justify-between mt-5">
         <button onClick={() => navigate('/machine-cost')} className="px-4 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-        {!isPosted && canWrite && <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-5 md:px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm shadow-blue-600/20"><Save size={15} />{saving ? 'Saving...' : 'Save & Return'}</button>}
+        {!isPosted && canWrite && (() => {
+          const hasMachine = formData.items.some(i => i.machine_id);
+          const disabled = saving || outputZero || !hasMachine;
+          const title = outputZero ? 'Cost cannot be updated without output quantity' : !hasMachine ? 'Add at least one machine before saving' : '';
+          return <button onClick={handleSave} disabled={disabled} title={title} className="flex items-center gap-2 px-5 md:px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-600/20"><Save size={15} />{saving ? 'Saving...' : 'Save & Return'}</button>;
+        })()}
       </div>
 
       <ConfirmDialog open={showPostConfirm} title="Post Machine Cost" message="Once posted, this entry cannot be edited. Are you sure?" confirmLabel="Post" onConfirm={handlePost} onCancel={() => setShowPostConfirm(false)} />

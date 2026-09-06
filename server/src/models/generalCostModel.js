@@ -98,9 +98,17 @@ export async function getTransactionLines({ search, process_stage, page = 1, lim
 
   const [rows] = await pool.query(
     `SELECT i.id, gch.id AS general_cost_id, gch.transaction_no, gch.production_date,
+       o.order_no AS plan_no,
+       m.group_name,
        i.cost_category, i.uom, i.amount, i.cost_per_piece
      FROM general_cost_items i
      JOIN general_cost_headers gch ON i.general_cost_id = gch.id
+     LEFT JOIN production_status_orders o ON gch.production_plan_id = o.id
+     LEFT JOIN (
+       SELECT mm.name AS material_name, gm.name AS group_name
+       FROM materials mm
+       LEFT JOIN group_master gm ON mm.group_id = gm.id
+     ) m ON m.material_name = i.cost_category
      WHERE ${where}
      ORDER BY ${col} ${ord}, i.id ASC
      LIMIT ? OFFSET ?`,

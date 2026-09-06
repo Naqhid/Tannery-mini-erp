@@ -35,6 +35,8 @@ interface TxnRow {
   id: number;
   general_cost_id: number;
   transaction_no: string;
+  plan_no: string;
+  group_name: string;
   production_date: string;
   cost_category: string;
   uom: string;
@@ -237,8 +239,10 @@ export default function GeneralCost() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Plan No.</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Transaction No.</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Production Date</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Group</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cost Category</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">UOM</th>
                     <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount (₹)</th>
@@ -252,8 +256,10 @@ export default function GeneralCost() {
                       onClick={() => navigate(`/general-cost/${row.general_cost_id}`)}
                       className={`cursor-pointer transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
                     >
-                      <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.transaction_no || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.plan_no || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-700 font-mono">{row.transaction_no || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-700">{row.production_date ? new Date(row.production_date).toLocaleDateString('en-IN') : '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-700">{row.group_name || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.cost_category || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-700">{row.uom || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.amount)}</td>
@@ -272,7 +278,7 @@ export default function GeneralCost() {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1">Order No. <SortIcon field="order_no" /></span>
+                    <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
                   </th>
                   <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
@@ -388,9 +394,13 @@ export default function GeneralCost() {
                   className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm active:bg-blue-50 transition-colors cursor-pointer"
                 >
                   <div className="flex items-start justify-between mb-2">
-                    <p className="text-xs text-blue-700 font-mono font-medium">{row.transaction_no || '—'}</p>
+                    <div>
+                      <p className="text-xs text-blue-700 font-mono font-medium">{row.plan_no || '—'}</p>
+                      <p className="text-[10px] text-gray-500 font-mono mt-0.5">{row.transaction_no || '—'}</p>
+                    </div>
                     <p className="text-[10px] text-gray-500">{row.production_date ? new Date(row.production_date).toLocaleDateString('en-IN') : '—'}</p>
                   </div>
+                  {row.group_name && <p className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">{row.group_name}</p>}
                   <p className="text-sm font-semibold text-gray-900 mb-2">{row.cost_category || '—'} <span className="text-xs font-normal text-gray-500">({row.uom || '—'})</span></p>
                   <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
                     <div className="text-center">

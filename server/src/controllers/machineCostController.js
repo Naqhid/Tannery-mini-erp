@@ -25,9 +25,16 @@ export async function getNextNo(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// At least one machine line (with a machine selected) is required to save.
+function hasMachineItems(body) {
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return items.some(i => i && (i.machine_id || i.machine_name));
+}
+
 export async function create(req, res, next) {
   try {
     if (!req.body.production_plan_id) return res.status(400).json({ error: 'production_plan_id is required' });
+    if (!hasMachineItems(req.body)) return res.status(400).json({ error: 'Add at least one machine before saving' });
     const userId = req.user?.id || null;
     const result = await model.create(req.body, userId);
     res.status(201).json({ data: result, message: 'Machine Cost entry created successfully!' });
@@ -36,6 +43,7 @@ export async function create(req, res, next) {
 
 export async function update(req, res, next) {
   try {
+    if (!hasMachineItems(req.body)) return res.status(400).json({ error: 'Add at least one machine before saving' });
     const userId = req.user?.id || null;
     const result = await model.update(req.params.id, req.body, userId);
     res.json({ data: result, message: 'Machine Cost entry updated successfully!' });

@@ -15,6 +15,7 @@ interface ReportRow {
   order_no: string;
   article: string;
   color: string;
+  delivery_date: string | null;
   order_qty_sqft: number;
   completed_qty_sqft: number;
   cost_per_sqft: number;
@@ -182,6 +183,7 @@ export default function CostingReport() {
                   <th onClick={() => handleSort('color')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Delivery Date</th>
                   <th onClick={() => handleSort('order_qty_sqft')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1 justify-end">Order Qty (Sq.ft) <SortIcon field="order_qty_sqft" /></span>
                   </th>
@@ -206,6 +208,7 @@ export default function CostingReport() {
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.delivery_date ? new Date(row.delivery_date).toLocaleDateString('en-IN') : '—'}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.order_qty_sqft)}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatQty(row.completed_qty_sqft)}</td>
                     <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.cost_per_sqft)}</td>

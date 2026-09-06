@@ -51,10 +51,11 @@ export async function getReport({ search, customer, article, color, page = 1, li
   const [rows] = await pool.query(
     `SELECT 
        o.id,
-       o.customer_name,
+       COALESCE(so_info.customer_name, o.customer_name) AS customer_name,
        o.order_no,
-       o.article,
-       o.color,
+       COALESCE(so_info.article, o.article) AS article,
+       COALESCE(so_info.color, o.color) AS color,
+       so_info.delivery_date,
        o.issued_qty AS order_qty_sqft,
        o.completed_qty AS completed_qty_sqft,
        COALESCE(cost_agg.total_general_cost, 0) AS total_general_cost,
@@ -96,6 +97,20 @@ export async function getReport({ search, customer, article, color, page = 1, li
        JOIN sales_order_items soi ON soi.sales_order_id = so.id
        GROUP BY so.order_no
      ) so_agg ON so_agg.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
+     LEFT JOIN (
+       SELECT so.order_no,
+         soi.item_description AS article,
+         soi.finish_color AS color,
+         MAX(c.name) AS customer_name,
+         MAX(soi.delivery_date) AS delivery_date
+       FROM sales_orders so
+       LEFT JOIN customers c ON so.customer_id = c.id
+       JOIN sales_order_items soi ON soi.sales_order_id = so.id
+       GROUP BY so.order_no, soi.item_description, soi.finish_color
+     ) so_info
+       ON so_info.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
+       AND so_info.article COLLATE utf8mb4_0900_ai_ci = o.article
+       AND COALESCE(so_info.color, '') COLLATE utf8mb4_0900_ai_ci = COALESCE(o.color, '')
      WHERE ${where}
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
