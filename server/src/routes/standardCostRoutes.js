@@ -6,6 +6,7 @@ import { requireWriteAccess } from '../middleware/auth.js';
 const router = Router();
 
 router.get('/', validatePagination, ctrl.list);
+router.get('/next-no', ctrl.nextNo);
 router.get('/bom-cost/:bomId', ctrl.calculateBomCost);
 router.get('/order-cost-summary/:productId', ctrl.getOrderCostSummary);
 router.get('/:id', validateId, ctrl.getOne);

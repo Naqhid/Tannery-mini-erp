@@ -231,17 +231,48 @@ export async function getActualCostDetailByPlan(planId) {
  */
 async function buildDetailFromSeed(seed) {
   const [stages] = await pool.query(
-    `SELECT id, process_stage, uom, plan_date, customer_name, article, color,
-            order_no, issued_qty AS order_qty, completed_qty, balance_qty,
-            status, production_plan_id
-     FROM production_status_orders
-     WHERE deleted_at IS NULL AND order_no=? AND article=? AND COALESCE(color,'')=COALESCE(?, '')
-     ORDER BY id`,
+    `SELECT pso.id, pso.process_stage, pso.uom, pso.plan_date, pso.customer_name,
+            pso.article, pso.color, pso.order_no, pso.issued_qty AS order_qty,
+            pso.completed_qty, pso.balance_qty, pso.status, pso.production_plan_id,
+            COALESCE(pps.seq, 999999) AS stage_seq
+     FROM production_status_orders pso
+     LEFT JOIN production_plan_stages pps
+       ON pps.plan_id = pso.production_plan_id
+      AND pps.stage_name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+     WHERE pso.deleted_at IS NULL AND pso.order_no=? AND pso.article=? AND COALESCE(pso.color,'')=COALESCE(?, '')
+     ORDER BY stage_seq ASC, pso.id ASC`,
     [seed.order_no, seed.article, seed.color]
   );
 
-  const orderQty = stages.reduce((m, r) => Math.max(m, Number(r.order_qty) || 0), 0);
+  // Resolve the real Sales Order No and ordered quantity from the linked sales
+  // order (production_status_orders.order_no actually stores the plan number).
+  let salesOrderNo = seed.order_no;
+  let salesOrderQty = 0;
+  if (seed.production_plan_id) {
+    const [[so]] = await pool.query(
+      `SELECT so.order_no,
+              COALESCE((
+                SELECT SUM(soi.quantity) FROM sales_order_items soi
+                WHERE soi.sales_order_id = so.id
+                  AND soi.item_description COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                  AND COALESCE(soi.finish_color,'') COLLATE utf8mb4_unicode_ci = COALESCE(?, '') COLLATE utf8mb4_unicode_ci
+              ), 0) AS order_qty
+       FROM production_plans pp
+       JOIN sales_orders so ON so.id = pp.sales_order_id
+       WHERE pp.id = ? AND pp.deleted_at IS NULL`,
+      [seed.article, seed.color, seed.production_plan_id]
+    );
+    if (so) {
+      if (so.order_no) salesOrderNo = so.order_no;
+      salesOrderQty = Number(so.order_qty) || 0;
+    }
+  }
+
   const completedQty = stages.reduce((m, r) => Math.max(m, Number(r.completed_qty) || 0), 0);
+  // Prefer the sales order quantity; fall back to the max issued qty across stages.
+  const orderQty = salesOrderQty > 0
+    ? salesOrderQty
+    : stages.reduce((m, r) => Math.max(m, Number(r.order_qty) || 0), 0);
   const balanceQty = Math.max(0, orderQty - completedQty);
 
   const stageDetails = [];
@@ -276,6 +307,7 @@ async function buildDetailFromSeed(seed) {
   return {
     order: {
       ...seed,
+      order_no: salesOrderNo,
       production_plan_id: seed.production_plan_id,
       order_qty: orderQty,
       completed_qty: completedQty,

@@ -101,6 +101,14 @@ export async function calculateBomCost(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function nextNo(req, res, next) {
+  try {
+    const customerName = req.query.customer_name || null;
+    const costSheetNo = await model.getNextCostSheetNo(customerName);
+    res.json({ data: { cost_sheet_no: costSheetNo } });
+  } catch (err) { next(err); }
+}
+
 export async function getOrderCostSummary(req, res, next) {
   try {
     const productId = req.params.productId;

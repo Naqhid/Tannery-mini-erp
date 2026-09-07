@@ -20,6 +20,7 @@ export default function ActualStandardCostSheet(){
   const [description,setDescription]=useState('');
   const [currency,setCurrency]=useState('INR');
   const [status,setStatus]=useState('Draft');
+  const [costSheetNo,setCostSheetNo]=useState('');
 
   const handleSave = async () => {
     if(!data) return;
@@ -51,7 +52,14 @@ export default function ActualStandardCostSheet(){
   const user=JSON.parse(localStorage.getItem('tannery_user')||'{}');
   useEffect(()=>{
     const endpoint = planId ? `/costing-report/plan/${planId}/detail` : `/costing-report/${id}/detail`;
-    api<{data:Detail}>(endpoint).then(r=>setData(r.data)).finally(()=>setLoading(false));
+    api<{data:Detail}>(endpoint).then(r=>{
+      setData(r.data);
+      const cust = r.data?.order?.customer_name || '';
+      const qs = cust ? `?customer_name=${encodeURIComponent(cust)}` : '';
+      api<{data:{cost_sheet_no:string}}>(`/standard-costs/next-no${qs}`)
+        .then(n=>setCostSheetNo(n.data?.cost_sheet_no||''))
+        .catch(()=>{});
+    }).finally(()=>setLoading(false));
   },[id, planId]);
   const totals=useMemo(()=>{
     const rows=data?.stages.flatMap(s=>s.rows)||[];
@@ -72,7 +80,7 @@ export default function ActualStandardCostSheet(){
         <Field label="Effective From *"><input type="date" value={effectiveFrom} onChange={e=>setEffectiveFrom(e.target.value)} className="field"/></Field>
         <Field label="Prepared By *"><input value={user?.name||user?.full_name||'Costing Dept.'} readOnly className="field bg-slate-50"/></Field>
         <Field label="Description / Note"><input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Standard cost prepared for export orders..." className="field"/></Field>
-        <Field label="Cost Sheet No."><input value="(Auto-generated)" readOnly className="field bg-slate-50"/></Field>
+        <Field label="Cost Sheet No."><input value={costSheetNo || '(Auto-generated)'} readOnly className="field bg-slate-50"/></Field>
         <Field label="Currency"><select className="field" value={currency} onChange={e=>setCurrency(e.target.value)}><option>INR</option><option>USD</option><option>EUR</option></select></Field>
         <Field label="Status"><select className="field" value={status} onChange={e=>setStatus(e.target.value)}><option>Draft</option><option>Approved</option></select></Field>
       </div>
@@ -82,7 +90,7 @@ export default function ActualStandardCostSheet(){
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Cost Details</div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Cost Group</th><th className="p-3 text-left">Cost Category</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Amount (INR)</th><th className="p-3 text-right">Cost/UOM (INR)</th></tr></thead><tbody>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Cost Category</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Amount (INR)</th><th className="p-3 text-right">Cost/UOM (INR)</th></tr></thead><tbody>
       {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td></td><td colSpan={2} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
     </div>
   </div>;
