@@ -3,9 +3,9 @@ import { getIssueItemInfo } from '../models/materialTransactionModel.js';
 
 export async function list(req, res, next) {
   try {
-    const { search, status, warehouse_id, sortBy, sortOrder } = req.query;
+    const { search, status, warehouse_id, process_stage, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const { rows, total } = await model.getAll({ search, status, warehouse_id, page, limit, sortBy, sortOrder });
+    const { rows, total } = await model.getAll({ search, status, warehouse_id, process_stage, page, limit, sortBy, sortOrder });
     res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (err) { next(err); }
 }

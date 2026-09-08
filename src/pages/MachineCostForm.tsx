@@ -7,9 +7,10 @@ import { usePermission } from '../lib/usePermission';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
-interface CostItem { id?: number; machine_name: string; machine_id: number; uom: string; amount: number; cost_per_piece: number; remarks: string; }
+interface CostItem { id?: number; machine_name: string; machine_id: number; group_id: number | null; group_name: string; uom: string; amount: number; cost_per_piece: number; remarks: string; }
 
 interface MachineOption { id: number; code: string; name: string; uom_type: string; rate_indian: number; }
+interface GroupOption { id: number; name: string; }
 
 interface MachineCostData {
   id?: number; transaction_no: string; production_plan_id: number; production_date: string; process_stage: string;
@@ -39,6 +40,7 @@ export default function MachineCostForm() {
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [machines, setMachines] = useState<MachineOption[]>([]);
+  const [groups, setGroups] = useState<GroupOption[]>([]);
   const isPosted = formData.status === 'Posted';
   // Cost cannot be entered without output quantity.
   const outputZero = (Number(formData.output_qty) || 0) <= 0;
@@ -47,6 +49,10 @@ export default function MachineCostForm() {
     // Fetch machines dropdown
     api<{ data: MachineOption[] }>('/machines/dropdown')
       .then(res => setMachines(res.data || []))
+      .catch(() => {});
+    // Fetch group master for the Group column (same source as Standard Costing)
+    api<{ data: GroupOption[] }>('/group-master?limit=500')
+      .then(res => setGroups(res.data || []))
       .catch(() => {});
   }, []);
 
@@ -123,7 +129,7 @@ export default function MachineCostForm() {
     setFormData(prev => ({ ...prev, items, total_amount: totalAmount, total_cost_per_piece: totalCostPerPiece }));
   }, [formData.output_qty]);
 
-  const addLine = () => recalculate([...formData.items, { machine_name: '', machine_id: 0, uom: '', amount: 0, cost_per_piece: 0, remarks: '' }]);
+  const addLine = () => recalculate([...formData.items, { machine_name: '', machine_id: 0, group_id: null, group_name: '', uom: '', amount: 0, cost_per_piece: 0, remarks: '' }]);
   const removeLine = (index: number) => recalculate(formData.items.filter((_, i) => i !== index));
 
   const updateLine = (index: number, field: keyof CostItem, value: string | number) => {
@@ -152,6 +158,12 @@ export default function MachineCostForm() {
       }
     }
 
+    // When group changes, store the group name for display / export
+    if (field === 'group_id') {
+      const grp = groups.find(g => g.id === Number(value));
+      items[index].group_name = grp?.name || '';
+    }
+
     // Recalculate cost_per_piece when amount changes
     if (field === 'amount') {
       const divideBy = formData.output_qty || 1;
@@ -170,7 +182,7 @@ export default function MachineCostForm() {
     try {
       const payload = { production_plan_id: formData.production_plan_id, production_date: formData.production_date,
         process_stage: formData.process_stage, remarks: formData.remarks,
-        items: validItems.map(i => ({ machine_name: i.machine_name, machine_id: i.machine_id, uom: i.uom, amount: i.amount, cost_per_piece: i.cost_per_piece, remarks: i.remarks })),
+        items: validItems.map(i => ({ machine_name: i.machine_name, machine_id: i.machine_id, group_id: i.group_id, group_name: i.group_name, uom: i.uom, amount: i.amount, cost_per_piece: i.cost_per_piece, remarks: i.remarks })),
       };
       if (isNew) {
         const res = await api<{ data: any; message: string }>('/machine-costs', { method: 'POST', body: JSON.stringify(payload) });
@@ -251,6 +263,7 @@ export default function MachineCostForm() {
           <table className="w-full">
             <thead><tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase w-10">#</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase min-w-[180px]">Group</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase min-w-[200px]">Machine Name</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase w-32">UOM</th>
               <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-40">Amount (INR)</th>
@@ -260,10 +273,11 @@ export default function MachineCostForm() {
             </tr></thead>
             <tbody className="divide-y divide-gray-100">
               {formData.items.length === 0 ? (
-                <tr><td colSpan={isPosted ? 6 : 7} className="px-4 py-12 text-center"><div className="text-gray-400"><Plus size={32} className="mx-auto mb-2 opacity-40" /><p className="text-sm font-medium">No machines added</p><p className="text-xs mt-0.5">Click "+ Add Line" to start.</p></div></td></tr>
+                <tr><td colSpan={isPosted ? 7 : 8} className="px-4 py-12 text-center"><div className="text-gray-400"><Plus size={32} className="mx-auto mb-2 opacity-40" /><p className="text-sm font-medium">No machines added</p><p className="text-xs mt-0.5">Click "+ Add Line" to start.</p></div></td></tr>
               ) : formData.items.map((item, idx) => (
                 <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30`}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-400">{idx + 1}</td>
+                  <td className="px-4 py-3">{isPosted ? <span className="text-sm text-gray-700">{item.group_name || '—'}</span> : <SearchableSelect options={[{ value: '', label: 'Select Group' }, ...groups.map(g => ({ value: String(g.id), label: g.name }))]} value={item.group_id ? String(item.group_id) : ''} onChange={val => updateLine(idx, 'group_id', Number(val) || 0)} placeholder="Search group..." disabled={outputZero} />}</td>
                   <td className="px-4 py-3">{isPosted ? <span className="text-sm font-medium text-gray-900">{item.machine_name}</span> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} />}</td>
                   <td className="px-4 py-3"><span className="text-sm text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100 inline-block">{item.uom || '—'}</span></td>
                   <td className="px-4 py-3">{isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span> : <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} placeholder="0.00" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />}</td>
@@ -289,6 +303,7 @@ export default function MachineCostForm() {
                     {!isPosted && canWrite && <button onClick={() => removeLine(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>}
                   </div>
                   <div className="space-y-3">
+                    <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Group</label>{isPosted ? <p className="text-sm text-gray-700">{item.group_name || '—'}</p> : <SearchableSelect options={[{ value: '', label: 'Select Group' }, ...groups.map(g => ({ value: String(g.id), label: g.name }))]} value={item.group_id ? String(item.group_id) : ''} onChange={val => updateLine(idx, 'group_id', Number(val) || 0)} placeholder="Search group..." disabled={outputZero} />}</div>
                     <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Machine Name</label>{isPosted ? <p className="text-sm font-medium text-gray-900">{item.machine_name}</p> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} />}</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">UOM</label><p className="text-sm text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100">{item.uom || '—'}</p></div>

@@ -5,7 +5,7 @@ import { Save, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../lib/api';
 
-type CostRow = { cost_group: string; cost_category: string; uom: string; actual_cost: number; cost_per_uom: number };
+type CostRow = { data_source:string; item_group:string; item_name:string; cost_group:string; cost_category:string; uom:string; actual_cost:number; cost_per_uom:number };
 type Stage = { id:number; process_stage:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; rows:CostRow[] };
 type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[] };
 
@@ -90,11 +90,41 @@ export default function ActualStandardCostSheet(){
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Cost Details</div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Cost Category</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Amount (INR)</th><th className="p-3 text-right">Cost/UOM (INR)</th></tr></thead><tbody>
-      {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td></td><td colSpan={2} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Amount (INR)</th><th className="p-3 text-right">Cost/UOM (INR)</th></tr></thead><tbody>
+      {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={4} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
     </div>
   </div>;
 }
 function Field({label,children}:{label:string;children:ReactNode}){return <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>{children}</div>}
 function Metric({label,value,tone}:{label:string;value:string;tone?:'green'|'amber'}){return <div className="p-3 border-r last:border-r-0 border-slate-200"><div className="text-xs font-semibold text-slate-600 mb-2">{label}</div><div className={`font-bold ${tone==='green'?'text-green-700':tone==='amber'?'text-amber-700':'text-slate-800'}`}>{value||'—'}</div></div>}
-function StageRows({stage,index}:{stage:Stage;index:number}){const planned=stage.order_qty||0; const label=`${stage.process_stage || 'Stage'} - ${fmtQty(planned)} ${stage.uom||''}`; if(!stage.rows.length)return <tr><td className="p-3 text-center font-bold">{index}</td><td className="p-3 font-bold">{label}</td><td colSpan={4} className="p-3 text-center text-slate-400">No cost entries</td></tr>; return <>{stage.rows.map((r,i)=><tr key={`${stage.id}-${i}`} className="border-t border-slate-100"><td className="p-2.5 text-center">{i===0?index:`${index}.${i}`}</td><td className="p-2.5 font-medium">{i===0?label:r.cost_group}</td><td className="p-2.5">{r.cost_category}</td><td className="p-2.5">{r.uom||stage.uom||'—'}</td><td className="p-2.5 text-right">{fmt(r.actual_cost)}</td><td className="p-2.5 text-right">{fmt(r.cost_per_uom)}</td></tr>)}</>}
+function StageRows({stage,index}:{stage:Stage;index:number}){
+  const planned=stage.order_qty||0;
+  const label=`${stage.process_stage || 'Stage'} - ${fmtQty(planned)} ${stage.uom||''}`;
+  const subtotal=stage.rows.reduce((a,r)=>a+Number(r.actual_cost||0),0);
+  const subtotalPerUom=stage.rows.reduce((a,r)=>a+Number(r.cost_per_uom||0),0);
+  return <>
+    <tr className="border-t border-slate-200 bg-slate-50/70">
+      <td className="p-2.5 text-center font-bold text-slate-700">{index}</td>
+      <td className="p-2.5 font-bold text-slate-800" colSpan={6}>{label}</td>
+    </tr>
+    {stage.rows.length===0
+      ? <tr className="border-t border-slate-100"><td></td><td colSpan={6} className="p-2.5 text-center text-slate-400">No cost entries</td></tr>
+      : <>
+          {stage.rows.map((r,i)=><tr key={`${stage.id}-${i}`} className="border-t border-slate-100">
+            <td className="p-2.5 text-center text-slate-500">{`${index}.${i+1}`}</td>
+            <td className="p-2.5">{r.data_source||r.cost_group||'—'}</td>
+            <td className="p-2.5">{r.item_group||'—'}</td>
+            <td className="p-2.5 font-medium">{r.item_name||r.cost_category||'—'}</td>
+            <td className="p-2.5">{r.uom||stage.uom||'—'}</td>
+            <td className="p-2.5 text-right">{fmt(r.actual_cost)}</td>
+            <td className="p-2.5 text-right">{fmt(r.cost_per_uom)}</td>
+          </tr>)}
+          <tr className="border-t border-slate-100 bg-slate-50/40">
+            <td></td>
+            <td colSpan={4} className="p-2.5 text-right font-semibold text-slate-600">Subtotal</td>
+            <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotal)}</td>
+            <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotalPerUom)}</td>
+          </tr>
+        </>}
+  </>;
+}

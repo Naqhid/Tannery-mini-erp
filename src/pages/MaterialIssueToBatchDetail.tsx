@@ -9,12 +9,13 @@ import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; allow_negative_stock: number; }
 interface StockItem { material_id: number; material_name: string; material_code: string; uom: string; current_qty: number; avg_unit_cost: number; }
-interface MaterialOption { id: number; name: string; code: string; primary_uom?: string; primary_uom_name?: string; uom?: string; }
+interface MaterialOption { id: number; name: string; code: string; primary_uom?: string; primary_uom_name?: string; uom?: string; group_name?: string; }
 interface Item {
   _key: string;
   material_id: string;
   material_code: string;
   material_name: string;
+  group_name: string;
   uom: string;
   required_qty: string;
   issue_qty: string;
@@ -54,7 +55,7 @@ interface StageOption { id: number; name: string; uom?: string; }
 interface DepartmentOption { id: number; code: string; name: string; }
 interface PlanStage { id: number; seq: number; stage_id: number | null; stage_name: string; planned_qty: number; stage_uom?: string; }
 
-const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', required_qty: '', issue_qty: '', unit_cost: '', amount: 0, remarks: '', available_qty: 0, stock_error: '' };
+const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', group_name: '', uom: '', required_qty: '', issue_qty: '', unit_cost: '', amount: 0, remarks: '', available_qty: 0, stock_error: '' };
 
 const emptyIssue: IssueData = {
   issue_no: '', issue_date: new Date().toISOString().split('T')[0], department: '', job_order_no: '',
@@ -127,6 +128,11 @@ export default function MaterialIssueToBatchDetail() {
     catch { setMaterials([]); }
   }, []);
 
+  const materialGroupById = useCallback((materialId: string) => {
+    const m = materials.find((x) => String(x.id) === String(materialId));
+    return m?.group_name || '';
+  }, [materials]);
+
   const fetchIssue = useCallback(async () => {
     if (isNew) {
       try { const res = await api<{ data: { issue_no: string } }>('/material-issues/next-no'); setIssue((p) => ({ ...p, issue_no: res.data.issue_no })); } catch {}
@@ -152,6 +158,7 @@ export default function MaterialIssueToBatchDetail() {
       setItems((d.items || []).map((it: any) => ({
         _key: genKey(), material_id: String(it.material_id),
         material_code: it.material_code || '', material_name: it.material_name || '',
+        group_name: it.group_name || '',
         uom: it.uom || '', required_qty: String(it.required_qty || ''),
         issue_qty: String(it.issue_qty), unit_cost: String(it.unit_cost),
         amount: parseFloat(it.amount) || 0, remarks: it.remarks || '',
@@ -331,6 +338,7 @@ export default function MaterialIssueToBatchDetail() {
             material_id: String(item.material_id),
             material_code: item.material_code || '',
             material_name: item.material_name || '',
+            group_name: item.group_name || materialGroupById(String(item.material_id)),
             uom: item.uom || '',
             required_qty: requiredQty.toFixed(3),
             issue_qty: '',
@@ -356,6 +364,7 @@ export default function MaterialIssueToBatchDetail() {
       material_id: materialId,
       material_code: material?.code || '',
       material_name: material?.name || '',
+      group_name: material?.group_name || '',
       uom: material?.primary_uom_name || material?.primary_uom || material?.uom || '',
       unit_cost: '', amount: 0, available_qty: 0, stock_error: '',
     })));
@@ -376,7 +385,7 @@ export default function MaterialIssueToBatchDetail() {
     if (!issue.article) { toast.error('Select or enter an article first'); return; }
     try {
       const res = await api<{ data: any }>(`/material-issues/previous-issue?article=${encodeURIComponent(issue.article)}${id && !isNew ? `&exclude_id=${id}` : ''}`);
-      const imported = (res.data.items || []).map((it: any) => ({ _key: genKey(), material_id: String(it.material_id), material_code: it.material_code || '', material_name: it.material_name || '', uom: it.uom || '', required_qty: String(it.required_qty || ''), issue_qty: String(it.issue_qty || ''), unit_cost: String(it.unit_cost || ''), amount: Number(it.amount || 0), remarks: it.remarks || '' }));
+      const imported = (res.data.items || []).map((it: any) => ({ _key: genKey(), material_id: String(it.material_id), material_code: it.material_code || '', material_name: it.material_name || '', group_name: it.group_name || materialGroupById(String(it.material_id)), uom: it.uom || '', required_qty: String(it.required_qty || ''), issue_qty: String(it.issue_qty || ''), unit_cost: String(it.unit_cost || ''), amount: Number(it.amount || 0), remarks: it.remarks || '' }));
       setItems(imported.length ? imported : [{ ...emptyItem, _key: genKey() }]);
       toast.success('Previous issue details imported');
     } catch (err) { toast.error((err as Error).message || 'No previous issue found for this article'); }
@@ -600,14 +609,14 @@ export default function MaterialIssueToBatchDetail() {
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Name <span className="text-rose-500">*</span></th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase min-w-[320px]">Item Name <span className="text-rose-500">*</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Item Code</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Group</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">UOM</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Required Qty</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Issue Qty <span className="text-rose-500">*</span></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Unit Cost (₹)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount (₹)</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Remarks</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
               </tr>
             </thead>
@@ -615,7 +624,7 @@ export default function MaterialIssueToBatchDetail() {
               {items.map((item, idx) => (
                 <tr key={item._key} className="hover:bg-blue-50/30 transition-all">
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-3 min-w-[320px]">
                     <SearchableSelect
                       options={materials.map((m) => ({ value: String(m.id), label: m.name }))}
                       value={item.material_id}
@@ -624,6 +633,7 @@ export default function MaterialIssueToBatchDetail() {
                     />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_code || '-'}</td>
+                  <td className="py-2.5 px-3 text-xs text-gray-700">{item.group_name || materialGroupById(item.material_id) || '-'}</td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.required_qty} onChange={(e) => updateItem(item._key, 'required_qty', e.target.value)}
@@ -641,10 +651,6 @@ export default function MaterialIssueToBatchDetail() {
                       className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2.5 px-3">
-                    <input value={item.remarks} onChange={(e) => updateItem(item._key, 'remarks', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[60px]" placeholder="-" />
-                  </td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all"><Trash2 size={14} /></button>
                   </td>

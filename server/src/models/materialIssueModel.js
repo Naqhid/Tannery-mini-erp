@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 import { updateStock, addLedgerEntry, allowsNegativeStock } from './stockLedgerModel.js';
 import { getIssueItemInfo, replaceReferenceTransactions } from './materialTransactionModel.js';
 
-export async function getAll({ search, status, warehouse_id, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function getAll({ search, status, warehouse_id, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
   const params = [];
   if (search) {
@@ -12,6 +12,7 @@ export async function getAll({ search, status, warehouse_id, page = 1, limit = 1
   }
   if (status) { where += ' AND mi.status = ?'; params.push(status); }
   if (warehouse_id) { where += ' AND mi.warehouse_id = ?'; params.push(warehouse_id); }
+  if (process_stage) { where += ' AND mi.process_stage = ?'; params.push(process_stage); }
 
   const allowed = ['id', 'issue_no', 'issue_date', 'grand_total', 'status', 'created_at'];
   const col = allowed.includes(sortBy) ? `mi.\`${sortBy}\`` : 'mi.`id`';
@@ -43,9 +44,10 @@ export async function getById(id) {
   );
   if (!issue) return null;
   const [items] = await pool.query(
-    `SELECT mii.*, m.name AS material_name, m.code AS material_code
+    `SELECT mii.*, m.name AS material_name, m.code AS material_code, g.name AS group_name
      FROM material_issue_items mii
      LEFT JOIN materials m ON mii.material_id = m.id
+     LEFT JOIN group_master g ON m.group_id = g.id
      WHERE mii.issue_id = ? ORDER BY mii.id ASC`, [id]
   );
   return { ...issue, items };
@@ -313,10 +315,11 @@ export async function getBatchesDropdown() {
 export async function getBOMItemsByProduct(productId) {
   const [rows] = await pool.query(
     `SELECT bi.material_id, bi.qty, bi.uom, bi.unit_cost,
-       m.code AS material_code, m.name AS material_name
+       m.code AS material_code, m.name AS material_name, g.name AS group_name
      FROM boms b
      JOIN bom_items bi ON b.id = bi.bom_id
      JOIN materials m ON bi.material_id = m.id
+     LEFT JOIN group_master g ON m.group_id = g.id
      WHERE b.product_id = ? AND b.status = 'Active'
      ORDER BY bi.id`,
     [productId]
@@ -358,8 +361,9 @@ export async function getPreviousIssueByArticle(article, excludeId = null) {
   );
   if (!header) return null;
   const [items] = await pool.query(
-    `SELECT mii.*, m.name AS material_name, m.code AS material_code
+    `SELECT mii.*, m.name AS material_name, m.code AS material_code, g.name AS group_name
      FROM material_issue_items mii JOIN materials m ON mii.material_id=m.id
+     LEFT JOIN group_master g ON m.group_id = g.id
      WHERE mii.issue_id=? ORDER BY mii.id`, [header.id]
   );
   return { ...header, items };

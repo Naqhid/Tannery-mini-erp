@@ -16,11 +16,18 @@ const STATUS_COLORS: Record<string, string> = {
 export default function MaterialIssueToBatch() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total: 0, posted: 0, draft: 0, total_value: 0 });
+  const [stageOptions, setStageOptions] = useState<{ value: string; label: string }[]>([]);
 
   const fetchStats = useCallback(async () => {
     try { const res = await api<{ data: typeof stats }>('/material-issues/stats'); setStats(res.data); } catch {}
   }, []);
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  const fetchStages = useCallback(async () => {
+    try {
+      const res = await api<{ data: { id: number; name: string }[] }>('/process-stages?limit=100');
+      setStageOptions((res.data || []).map((s) => ({ value: s.name, label: s.name })));
+    } catch {}
+  }, []);
+  useEffect(() => { fetchStats(); fetchStages(); }, [fetchStats, fetchStages]);
 
   const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
   const formatCurrency = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(n || 0);
@@ -44,6 +51,7 @@ export default function MaterialIssueToBatch() {
 
   const filterOptions = [
     { key: 'status', label: 'Status', options: [{ value: 'Posted', label: 'Posted' }, { value: 'Draft', label: 'Draft' }, { value: 'Cancelled', label: 'Cancelled' }] },
+    { key: 'process_stage', label: 'Stage', options: stageOptions },
   ];
 
   const handleDelete = async (id: number) => {

@@ -268,36 +268,108 @@ async function buildDetailFromSeed(seed) {
     }
   }
 
-  const completedQty = stages.reduce((m, r) => Math.max(m, Number(r.completed_qty) || 0), 0);
+  // Completed Qty must match the Production Plan page: cumulative Daily
+  // Production output of the plan's measurement (last) stage, summed across all
+  // production plans linked to this sales order + article + color.
+  let completedQty = 0;
+  if (seed.production_plan_id) {
+    const [[row]] = await pool.query(
+      `SELECT COALESCE(SUM(t.output_qty), 0) AS completed_qty
+       FROM production_plans pp
+       JOIN sales_orders so ON so.id = pp.sales_order_id
+       JOIN production_plans pp2 ON pp2.sales_order_id = so.id AND pp2.deleted_at IS NULL
+         AND pp2.article COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+       JOIN production_status_orders pso
+         ON pso.production_plan_id = pp2.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name FROM production_plan_stages s2
+          WHERE s2.plan_id = pp2.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+        )
+       JOIN production_status_transactions t
+         ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+       WHERE pp.id = ? AND pp.deleted_at IS NULL`,
+      [seed.article, seed.production_plan_id]
+    );
+    completedQty = Number(row?.completed_qty) || 0;
+  }
+  // Fall back to the recorded completed_qty on the status orders when no Daily
+  // Production transactions exist yet.
+  if (completedQty <= 0) {
+    completedQty = stages.reduce((m, r) => Math.max(m, Number(r.completed_qty) || 0), 0);
+  }
   // Prefer the sales order quantity; fall back to the max issued qty across stages.
   const orderQty = salesOrderQty > 0
     ? salesOrderQty
     : stages.reduce((m, r) => Math.max(m, Number(r.order_qty) || 0), 0);
   const balanceQty = Math.max(0, orderQty - completedQty);
 
+  // Resolve the plan number so Material Issues (which link by plan_no +
+  // process_stage) can be aggregated per stage.
+  let planNo = null;
+  if (seed.production_plan_id) {
+    const [[pp]] = await pool.query(
+      `SELECT plan_no FROM production_plans WHERE id=? AND deleted_at IS NULL`,
+      [seed.production_plan_id]
+    );
+    planNo = pp?.plan_no || null;
+  }
+
   const stageDetails = [];
   for (const stage of stages) {
+    // Material Issues for this plan + stage. Item Group comes from the
+    // material's group_master; Item Name is the material name.
+    const [materialRows] = await pool.query(
+      `SELECT 'Material Issue' AS data_source,
+              COALESCE(g.name, '') AS item_group,
+              m.name AS item_name,
+              i.uom,
+              COALESCE(SUM(i.amount),0) AS actual_cost
+       FROM material_issues h
+       JOIN material_issue_items i ON i.issue_id=h.id
+       JOIN materials m ON m.id = i.material_id
+       LEFT JOIN group_master g ON m.group_id = g.id
+       WHERE h.production_batch = ?
+         AND COALESCE(h.process_stage,'') COLLATE utf8mb4_0900_ai_ci = COALESCE(?, '') COLLATE utf8mb4_0900_ai_ci
+       GROUP BY g.name, m.name, i.uom
+       ORDER BY g.name, m.name`,
+      [planNo, stage.process_stage]
+    );
     const [generalRows] = await pool.query(
-      `SELECT 'General Cost' AS cost_group, i.cost_category, i.uom,
+      `SELECT 'General Cost' AS data_source,
+              COALESCE(mg.group_name, '') AS item_group,
+              i.cost_category AS item_name, i.uom,
               COALESCE(SUM(i.amount),0) AS actual_cost
        FROM general_cost_headers h
        JOIN general_cost_items i ON i.general_cost_id=h.id
+       LEFT JOIN (
+         SELECT mm.name AS material_name, gm.name AS group_name
+         FROM materials mm LEFT JOIN group_master gm ON mm.group_id = gm.id
+       ) mg ON mg.material_name COLLATE utf8mb4_0900_ai_ci = i.cost_category COLLATE utf8mb4_0900_ai_ci
        WHERE h.production_plan_id=?
-       GROUP BY i.cost_category, i.uom
+       GROUP BY mg.group_name, i.cost_category, i.uom
        ORDER BY MIN(i.sort_order), MIN(i.id)`, [stage.id]
     );
     const [machineRows] = await pool.query(
-      `SELECT 'Machine Cost' AS cost_group, i.machine_name AS cost_category, i.uom,
+      `SELECT 'Machine Cost' AS data_source,
+              COALESCE(g.name, i.group_name, '') AS item_group,
+              i.machine_name AS item_name, i.uom,
               COALESCE(SUM(i.amount),0) AS actual_cost
        FROM machine_cost_headers h
        JOIN machine_cost_items i ON i.machine_cost_id=h.id
+       LEFT JOIN group_master g ON i.group_id = g.id
        WHERE h.production_plan_id=?
-       GROUP BY i.machine_name, i.uom
+       GROUP BY COALESCE(g.name, i.group_name, ''), i.machine_name, i.uom
        ORDER BY MIN(i.sort_order), MIN(i.id)`, [stage.id]
     );
     const outputQty = Number(stage.completed_qty) || 0;
-    const rows = [...generalRows, ...machineRows].map(r => ({
-      ...r,
+    const rows = [...materialRows, ...machineRows, ...generalRows].map(r => ({
+      data_source: r.data_source,
+      item_group: r.item_group || '',
+      item_name: r.item_name || '',
+      // Kept for backward compatibility with any existing consumers.
+      cost_group: r.data_source,
+      cost_category: r.item_name || '',
+      uom: r.uom,
       actual_cost: Number(r.actual_cost) || 0,
       cost_per_uom: outputQty > 0 ? (Number(r.actual_cost) || 0) / outputQty : 0,
     }));

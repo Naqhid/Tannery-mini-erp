@@ -91,7 +91,10 @@ export async function getById(id) {
   if (!header) return null;
 
   const [items] = await pool.query(
-    `SELECT * FROM machine_cost_items WHERE machine_cost_id = ? ORDER BY sort_order, id`,
+    `SELECT mci.*, COALESCE(g.name, mci.group_name) AS group_name
+     FROM machine_cost_items mci
+     LEFT JOIN group_master g ON mci.group_id = g.id
+     WHERE mci.machine_cost_id = ? ORDER BY mci.sort_order, mci.id`,
     [id]
   );
 
@@ -152,9 +155,9 @@ export async function create(data, userId = null) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       await conn.query(
-        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, uom, amount, cost_per_piece, remarks, sort_order)
-         VALUES (?,?,?,?,?,?,?)`,
-        [headerId, item.machine_name, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, group_id, group_name, uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [headerId, item.machine_name, item.group_id || null, item.group_name || null, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
       );
     }
 
@@ -192,9 +195,9 @@ export async function update(id, data, userId = null) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       await conn.query(
-        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, uom, amount, cost_per_piece, remarks, sort_order)
-         VALUES (?,?,?,?,?,?,?)`,
-        [id, item.machine_name, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, group_id, group_name, uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [id, item.machine_name, item.group_id || null, item.group_name || null, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
       );
     }
 
