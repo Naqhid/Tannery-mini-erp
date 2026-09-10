@@ -231,14 +231,25 @@ export async function getActualCostDetailByPlan(planId) {
  */
 async function buildDetailFromSeed(seed) {
   const [stages] = await pool.query(
-    `SELECT pso.id, pso.process_stage, pso.uom, pso.plan_date, pso.customer_name,
+    `SELECT pso.id, pso.process_stage, pso.plan_date, pso.customer_name,
             pso.article, pso.color, pso.order_no, pso.issued_qty AS order_qty,
             pso.completed_qty, pso.balance_qty, pso.status, pso.production_plan_id,
-            COALESCE(pps.seq, 999999) AS stage_seq
+            -- UOM shown against each stage comes from the Daily Production status
+            -- (process stage master), falling back to the order uom.
+            COALESCE(ps.uom, pso.uom) AS uom,
+            -- Rejection qty from Daily Production for this stage.
+            COALESCE((
+              SELECT SUM(t.rejection_qty) FROM production_status_transactions t
+              WHERE t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+            ), 0) AS rejection_qty,
+            -- Sequence follows the Process Stage master ordering.
+            COALESCE(ps.seq, pps.seq, 999999) AS stage_seq
      FROM production_status_orders pso
      LEFT JOIN production_plan_stages pps
        ON pps.plan_id = pso.production_plan_id
       AND pps.stage_name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+     LEFT JOIN process_stages ps
+       ON ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
      WHERE pso.deleted_at IS NULL AND pso.order_no=? AND pso.article=? AND COALESCE(pso.color,'')=COALESCE(?, '')
      ORDER BY stage_seq ASC, pso.id ASC`,
     [seed.order_no, seed.article, seed.color]
@@ -315,6 +326,7 @@ async function buildDetailFromSeed(seed) {
   }
 
   const stageDetails = [];
+  const summary = [];
   for (const stage of stages) {
     // Material Issues for this plan + stage. Item Group comes from the
     // material's group_master; Item Name is the material name.
@@ -362,6 +374,7 @@ async function buildDetailFromSeed(seed) {
        ORDER BY MIN(i.sort_order), MIN(i.id)`, [stage.id]
     );
     const outputQty = Number(stage.completed_qty) || 0;
+    const perUom = (amt) => outputQty > 0 ? amt / outputQty : 0;
     const rows = [...materialRows, ...machineRows, ...generalRows].map(r => ({
       data_source: r.data_source,
       item_group: r.item_group || '',
@@ -371,10 +384,43 @@ async function buildDetailFromSeed(seed) {
       cost_category: r.item_name || '',
       uom: r.uom,
       actual_cost: Number(r.actual_cost) || 0,
-      cost_per_uom: outputQty > 0 ? (Number(r.actual_cost) || 0) / outputQty : 0,
+      cost_per_uom: perUom(Number(r.actual_cost) || 0),
     }));
     stageDetails.push({ ...stage, rows });
+
+    // --- Per-stage Summary (mirrors the Excel breakdown) ---
+    const sumBy = (list) => list.reduce((a, r) => a + (Number(r.actual_cost) || 0), 0);
+    const materialCost = sumBy(materialRows);
+    const generalCost = sumBy(generalRows);
+    const machineCost = sumBy(machineRows);
+    const stageTotal = materialCost + generalCost + machineCost;
+    const rejectionQty = Number(stage.rejection_qty) || 0;
+    // Rejection cost = per-piece cost of the stage * rejection qty.
+    const stageCostPerPiece = perUom(stageTotal);
+    const rejectionAmount = stageCostPerPiece * rejectionQty;
+
+    summary.push({
+      process_stage: stage.process_stage,
+      uom: stage.uom,
+      output_qty: outputQty,
+      rejection_qty: rejectionQty,
+      lines: [
+        { label: 'Material Cost', amount: materialCost, cost_per_piece: perUom(materialCost) },
+        { label: 'General Cost', amount: generalCost, cost_per_piece: perUom(generalCost) },
+        { label: 'Machine Cost', amount: machineCost, cost_per_piece: perUom(machineCost) },
+      ],
+      total: { amount: stageTotal, cost_per_piece: stageCostPerPiece },
+      rejection: { qty: rejectionQty, amount: rejectionAmount, cost_per_piece: perUom(rejectionAmount) },
+      total_with_rejection: {
+        amount: stageTotal + rejectionAmount,
+        cost_per_piece: stageCostPerPiece + perUom(rejectionAmount),
+      },
+    });
   }
+
+  // Overall order-level excess/shortage: order qty vs the final (measurement)
+  // completed qty. Positive => shortage, negative => excess.
+  const excessShortage = orderQty - completedQty;
 
   return {
     order: {
@@ -386,5 +432,11 @@ async function buildDetailFromSeed(seed) {
       balance_qty: balanceQty,
     },
     stages: stageDetails,
+    summary,
+    summary_meta: {
+      order_qty: orderQty,
+      completed_qty: completedQty,
+      excess_shortage: excessShortage,
+    },
   };
 }

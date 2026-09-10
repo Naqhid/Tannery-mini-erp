@@ -6,8 +6,17 @@ import { toast } from 'react-toastify';
 import api from '../lib/api';
 
 type CostRow = { data_source:string; item_group:string; item_name:string; cost_group:string; cost_category:string; uom:string; actual_cost:number; cost_per_uom:number };
-type Stage = { id:number; process_stage:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; rows:CostRow[] };
-type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[] };
+type Stage = { id:number; process_stage:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; rejection_qty?:number; rows:CostRow[] };
+type SummaryLine = { label:string; amount:number; cost_per_piece:number };
+type SummaryStage = {
+  process_stage:string; uom:string; output_qty:number; rejection_qty:number;
+  lines:SummaryLine[];
+  total:{ amount:number; cost_per_piece:number };
+  rejection:{ qty:number; amount:number; cost_per_piece:number };
+  total_with_rejection:{ amount:number; cost_per_piece:number };
+};
+type SummaryMeta = { order_qty:number; completed_qty:number; excess_shortage:number };
+type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[]; summary?:SummaryStage[]; summary_meta?:SummaryMeta };
 
 const fmt = (n:number) => new Intl.NumberFormat('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);
 const fmtQty = (n:number) => new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(Number(n)||0);
@@ -85,15 +94,75 @@ export default function ActualStandardCostSheet(){
         <Field label="Status"><select className="field" value={status} onChange={e=>setStatus(e.target.value)}><option>Draft</option><option>Approved</option></select></Field>
       </div>
       <div className="mt-4 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 border border-slate-200 rounded-lg overflow-hidden">
-        <Metric label="Customer" value={data.order.customer_name}/><Metric label="Article" value={data.order.article}/><Metric label="Color" value={data.order.color}/><Metric label="Order No." value={data.order.order_no}/><Metric label="Order Qty" value={`${fmtQty(data.order.order_qty)} ${data.order.uom||''}`}/><Metric label="Completed Qty" value={`${fmtQty(data.order.completed_qty)} ${data.order.uom||''}`} tone="green"/><Metric label="Balance Qty" value={`${fmtQty(data.order.balance_qty)} ${data.order.uom||''}`} tone="amber"/>
+        <Metric label="Customer" value={data.order.customer_name}/><Metric label="Article" value={data.order.article}/><Metric label="Color" value={data.order.color}/><Metric label="Order No." value={data.order.order_no}/><Metric label="Order Qty" value={`${fmtQty(data.order.order_qty)} Sq.Ft.`}/><Metric label="Completed Qty" value={`${fmtQty(data.order.completed_qty)} Sq.Ft.`} tone="green"/><Metric label="Balance Qty" value={`${fmtQty(data.order.balance_qty)} Sq.Ft.`} tone="amber"/>
       </div>
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Cost Details</div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Amount (INR)</th><th className="p-3 text-right">Cost/UOM (INR)</th></tr></thead><tbody>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Amount (INR)</th><th className="p-3 text-right">Cost/Piece (INR)</th></tr></thead><tbody>
       {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={4} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
     </div>
+    {data.summary && data.summary.length>0 && <SummarySection summary={data.summary} meta={data.summary_meta}/>}
   </div>;
+}
+
+function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta}){
+  const grand = summary.reduce((a,s)=>({amt:a.amt+s.total_with_rejection.amount, cpp:a.cpp+s.total_with_rejection.cost_per_piece}),{amt:0,cpp:0});
+  return <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Summary</div>
+    <div className="overflow-x-auto"><table className="w-full text-sm">
+      <thead className="bg-slate-50 text-slate-700"><tr>
+        <th className="p-3 text-left">Stage</th>
+        <th className="p-3 text-left">Cost Component</th>
+        <th className="p-3 text-right">Amount (INR)</th>
+        <th className="p-3 text-right">Cost/Piece (INR)</th>
+      </tr></thead>
+      <tbody>
+        {summary.map((s,si)=><SummaryStageRows key={si} s={s}/>)}
+      </tbody>
+      <tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr>
+        <td colSpan={2} className="p-3 text-right font-bold text-slate-700">Grand Total (incl. rejection)</td>
+        <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.amt)}</td>
+        <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.cpp)}</td>
+      </tr></tfoot>
+    </table></div>
+    {meta && <div className="px-4 py-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+      <div className="flex justify-between sm:flex-col sm:justify-start"><span className="text-slate-500 font-semibold">Order Qty</span><span className="font-bold text-slate-800">{fmtQty(meta.order_qty)} Sq.Ft.</span></div>
+      <div className="flex justify-between sm:flex-col sm:justify-start"><span className="text-slate-500 font-semibold">Measurement Qty</span><span className="font-bold text-slate-800">{fmtQty(meta.completed_qty)} Sq.Ft.</span></div>
+      <div className="flex justify-between sm:flex-col sm:justify-start"><span className="text-slate-500 font-semibold">Excess / Shortage</span><span className={`font-bold ${meta.excess_shortage>0?'text-amber-700':meta.excess_shortage<0?'text-green-700':'text-slate-800'}`}>{fmtQty(meta.excess_shortage)} Sq.Ft.</span></div>
+    </div>}
+  </div>;
+}
+
+function SummaryStageRows({s}:{s:SummaryStage}){
+  const stageLabel = `${s.process_stage||'Stage'} - ${fmtQty(s.output_qty)} ${s.uom||''}`;
+  return <>
+    <tr className="border-t border-slate-200 bg-slate-50/70"><td colSpan={4} className="p-2.5 font-bold text-slate-800">{stageLabel}</td></tr>
+    {s.lines.map((ln,i)=><tr key={i} className="border-t border-slate-100">
+      <td className="p-2.5"></td>
+      <td className="p-2.5">{ln.label}</td>
+      <td className="p-2.5 text-right">{fmt(ln.amount)}</td>
+      <td className="p-2.5 text-right">{fmt(ln.cost_per_piece)}</td>
+    </tr>)}
+    <tr className="border-t border-slate-100 bg-slate-50/40">
+      <td className="p-2.5"></td>
+      <td className="p-2.5 font-semibold text-slate-600">Total</td>
+      <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.amount)}</td>
+      <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.cost_per_piece)}</td>
+    </tr>
+    <tr className="border-t border-slate-100">
+      <td className="p-2.5"></td>
+      <td className="p-2.5 text-rose-700">Rejection {fmtQty(s.rejection.qty)} {s.uom||''}</td>
+      <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.amount)}</td>
+      <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.cost_per_piece)}</td>
+    </tr>
+    <tr className="border-t border-slate-100 bg-blue-50/40">
+      <td className="p-2.5"></td>
+      <td className="p-2.5 font-semibold text-blue-800">{s.process_stage} + Rejection</td>
+      <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.amount)}</td>
+      <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.cost_per_piece)}</td>
+    </tr>
+  </>;
 }
 function Field({label,children}:{label:string;children:ReactNode}){return <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>{children}</div>}
 function Metric({label,value,tone}:{label:string;value:string;tone?:'green'|'amber'}){return <div className="p-3 border-r last:border-r-0 border-slate-200"><div className="text-xs font-semibold text-slate-600 mb-2">{label}</div><div className={`font-bold ${tone==='green'?'text-green-700':tone==='amber'?'text-amber-700':'text-slate-800'}`}>{value||'—'}</div></div>}
@@ -112,7 +181,7 @@ function StageRows({stage,index}:{stage:Stage;index:number}){
       : <>
           {stage.rows.map((r,i)=><tr key={`${stage.id}-${i}`} className="border-t border-slate-100">
             <td className="p-2.5 text-center text-slate-500">{`${index}.${i+1}`}</td>
-            <td className="p-2.5">{r.data_source||r.cost_group||'—'}</td>
+            <td className="p-2.5">{((r.data_source||r.cost_group)==='Material Issue'?'Material Cost':(r.data_source||r.cost_group))||'—'}</td>
             <td className="p-2.5">{r.item_group||'—'}</td>
             <td className="p-2.5 font-medium">{r.item_name||r.cost_category||'—'}</td>
             <td className="p-2.5">{r.uom||stage.uom||'—'}</td>
