@@ -230,26 +230,37 @@ export async function getActualCostDetailByPlan(planId) {
  * detail. Used by both getActualCostDetail and getActualCostDetailByPlan.
  */
 async function buildDetailFromSeed(seed) {
+  // Note: scalar subqueries are used for the process-stage UOM/seq (instead of
+  // LEFT JOINs) so that duplicate rows in process_stages / production_plan_stages
+  // can never multiply a stage into several summary/detail blocks.
   const [stages] = await pool.query(
     `SELECT pso.id, pso.process_stage, pso.plan_date, pso.customer_name,
             pso.article, pso.color, pso.order_no, pso.issued_qty AS order_qty,
             pso.completed_qty, pso.balance_qty, pso.status, pso.production_plan_id,
             -- UOM shown against each stage comes from the Daily Production status
             -- (process stage master), falling back to the order uom.
-            COALESCE(ps.uom, pso.uom) AS uom,
+            COALESCE((
+              SELECT ps.uom FROM process_stages ps
+              WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+              ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
+            ), pso.uom) AS uom,
             -- Rejection qty from Daily Production for this stage.
             COALESCE((
               SELECT SUM(t.rejection_qty) FROM production_status_transactions t
               WHERE t.production_status_order_id = pso.id AND t.deleted_at IS NULL
             ), 0) AS rejection_qty,
             -- Sequence follows the Process Stage master ordering.
-            COALESCE(ps.seq, pps.seq, 999999) AS stage_seq
+            COALESCE((
+              SELECT ps.seq FROM process_stages ps
+              WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+              ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
+            ), (
+              SELECT pps.seq FROM production_plan_stages pps
+              WHERE pps.plan_id = pso.production_plan_id
+                AND pps.stage_name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+              ORDER BY pps.id LIMIT 1
+            ), 999999) AS stage_seq
      FROM production_status_orders pso
-     LEFT JOIN production_plan_stages pps
-       ON pps.plan_id = pso.production_plan_id
-      AND pps.stage_name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
-     LEFT JOIN process_stages ps
-       ON ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
      WHERE pso.deleted_at IS NULL AND pso.order_no=? AND pso.article=? AND COALESCE(pso.color,'')=COALESCE(?, '')
      ORDER BY stage_seq ASC, pso.id ASC`,
     [seed.order_no, seed.article, seed.color]
