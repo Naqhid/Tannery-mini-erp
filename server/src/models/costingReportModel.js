@@ -339,21 +339,44 @@ async function buildDetailFromSeed(seed) {
     productId = pp?.product_id || null;
   }
 
-  // BOM (standard) cost per item, keyed by the item's name. Sourced from the
-  // plan's product active BOM: qty * (1 + scrap%/100) * unit_cost. Used to show
-  // the BOM Cost and Variance (Actual - BOM) columns on the BOM cost sheet.
+  // BOM (standard) cost per item, keyed by the item's name. Each item's BOM Cost
+  // is the BOM line Amount = qty * (1 + scrap%/100) * unit_cost.
+  // We resolve the BOM by (a) the plan's product_id, or (b) a product whose name
+  // matches the order article. Prefer an Active BOM, else the most recent one.
   const bomCostByName = new Map();
+
+  // Find the BOM id to use.
+  let bomId = null;
   if (productId) {
+    const [[b]] = await pool.query(
+      `SELECT id FROM boms WHERE product_id = ?
+       ORDER BY (status='Active') DESC, version DESC, id DESC LIMIT 1`,
+      [productId]
+    );
+    bomId = b?.id || null;
+  }
+  if (!bomId && seed.article) {
+    // Fall back to a BOM whose product name matches the order article.
+    const [[b]] = await pool.query(
+      `SELECT bm.id FROM boms bm
+       JOIN products p ON p.id = bm.product_id
+       WHERE p.name COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+       ORDER BY (bm.status='Active') DESC, bm.version DESC, bm.id DESC LIMIT 1`,
+      [seed.article]
+    );
+    bomId = b?.id || null;
+  }
+
+  if (bomId) {
     const [bomItems] = await pool.query(
       `SELECT COALESCE(m.name, mac.name) AS item_name,
               COALESCE(SUM(bi.qty * (1 + COALESCE(bi.scrap_percent,0)/100) * COALESCE(bi.unit_cost,0)), 0) AS bom_cost
-       FROM boms b
-       JOIN bom_items bi ON bi.bom_id = b.id
+       FROM bom_items bi
        LEFT JOIN materials m ON bi.material_id = m.id
        LEFT JOIN machines mac ON bi.machine_id = mac.id
-       WHERE b.product_id = ? AND b.status = 'Active'
+       WHERE bi.bom_id = ?
        GROUP BY COALESCE(m.name, mac.name)`,
-      [productId]
+      [bomId]
     );
     for (const bi of bomItems) {
       if (bi.item_name) bomCostByName.set(String(bi.item_name).toLowerCase(), Number(bi.bom_cost) || 0);
