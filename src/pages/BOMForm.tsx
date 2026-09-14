@@ -283,7 +283,7 @@ export default function BOMForm() {
     const payload = {
       material_id: item.material_id,
       type: item.type,
-      uom: 'Kg',
+      uom: item.uom || 'Kg',
       qty: item.qty,
       unit_cost: item.unit_cost,
       amount: item.amount,
@@ -305,6 +305,16 @@ export default function BOMForm() {
     { value: '', label: dropdowns['products']?.loading ? 'Loading...' : 'Select product' },
     ...(dropdowns['products']?.options || []),
   ];
+
+  // UOM options from the UOM master. When a row already has a UOM that is not in
+  // the master list (e.g. a legacy short code like "Kg"), we still include it so
+  // the dropdown displays the auto-populated value instead of appearing empty.
+  const uomMasterLabels: string[] = (dropdowns['uom']?.options || []).map((u: any) => u.label);
+  const uomOptionsFor = (current?: string) => {
+    const labels = [...uomMasterLabels];
+    if (current && !labels.includes(current)) labels.unshift(current);
+    return labels;
+  };
 
   const totalAmount = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 
@@ -424,9 +434,14 @@ export default function BOMForm() {
               </div>
               <div>
                 <label className="block text-[11px] font-medium text-gray-600 mb-1">UOM</label>
-                <div className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50 text-gray-700 min-h-[34px] flex items-center">
-                  {formData.uom || '-'}
-                </div>
+                <select
+                  value={formData.uom || ''}
+                  onChange={(e) => updateField('uom', e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                >
+                  <option value="">Select UOM</option>
+                  {uomOptionsFor(formData.uom).map((label) => <option key={label} value={label}>{label}</option>)}
+                </select>
               </div>
             </div>
           </div>
