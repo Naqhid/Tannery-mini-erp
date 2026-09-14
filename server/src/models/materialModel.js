@@ -309,10 +309,11 @@ export async function getDropdown() {
 
 /**
  * Resolve the unit cost for a material used to auto-populate BOM lines.
- * Priority:
+ * Only two sources, in this order:
  *   1. Latest stock_ledger.unit_cost for the material (most recent transaction).
- *   2. Fallback to the material master opening rate (materials.standard_cost).
- * Returns { unit_cost, source } where source is 'stock_ledger' or 'opening_rate'.
+ *   2. Fallback to the material master `rate` column.
+ * No other source is used.
+ * Returns { unit_cost, source } where source is 'stock_ledger' or 'material_rate'.
  */
 export async function getMaterialLatestCost(materialId) {
   const [[ledger]] = await pool.query(
@@ -326,11 +327,12 @@ export async function getMaterialLatestCost(materialId) {
     return { unit_cost: Number(ledger.unit_cost), source: 'stock_ledger' };
   }
 
+  // Fallback (only) to the material master rate column.
   const [[mat]] = await pool.query(
-    `SELECT standard_cost FROM materials WHERE id = ?`,
+    `SELECT rate FROM materials WHERE id = ?`,
     [materialId]
   );
-  return { unit_cost: Number(mat?.standard_cost) || 0, source: 'opening_rate' };
+  return { unit_cost: Number(mat?.rate) || 0, source: 'material_rate' };
 }
 
 export async function getStats() {
