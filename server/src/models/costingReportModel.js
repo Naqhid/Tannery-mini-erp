@@ -290,27 +290,30 @@ async function buildDetailFromSeed(seed) {
     }
   }
 
-  // Completed Qty must match the Production Plan page: cumulative Daily
-  // Production output of the plan's measurement (last) stage, summed across all
-  // production plans linked to this sales order + article + color.
+  // Completed Qty = Daily Production output of THIS plan's Measurement stage
+  // only. It must reflect the single production plan being viewed (not summed
+  // across other plans of the same sales order). We prefer a stage literally
+  // named "Measurement"; if none exists we fall back to the last stage by
+  // sequence within this plan.
   let completedQty = 0;
   if (seed.production_plan_id) {
     const [[row]] = await pool.query(
       `SELECT COALESCE(SUM(t.output_qty), 0) AS completed_qty
-       FROM production_plans pp
-       JOIN sales_orders so ON so.id = pp.sales_order_id
-       JOIN production_plans pp2 ON pp2.sales_order_id = so.id AND pp2.deleted_at IS NULL
-         AND pp2.article COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-       JOIN production_status_orders pso
-         ON pso.production_plan_id = pp2.id AND pso.deleted_at IS NULL
-        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
-          SELECT s2.stage_name FROM production_plan_stages s2
-          WHERE s2.plan_id = pp2.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
-        )
+       FROM production_status_orders pso
        JOIN production_status_transactions t
          ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
-       WHERE pp.id = ? AND pp.deleted_at IS NULL`,
-      [seed.article, seed.production_plan_id]
+       WHERE pso.production_plan_id = ? AND pso.deleted_at IS NULL
+         AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+           SELECT sname FROM (
+             SELECT s2.stage_name AS sname
+             FROM production_plan_stages s2
+             WHERE s2.plan_id = ?
+             ORDER BY (s2.stage_name COLLATE utf8mb4_unicode_ci = 'Measurement') DESC,
+                      s2.seq DESC, s2.id DESC
+             LIMIT 1
+           ) x
+         )`,
+      [seed.production_plan_id, seed.production_plan_id]
     );
     completedQty = Number(row?.completed_qty) || 0;
   }
