@@ -85,7 +85,7 @@ export default function ActualStandardCostSheetBom(){
     const amount=rows.reduce((a,r)=>a+Number(r.actual_cost||0),0);
     const bom=rows.reduce((a,r)=>a+Number(r.bom_cost||0),0);
     const out=data?.order.completed_qty||0;
-    return {amount,bom,variance:amount-bom,costPerUom:out>0?amount/out:0};
+    return {amount,bom,variance:bom-amount,costPerUom:out>0?amount/out:0};
   },[data]);
   if(loading) return <div className="p-8 text-center text-gray-500">Loading standard cost sheet...</div>;
   if(!data) return <div className="p-8 text-center text-red-500">Production plan not found.</div>;
@@ -110,8 +110,8 @@ export default function ActualStandardCostSheetBom(){
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Cost Details</div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Actual Cost (₹)</th><th className="p-3 text-right">BOM Cost (₹)</th><th className="p-3 text-right">Variance (₹)</th><th className="p-3 text-right">Cost/Piece (₹)</th></tr></thead><tbody>
-      {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={4} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-slate-700">{fmt(totals.bom)}</td><td className={`p-3 text-right font-bold ${totals.variance>0?'text-rose-700':totals.variance<0?'text-green-700':'text-slate-700'}`}>{fmt(totals.variance)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">BOM Cost (₹)</th><th className="p-3 text-right">Actual Cost (₹)</th><th className="p-3 text-right">Variance (₹)</th><th className="p-3 text-right">Cost/Piece (₹)</th></tr></thead><tbody>
+      {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={4} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-slate-700">{fmt(totals.bom)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className={`p-3 text-right font-bold ${totals.variance>0?'text-green-700':totals.variance<0?'text-rose-700':'text-slate-700'}`}>{fmt(totals.variance)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
     </div>
     {data.summary && data.summary.length>0 && <SummarySection summary={data.summary} meta={data.summary_meta}/>}
   </div>;
@@ -182,9 +182,9 @@ function StageRows({stage,index}:{stage:Stage;index:number}){
   const label=`${stage.process_stage || 'Stage'} - ${fmtQty(planned)} ${stage.uom||''}`;
   const subtotal=stage.rows.reduce((a,r)=>a+Number(r.actual_cost||0),0);
   const subtotalBom=stage.rows.reduce((a,r)=>a+Number(r.bom_cost||0),0);
-  const subtotalVar=subtotal-subtotalBom;
+  const subtotalVar=subtotalBom-subtotal;
   const subtotalPerUom=stage.rows.reduce((a,r)=>a+Number(r.cost_per_uom||0),0);
-  const varClass=(v:number)=>v>0?'text-rose-700':v<0?'text-green-700':'text-slate-700';
+  const varClass=(v:number)=>v>0?'text-green-700':v<0?'text-rose-700':'text-slate-700';
   return <>
     <tr className="border-t border-slate-200 bg-slate-50/70">
       <td className="p-2.5 text-center font-bold text-slate-700">{index}</td>
@@ -193,22 +193,22 @@ function StageRows({stage,index}:{stage:Stage;index:number}){
     {stage.rows.length===0
       ? <tr className="border-t border-slate-100"><td></td><td colSpan={8} className="p-2.5 text-center text-slate-400">No cost entries</td></tr>
       : <>
-          {stage.rows.map((r,i)=>{const v=Number(r.variance ?? ((r.actual_cost||0)-(r.bom_cost||0)));return <tr key={`${stage.id}-${i}`} className="border-t border-slate-100">
+          {stage.rows.map((r,i)=>{const v=Number(r.variance ?? ((r.bom_cost||0)-(r.actual_cost||0)));return <tr key={`${stage.id}-${i}`} className="border-t border-slate-100">
             <td className="p-2.5 text-center text-slate-500">{`${index}.${i+1}`}</td>
             <td className="p-2.5">{((r.data_source||r.cost_group)==='Material Issue'?'Material Cost':(r.data_source||r.cost_group))||'—'}</td>
             <td className="p-2.5">{r.item_group||'—'}</td>
             <td className="p-2.5 font-medium">{r.item_name||r.cost_category||'—'}</td>
             <td className="p-2.5">{r.uom||stage.uom||'—'}</td>
-            <td className="p-2.5 text-right">{fmt(r.actual_cost)}</td>
             <td className="p-2.5 text-right">{fmt(r.bom_cost||0)}</td>
+            <td className="p-2.5 text-right">{fmt(r.actual_cost)}</td>
             <td className={`p-2.5 text-right ${varClass(v)}`}>{fmt(v)}</td>
             <td className="p-2.5 text-right">{fmt(r.cost_per_uom)}</td>
           </tr>})}
           <tr className="border-t border-slate-100 bg-slate-50/40">
             <td></td>
             <td colSpan={4} className="p-2.5 text-right font-semibold text-slate-600">Subtotal</td>
-            <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotal)}</td>
             <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotalBom)}</td>
+            <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotal)}</td>
             <td className={`p-2.5 text-right font-semibold ${varClass(subtotalVar)}`}>{fmt(subtotalVar)}</td>
             <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotalPerUom)}</td>
           </tr>

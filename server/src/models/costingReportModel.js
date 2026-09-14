@@ -424,7 +424,7 @@ async function buildDetailFromSeed(seed) {
       actual_cost: actual,
       cost_per_uom: perUom(actual),
       bom_cost: bomCost,
-      variance: actual - bomCost,
+      variance: bomCost - actual,
     });
     });
     stageDetails.push({ ...stage, rows });
@@ -470,7 +470,7 @@ async function buildDetailFromSeed(seed) {
   const allRows = stageDetails.flatMap(s => s.rows);
   const totalActualCost = allRows.reduce((a, r) => a + (Number(r.actual_cost) || 0), 0);
   const totalBomCost = allRows.reduce((a, r) => a + (Number(r.bom_cost) || 0), 0);
-  const totalVariance = totalActualCost - totalBomCost;
+  const totalVariance = totalBomCost - totalActualCost;
 
   return {
     order: {

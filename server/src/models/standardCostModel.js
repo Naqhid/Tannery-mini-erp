@@ -178,7 +178,7 @@ export async function createBomCostSheet(data, userId = null) {
 
     const totalActual = Number(data.total_actual_cost ?? data.total_amount) || 0;
     const totalBom = Number(data.total_bom_cost) || 0;
-    const totalVariance = Number(data.total_variance ?? (totalActual - totalBom)) || 0;
+    const totalVariance = Number(data.total_variance ?? (totalBom - totalActual)) || 0;
 
     const costSheetNo = await getNextCostSheetNo(data.customer_name || null);
 
@@ -199,7 +199,7 @@ export async function createBomCostSheet(data, userId = null) {
     for (const item of (data.items || [])) {
       const actual = Number(item.actual_cost) || 0;
       const bom = Number(item.bom_cost) || 0;
-      const variance = Number(item.variance ?? (actual - bom)) || 0;
+      const variance = Number(item.variance ?? (bom - actual)) || 0;
       const costPercentage = totalActual > 0 ? (actual / totalActual) * 100 : 0;
       await conn.query(
         `INSERT INTO standard_cost_items
