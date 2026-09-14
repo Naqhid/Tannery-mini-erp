@@ -358,17 +358,35 @@ async function buildDetailFromSeed(seed) {
   if (!bomId && seed.article) {
     // Fall back to a BOM whose product name matches the order article. Match
     // exactly first, then a prefix/contains match ("Sheep Softy" vs
-    // "Sheep Softy Black"). Prefer Active, latest version.
+    // "Sheep Softy Black"). Whitespace is normalized (collapse repeated spaces
+    // and trim) so a stray double space in the product name does not block a
+    // match. Prefer Active, latest version.
+    const norm = (col) => `TRIM(REGEXP_REPLACE(${col}, '[[:space:]]+', ' '))`;
     const [[b]] = await pool.query(
       `SELECT bm.id FROM boms bm
        JOIN products p ON p.id = bm.product_id
-       WHERE p.name COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-          OR p.name COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, '%')
-          OR ? LIKE CONCAT(p.name COLLATE utf8mb4_unicode_ci, '%')
-       ORDER BY (p.name COLLATE utf8mb4_unicode_ci = ?) DESC,
+       WHERE ${norm('p.name')} COLLATE utf8mb4_unicode_ci = ${norm('?')} COLLATE utf8mb4_unicode_ci
+          OR ${norm('p.name')} COLLATE utf8mb4_unicode_ci LIKE CONCAT(${norm('?')}, '%')
+          OR ${norm('?')} LIKE CONCAT(${norm('p.name')} COLLATE utf8mb4_unicode_ci, '%')
+       ORDER BY (${norm('p.name')} COLLATE utf8mb4_unicode_ci = ${norm('?')}) DESC,
                 (bm.status='Active') DESC, bm.version DESC, bm.id DESC
        LIMIT 1`,
       [seed.article, seed.article, seed.article, seed.article]
+    );
+    bomId = b?.id || null;
+  }
+  if (!bomId && seed.customer_name) {
+    // Last-resort fallback: a BOM for the same customer. Prefer a product whose
+    // name relates to the article, then Active / latest.
+    const [[b]] = await pool.query(
+      `SELECT bm.id FROM boms bm
+       LEFT JOIN products p ON p.id = bm.product_id
+       LEFT JOIN customers c ON c.id = bm.customer_id
+       WHERE c.name COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+       ORDER BY (p.name COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, '%')) DESC,
+                (bm.status='Active') DESC, bm.version DESC, bm.id DESC
+       LIMIT 1`,
+      [seed.customer_name, seed.article || '']
     );
     bomId = b?.id || null;
   }

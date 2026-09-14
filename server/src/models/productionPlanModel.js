@@ -572,7 +572,8 @@ export async function getSalesOrderItems({ search, status, customer_id, article,
        so.customer_po_no AS customer_order_no,
        c.name AS customer_name,
        c.id AS customer_id,
-       soi.item_description AS article,
+       COALESCE(prod.name, soi.item_description) AS article,
+       soi.item_description AS item_description,
        soi.item_code AS article_code,
        soi.finish_color AS color,
        soi.leather_type AS finish,
@@ -590,6 +591,7 @@ export async function getSalesOrderItems({ search, status, customer_id, article,
      FROM sales_order_items soi
      JOIN sales_orders so ON soi.sales_order_id = so.id
      LEFT JOIN customers c ON so.customer_id = c.id
+     LEFT JOIN products prod ON prod.id = soi.product_id
      WHERE ${where}
      ORDER BY so.id DESC, soi.id ASC
      LIMIT ? OFFSET ?`,
