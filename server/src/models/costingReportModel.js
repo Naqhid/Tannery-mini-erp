@@ -400,14 +400,17 @@ async function buildDetailFromSeed(seed) {
     stageDetails.push({ ...stage, rows });
 
     // --- Per-stage Summary (mirrors the Excel breakdown) ---
+    // In the Summary, Cost/Sqft = amount / overall completed (measurement) qty,
+    // NOT the per-stage output qty.
+    const perSqft = (amt) => completedQty > 0 ? amt / completedQty : 0;
     const sumBy = (list) => list.reduce((a, r) => a + (Number(r.actual_cost) || 0), 0);
     const materialCost = sumBy(materialRows);
     const generalCost = sumBy(generalRows);
     const machineCost = sumBy(machineRows);
     const stageTotal = materialCost + generalCost + machineCost;
     const rejectionQty = Number(stage.rejection_qty) || 0;
-    // Rejection cost = per-piece cost of the stage * rejection qty.
-    const stageCostPerPiece = perUom(stageTotal);
+    // Rejection cost = per-sqft cost of the stage * rejection qty.
+    const stageCostPerPiece = perSqft(stageTotal);
     const rejectionAmount = stageCostPerPiece * rejectionQty;
 
     summary.push({
@@ -416,15 +419,15 @@ async function buildDetailFromSeed(seed) {
       output_qty: outputQty,
       rejection_qty: rejectionQty,
       lines: [
-        { label: 'Material Cost', amount: materialCost, cost_per_piece: perUom(materialCost) },
-        { label: 'General Cost', amount: generalCost, cost_per_piece: perUom(generalCost) },
-        { label: 'Machine Cost', amount: machineCost, cost_per_piece: perUom(machineCost) },
+        { label: 'Material Cost', amount: materialCost, cost_per_piece: perSqft(materialCost) },
+        { label: 'General Cost', amount: generalCost, cost_per_piece: perSqft(generalCost) },
+        { label: 'Machine Cost', amount: machineCost, cost_per_piece: perSqft(machineCost) },
       ],
       total: { amount: stageTotal, cost_per_piece: stageCostPerPiece },
-      rejection: { qty: rejectionQty, amount: rejectionAmount, cost_per_piece: perUom(rejectionAmount) },
+      rejection: { qty: rejectionQty, amount: rejectionAmount, cost_per_piece: perSqft(rejectionAmount) },
       total_with_rejection: {
         amount: stageTotal + rejectionAmount,
-        cost_per_piece: stageCostPerPiece + perUom(rejectionAmount),
+        cost_per_piece: stageCostPerPiece + perSqft(rejectionAmount),
       },
     });
   }

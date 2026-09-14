@@ -115,7 +115,7 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
         <th className="p-3 text-left">Stage</th>
         <th className="p-3 text-left">Cost Component</th>
         <th className="p-3 text-right">Amount (INR)</th>
-        <th className="p-3 text-right">Cost/Piece (INR)</th>
+        <th className="p-3 text-right">Cost/Sqft (INR)</th>
       </tr></thead>
       <tbody>
         {summary.map((s,si)=><SummaryStageRows key={si} s={s}/>)}
