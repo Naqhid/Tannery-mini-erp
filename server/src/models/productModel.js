@@ -85,8 +85,32 @@ export async function getNextCode() {
   return `PRD-${String(maxNum + 1).padStart(5, '0')}`;
 }
 
+// Compose the product name from the master names of leather type, finish type
+// and color (in that order). Falls back to the provided name when the ids are
+// not available. This keeps products.name = "Leather Finish Color" in the DB.
+async function composeProductName(data) {
+  const ids = {
+    leather: data.leather_type_id || null,
+    finish: data.finish_type_id || null,
+    color: data.color_id || null,
+  };
+  if (!ids.leather && !ids.finish && !ids.color) return data.name || null;
+
+  const [ltRows] = ids.leather
+    ? await pool.query('SELECT name FROM leather_types WHERE id=?', [ids.leather]) : [[]];
+  const [ftRows] = ids.finish
+    ? await pool.query('SELECT name FROM finish_types WHERE id=?', [ids.finish]) : [[]];
+  const [cRows] = ids.color
+    ? await pool.query('SELECT name FROM colors WHERE id=?', [ids.color]) : [[]];
+
+  const parts = [ltRows?.[0]?.name, ftRows?.[0]?.name, cRows?.[0]?.name].filter(Boolean);
+  const composed = parts.join(' ').trim();
+  return composed || data.name || null;
+}
+
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
+  const productName = await composeProductName(data);
 
   // Normalize leather_type to valid ENUM value when using _id field
   let leatherType = data.leather_type || 'cow';
@@ -110,7 +134,7 @@ export async function create(data, createdBy = null) {
   const [result] = await pool.query(
     `INSERT INTO products (code, name, category, leather_type, uom, thickness, color, finish_type, description, standard_size, grade, hsn_code, status, category_id, group_id, leather_type_id, uom_id, secondary_uom_id, thickness_id, color_id, finish_type_id, grade_id, hsn_code_id, standard_size_id, customer_id, created_by)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [code, data.name, data.category || 'General', leatherType, data.uom || null, data.thickness || null,
+    [code, productName, data.category || 'General', leatherType, data.uom || null, data.thickness || null,
      data.color || null, data.finish_type || null, data.description, data.standard_size || null,
      grade, data.hsn_code || null, data.status || 'Active',
      data.category_id || null, data.group_id || null, data.leather_type_id || null, data.uom_id || null,
@@ -124,6 +148,7 @@ export async function create(data, createdBy = null) {
 }
 
 export async function update(id, data, updatedBy = null) {
+  const productName = await composeProductName(data);
   // Normalize leather_type to valid ENUM value when using _id field
   let leatherType = data.leather_type || 'cow';
   const validLeatherTypes = ['cow', 'buffalo', 'goat', 'sheep'];
@@ -144,7 +169,7 @@ export async function update(id, data, updatedBy = null) {
 
   const [result] = await pool.query(
     `UPDATE products SET code=?, name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, hsn_code=?, status=?, category_id=?, group_id=?, leather_type_id=?, uom_id=?, secondary_uom_id=?, thickness_id=?, color_id=?, finish_type_id=?, grade_id=?, hsn_code_id=?, standard_size_id=?, customer_id=?, updated_by=? WHERE id=?`,
-    [data.code, data.name, data.category || null, leatherType, data.uom || null, data.thickness || null,
+    [data.code, productName, data.category || null, leatherType, data.uom || null, data.thickness || null,
      data.color || null, data.finish_type || null, data.description, data.standard_size || null,
      grade, data.hsn_code || null, data.status,
      data.category_id || null, data.group_id || null, data.leather_type_id || null, data.uom_id || null,
