@@ -356,13 +356,19 @@ async function buildDetailFromSeed(seed) {
     bomId = b?.id || null;
   }
   if (!bomId && seed.article) {
-    // Fall back to a BOM whose product name matches the order article.
+    // Fall back to a BOM whose product name matches the order article. Match
+    // exactly first, then a prefix/contains match ("Sheep Softy" vs
+    // "Sheep Softy Black"). Prefer Active, latest version.
     const [[b]] = await pool.query(
       `SELECT bm.id FROM boms bm
        JOIN products p ON p.id = bm.product_id
        WHERE p.name COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-       ORDER BY (bm.status='Active') DESC, bm.version DESC, bm.id DESC LIMIT 1`,
-      [seed.article]
+          OR p.name COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, '%')
+          OR ? LIKE CONCAT(p.name COLLATE utf8mb4_unicode_ci, '%')
+       ORDER BY (p.name COLLATE utf8mb4_unicode_ci = ?) DESC,
+                (bm.status='Active') DESC, bm.version DESC, bm.id DESC
+       LIMIT 1`,
+      [seed.article, seed.article, seed.article, seed.article]
     );
     bomId = b?.id || null;
   }
