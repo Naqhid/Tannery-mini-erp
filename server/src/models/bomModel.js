@@ -199,11 +199,24 @@ export async function removeItem(id) {
 }
 
 async function createRevisionSnapshot(conn, bomId, userId = null, changeReason = null) {
-  const [[bom]] = await conn.query('SELECT * FROM boms WHERE id=?', [bomId]);
+  const [[bom]] = await conn.query('SELECT * FROM boms WHERE id=? FOR UPDATE', [bomId]);
   const [items] = await conn.query('SELECT * FROM bom_items WHERE bom_id=? ORDER BY id', [bomId]);
-  const [[latest]] = await conn.query('SELECT version_no, revision_no FROM bom_versions WHERE bom_id=? ORDER BY version_no DESC, revision_no DESC LIMIT 1', [bomId]);
-  const versionNo = latest?.version_no || Number(bom.version) || 1;
-  const revisionNo = latest ? latest.revision_no + 1 : 1;
+
+  // Determine the current version number (highest existing, else the BOM's own).
+  const [[maxVer]] = await conn.query(
+    'SELECT MAX(version_no) AS max_version FROM bom_versions WHERE bom_id=?', [bomId]
+  );
+  const versionNo = Number(maxVer?.max_version) || Number(bom.version) || 1;
+
+  // Next revision is scoped to that version: MAX(revision_no)+1. Using MAX (with
+  // FOR UPDATE lock via the boms row above) avoids duplicate-key collisions when
+  // the "latest" row ordering is ambiguous.
+  const [[maxRev]] = await conn.query(
+    'SELECT MAX(revision_no) AS max_revision FROM bom_versions WHERE bom_id=? AND version_no=?',
+    [bomId, versionNo]
+  );
+  const revisionNo = maxRev?.max_revision != null ? Number(maxRev.max_revision) + 1 : 1;
+
   await conn.query("UPDATE bom_versions SET status='Superseded' WHERE bom_id=? AND status='Active'", [bomId]);
   await conn.query(
     `INSERT INTO bom_versions (bom_id, version_no, revision_no, status, effective_from, effective_to, change_reason, snapshot, created_by, released_by, released_on)
