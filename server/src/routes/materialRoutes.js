@@ -9,6 +9,7 @@ router.get('/dropdown', ctrl.dropdown);
 router.get('/next-code', ctrl.nextCode);
 router.get('/stats', ctrl.stats);
 router.get('/', ctrl.list);
+router.get('/:id/cost', validateId, ctrl.latestCost);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', requireWriteAccess, ctrl.create);
 router.put('/:id', validateId, requireWriteAccess, ctrl.update);

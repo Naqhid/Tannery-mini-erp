@@ -71,6 +71,13 @@ export async function dropdown(_req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function latestCost(req, res, next) {
+  try {
+    const data = await model.getMaterialLatestCost(req.params.id);
+    res.json({ data });
+  } catch (err) { next(err); }
+}
+
 export async function stats(_req, res, next) {
   try {
     const data = await model.getStats();

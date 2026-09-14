@@ -260,10 +260,10 @@ export default function BOMForm() {
           updated.material_name = material.name;
           updated.type = material.type;
           updated.uom = material.uom;
-          updated.unit_cost = material.last_purchase_price && material.last_purchase_price > 0
-            ? material.last_purchase_price
-            : (material.standard_cost && material.standard_cost > 0 ? material.standard_cost : 0);
-          updated.amount = (Number(updated.qty) || 0) * updated.unit_cost;
+          // Cost is resolved from the stock ledger (latest) with fallback to the
+          // material master opening rate. Fetched asynchronously below.
+          updated.unit_cost = 0;
+          updated.amount = 0;
           updated.supplier_id = material.preferred_supplier_id || null;
           updated.supplier_name = material.preferred_supplier_id
             ? suppliers.find(s => s.id === material.preferred_supplier_id)?.name || ''
@@ -275,6 +275,19 @@ export default function BOMForm() {
       }
       return updated;
     }));
+
+    // When the material changes, fetch its latest cost from the stock ledger
+    // (fallback: material master opening rate) and apply it to the row.
+    if (field === 'material_id' && value) {
+      api<{ data: { unit_cost: number } }>(`/materials/${Number(value)}/cost`)
+        .then(res => {
+          const cost = Number(res.data?.unit_cost) || 0;
+          setItems(prev => prev.map(it => it.id === rowId
+            ? { ...it, unit_cost: cost, amount: (Number(it.qty) || 0) * cost }
+            : it));
+        })
+        .catch(() => {});
+    }
   };
 
   // Save an inline-edited item to server (for edit mode)

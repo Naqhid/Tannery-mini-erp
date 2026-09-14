@@ -307,6 +307,32 @@ export async function getDropdown() {
   });
 }
 
+/**
+ * Resolve the unit cost for a material used to auto-populate BOM lines.
+ * Priority:
+ *   1. Latest stock_ledger.unit_cost for the material (most recent transaction).
+ *   2. Fallback to the material master opening rate (materials.standard_cost).
+ * Returns { unit_cost, source } where source is 'stock_ledger' or 'opening_rate'.
+ */
+export async function getMaterialLatestCost(materialId) {
+  const [[ledger]] = await pool.query(
+    `SELECT unit_cost FROM stock_ledger
+     WHERE material_id = ? AND unit_cost IS NOT NULL AND unit_cost > 0
+     ORDER BY transaction_date DESC, id DESC
+     LIMIT 1`,
+    [materialId]
+  );
+  if (ledger && Number(ledger.unit_cost) > 0) {
+    return { unit_cost: Number(ledger.unit_cost), source: 'stock_ledger' };
+  }
+
+  const [[mat]] = await pool.query(
+    `SELECT standard_cost FROM materials WHERE id = ?`,
+    [materialId]
+  );
+  return { unit_cost: Number(mat?.standard_cost) || 0, source: 'opening_rate' };
+}
+
 export async function getStats() {
   const [[data]] = await pool.query(
     `SELECT COUNT(*) AS total,
