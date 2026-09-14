@@ -13,6 +13,7 @@ router.get('/:id', validateId, ctrl.getOne);
 router.get('/:id/variance', validateId, ctrl.getVariance);
 
 router.post('/', requireWriteAccess, ctrl.create);
+router.post('/bom', requireWriteAccess, ctrl.createBom);
 router.post('/:id/import', validateId, requireWriteAccess, ctrl.importRevision);
 router.post('/:id/post', validateId, requireWriteAccess, ctrl.postCostSheet);
 

@@ -329,12 +329,35 @@ async function buildDetailFromSeed(seed) {
   // Resolve the plan number so Material Issues (which link by plan_no +
   // process_stage) can be aggregated per stage.
   let planNo = null;
+  let productId = null;
   if (seed.production_plan_id) {
     const [[pp]] = await pool.query(
-      `SELECT plan_no FROM production_plans WHERE id=? AND deleted_at IS NULL`,
+      `SELECT plan_no, product_id FROM production_plans WHERE id=? AND deleted_at IS NULL`,
       [seed.production_plan_id]
     );
     planNo = pp?.plan_no || null;
+    productId = pp?.product_id || null;
+  }
+
+  // BOM (standard) cost per item, keyed by the item's name. Sourced from the
+  // plan's product active BOM: qty * (1 + scrap%/100) * unit_cost. Used to show
+  // the BOM Cost and Variance (Actual - BOM) columns on the BOM cost sheet.
+  const bomCostByName = new Map();
+  if (productId) {
+    const [bomItems] = await pool.query(
+      `SELECT COALESCE(m.name, mac.name) AS item_name,
+              COALESCE(SUM(bi.qty * (1 + COALESCE(bi.scrap_percent,0)/100) * COALESCE(bi.unit_cost,0)), 0) AS bom_cost
+       FROM boms b
+       JOIN bom_items bi ON bi.bom_id = b.id
+       LEFT JOIN materials m ON bi.material_id = m.id
+       LEFT JOIN machines mac ON bi.machine_id = mac.id
+       WHERE b.product_id = ? AND b.status = 'Active'
+       GROUP BY COALESCE(m.name, mac.name)`,
+      [productId]
+    );
+    for (const bi of bomItems) {
+      if (bi.item_name) bomCostByName.set(String(bi.item_name).toLowerCase(), Number(bi.bom_cost) || 0);
+    }
   }
 
   const stageDetails = [];
@@ -387,7 +410,10 @@ async function buildDetailFromSeed(seed) {
     );
     const outputQty = Number(stage.completed_qty) || 0;
     const perUom = (amt) => outputQty > 0 ? amt / outputQty : 0;
-    const rows = [...materialRows, ...machineRows, ...generalRows].map(r => ({
+    const rows = [...materialRows, ...machineRows, ...generalRows].map(r => {
+      const actual = Number(r.actual_cost) || 0;
+      const bomCost = bomCostByName.get(String(r.item_name || '').toLowerCase()) || 0;
+      return ({
       data_source: r.data_source,
       item_group: r.item_group || '',
       item_name: r.item_name || '',
@@ -395,9 +421,12 @@ async function buildDetailFromSeed(seed) {
       cost_group: r.data_source,
       cost_category: r.item_name || '',
       uom: r.uom,
-      actual_cost: Number(r.actual_cost) || 0,
-      cost_per_uom: perUom(Number(r.actual_cost) || 0),
-    }));
+      actual_cost: actual,
+      cost_per_uom: perUom(actual),
+      bom_cost: bomCost,
+      variance: actual - bomCost,
+    });
+    });
     stageDetails.push({ ...stage, rows });
 
     // --- Per-stage Summary (mirrors the Excel breakdown) ---
@@ -437,6 +466,12 @@ async function buildDetailFromSeed(seed) {
   // completed qty. Positive => shortage, negative => excess.
   const excessShortage = orderQty - completedQty;
 
+  // Order-level cost totals (Actual, BOM, Variance) for the BOM cost sheet.
+  const allRows = stageDetails.flatMap(s => s.rows);
+  const totalActualCost = allRows.reduce((a, r) => a + (Number(r.actual_cost) || 0), 0);
+  const totalBomCost = allRows.reduce((a, r) => a + (Number(r.bom_cost) || 0), 0);
+  const totalVariance = totalActualCost - totalBomCost;
+
   return {
     order: {
       ...seed,
@@ -452,6 +487,11 @@ async function buildDetailFromSeed(seed) {
       order_qty: orderQty,
       completed_qty: completedQty,
       excess_shortage: excessShortage,
+    },
+    cost_totals: {
+      total_actual_cost: totalActualCost,
+      total_bom_cost: totalBomCost,
+      total_variance: totalVariance,
     },
   };
 }

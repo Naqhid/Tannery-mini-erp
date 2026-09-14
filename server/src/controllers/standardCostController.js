@@ -101,6 +101,14 @@ export async function calculateBomCost(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function createBom(req, res, next) {
+  try {
+    const userId = req.user?.id || null;
+    const result = await model.createBomCostSheet(req.body, userId);
+    res.status(201).json({ data: result, message: 'BOM Cost Sheet saved successfully!' });
+  } catch (err) { next(err); }
+}
+
 export async function nextNo(req, res, next) {
   try {
     const customerName = req.query.customer_name || null;

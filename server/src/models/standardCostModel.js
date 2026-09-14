@@ -165,6 +165,59 @@ export async function create(data, userId = null) {
   } finally { conn.release(); }
 }
 
+/**
+ * Create a BOM (actual-vs-BOM) standard cost sheet. Unlike create(), this is
+ * driven by a production plan and stores the actual cost, BOM cost and variance
+ * (header totals + per line). Items here are name-based cost lines, not the
+ * cost-component items used by the classic standard cost sheet.
+ */
+export async function createBomCostSheet(data, userId = null) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const totalActual = Number(data.total_actual_cost ?? data.total_amount) || 0;
+    const totalBom = Number(data.total_bom_cost) || 0;
+    const totalVariance = Number(data.total_variance ?? (totalActual - totalBom)) || 0;
+
+    const costSheetNo = await getNextCostSheetNo(data.customer_name || null);
+
+    const [result] = await conn.query(
+      `INSERT INTO standard_cost_sheets
+       (product_id, bom_id, bom_type, bom_version, cost_sheet_no, cost_sheet_version,
+        currency, basis_unit, total_bom_cost, total_actual_cost, total_variance,
+        total_other_cost, standard_cost, status, prepared_by, created_by, updated_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [data.product_id || null, data.bom_id || null, data.bom_type || 'BOM',
+       data.bom_version || 1, costSheetNo, 1,
+       data.currency || 'INR', data.basis_unit || 'Sq.Ft.',
+       totalBom, totalActual, totalVariance,
+       0, totalActual, data.status || 'Draft', data.prepared_by || null, userId, userId]
+    );
+    const costSheetId = result.insertId;
+
+    for (const item of (data.items || [])) {
+      const actual = Number(item.actual_cost) || 0;
+      const bom = Number(item.bom_cost) || 0;
+      const variance = Number(item.variance ?? (actual - bom)) || 0;
+      const costPercentage = totalActual > 0 ? (actual / totalActual) * 100 : 0;
+      await conn.query(
+        `INSERT INTO standard_cost_items
+         (cost_sheet_id, cost_component_id, cost_component_group_id, cost_value,
+          actual_cost, bom_cost, variance, cost_percentage)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [costSheetId, null, null, actual, actual, bom, variance, costPercentage]
+      );
+    }
+
+    await conn.commit();
+    return { id: costSheetId, cost_sheet_no: costSheetNo, total_actual_cost: totalActual, total_bom_cost: totalBom, total_variance: totalVariance };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
+}
+
 export async function update(id, data, userId = null) {
   const conn = await pool.getConnection();
   try {

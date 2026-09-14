@@ -5,7 +5,7 @@ import { Save, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../lib/api';
 
-type CostRow = { data_source:string; item_group:string; item_name:string; cost_group:string; cost_category:string; uom:string; actual_cost:number; cost_per_uom:number };
+type CostRow = { data_source:string; item_group:string; item_name:string; cost_group:string; cost_category:string; uom:string; actual_cost:number; cost_per_uom:number; bom_cost?:number; variance?:number };
 type Stage = { id:number; process_stage:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; rejection_qty?:number; rows:CostRow[] };
 type SummaryLine = { label:string; amount:number; cost_per_piece:number };
 type SummaryStage = {
@@ -16,12 +16,13 @@ type SummaryStage = {
   total_with_rejection:{ amount:number; cost_per_piece:number };
 };
 type SummaryMeta = { order_qty:number; completed_qty:number; excess_shortage:number };
-type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[]; summary?:SummaryStage[]; summary_meta?:SummaryMeta };
+type CostTotals = { total_actual_cost:number; total_bom_cost:number; total_variance:number };
+type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[]; summary?:SummaryStage[]; summary_meta?:SummaryMeta; cost_totals?:CostTotals };
 
 const fmt = (n:number) => new Intl.NumberFormat('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);
 const fmtQty = (n:number) => new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(Number(n)||0);
 
-export default function ActualStandardCostSheet(){
+export default function ActualStandardCostSheetBom(){
   const { id, planId } = useParams<{id?:string; planId?:string}>(); const navigate=useNavigate();
   const [data,setData]=useState<Detail|null>(null); const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
@@ -51,10 +52,19 @@ export default function ActualStandardCostSheet(){
         balance_qty: data.order.balance_qty,
         total_amount: totals.amount,
         total_cost_per_uom: totals.costPerUom,
+        total_actual_cost: data.cost_totals?.total_actual_cost ?? totals.amount,
+        total_bom_cost: data.cost_totals?.total_bom_cost ?? totals.bom,
+        total_variance: data.cost_totals?.total_variance ?? totals.variance,
+        items: data.stages.flatMap(s => s.rows.map(r => ({
+          item_name: r.item_name || r.cost_category,
+          actual_cost: r.actual_cost,
+          bom_cost: r.bom_cost || 0,
+          variance: r.variance ?? ((r.actual_cost||0)-(r.bom_cost||0)),
+        }))),
       };
-      await api('/standard-costs', { method: 'POST', body: JSON.stringify(payload) });
-      toast.success('Standard Cost Sheet saved successfully!');
-      navigate('/standard-costing');
+      await api('/standard-costs/bom', { method: 'POST', body: JSON.stringify(payload) });
+      toast.success('BOM Cost Sheet saved successfully!');
+      navigate('/standard-cost-bom');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { setSaving(false); }
   };
@@ -73,15 +83,16 @@ export default function ActualStandardCostSheet(){
   const totals=useMemo(()=>{
     const rows=data?.stages.flatMap(s=>s.rows)||[];
     const amount=rows.reduce((a,r)=>a+Number(r.actual_cost||0),0);
+    const bom=rows.reduce((a,r)=>a+Number(r.bom_cost||0),0);
     const out=data?.order.completed_qty||0;
-    return {amount,costPerUom:out>0?amount/out:0};
+    return {amount,bom,variance:amount-bom,costPerUom:out>0?amount/out:0};
   },[data]);
   if(loading) return <div className="p-8 text-center text-gray-500">Loading standard cost sheet...</div>;
   if(!data) return <div className="p-8 text-center text-red-500">Production plan not found.</div>;
   return <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 bg-[#fafbfe] min-h-full">
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost Sheet</h1><span className="px-3 py-1 rounded bg-amber-50 text-amber-700 text-sm font-semibold border border-amber-200">Draft</span></div>
-      <div className="flex gap-3"><button onClick={()=>navigate('/standard-costing')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold"><X size={16}/>Cancel</button><button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"><Save size={16}/>{saving?'Saving...':'Save'}</button></div>
+      <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost Sheet (BOM)</h1><span className="px-3 py-1 rounded bg-amber-50 text-amber-700 text-sm font-semibold border border-amber-200">Draft</span></div>
+      <div className="flex gap-3"><button onClick={()=>navigate('/standard-cost-bom')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold"><X size={16}/>Cancel</button><button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"><Save size={16}/>{saving?'Saving...':'Save'}</button></div>
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
       <h2 className="font-bold text-slate-700 mb-3">Standard Cost Sheet Details</h2>
@@ -99,8 +110,8 @@ export default function ActualStandardCostSheet(){
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Cost Details</div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Actual Cost (₹)</th><th className="p-3 text-right">Cost/Piece (₹)</th></tr></thead><tbody>
-      {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={4} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-16">#</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Actual Cost (₹)</th><th className="p-3 text-right">BOM Cost (₹)</th><th className="p-3 text-right">Variance (₹)</th><th className="p-3 text-right">Cost/Piece (₹)</th></tr></thead><tbody>
+      {data.stages.map((stage,si)=><StageRows key={stage.id} stage={stage} index={si+1}/>)}</tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={4} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-center">-</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-slate-700">{fmt(totals.bom)}</td><td className={`p-3 text-right font-bold ${totals.variance>0?'text-rose-700':totals.variance<0?'text-green-700':'text-slate-700'}`}>{fmt(totals.variance)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerUom)}</td></tr></tfoot></table></div>
     </div>
     {data.summary && data.summary.length>0 && <SummarySection summary={data.summary} meta={data.summary_meta}/>}
   </div>;
@@ -170,28 +181,35 @@ function StageRows({stage,index}:{stage:Stage;index:number}){
   const planned=stage.order_qty||0;
   const label=`${stage.process_stage || 'Stage'} - ${fmtQty(planned)} ${stage.uom||''}`;
   const subtotal=stage.rows.reduce((a,r)=>a+Number(r.actual_cost||0),0);
+  const subtotalBom=stage.rows.reduce((a,r)=>a+Number(r.bom_cost||0),0);
+  const subtotalVar=subtotal-subtotalBom;
   const subtotalPerUom=stage.rows.reduce((a,r)=>a+Number(r.cost_per_uom||0),0);
+  const varClass=(v:number)=>v>0?'text-rose-700':v<0?'text-green-700':'text-slate-700';
   return <>
     <tr className="border-t border-slate-200 bg-slate-50/70">
       <td className="p-2.5 text-center font-bold text-slate-700">{index}</td>
-      <td className="p-2.5 font-bold text-slate-800" colSpan={6}>{label}</td>
+      <td className="p-2.5 font-bold text-slate-800" colSpan={8}>{label}</td>
     </tr>
     {stage.rows.length===0
-      ? <tr className="border-t border-slate-100"><td></td><td colSpan={6} className="p-2.5 text-center text-slate-400">No cost entries</td></tr>
+      ? <tr className="border-t border-slate-100"><td></td><td colSpan={8} className="p-2.5 text-center text-slate-400">No cost entries</td></tr>
       : <>
-          {stage.rows.map((r,i)=><tr key={`${stage.id}-${i}`} className="border-t border-slate-100">
+          {stage.rows.map((r,i)=>{const v=Number(r.variance ?? ((r.actual_cost||0)-(r.bom_cost||0)));return <tr key={`${stage.id}-${i}`} className="border-t border-slate-100">
             <td className="p-2.5 text-center text-slate-500">{`${index}.${i+1}`}</td>
             <td className="p-2.5">{((r.data_source||r.cost_group)==='Material Issue'?'Material Cost':(r.data_source||r.cost_group))||'—'}</td>
             <td className="p-2.5">{r.item_group||'—'}</td>
             <td className="p-2.5 font-medium">{r.item_name||r.cost_category||'—'}</td>
             <td className="p-2.5">{r.uom||stage.uom||'—'}</td>
             <td className="p-2.5 text-right">{fmt(r.actual_cost)}</td>
+            <td className="p-2.5 text-right">{fmt(r.bom_cost||0)}</td>
+            <td className={`p-2.5 text-right ${varClass(v)}`}>{fmt(v)}</td>
             <td className="p-2.5 text-right">{fmt(r.cost_per_uom)}</td>
-          </tr>)}
+          </tr>})}
           <tr className="border-t border-slate-100 bg-slate-50/40">
             <td></td>
             <td colSpan={4} className="p-2.5 text-right font-semibold text-slate-600">Subtotal</td>
             <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotal)}</td>
+            <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotalBom)}</td>
+            <td className={`p-2.5 text-right font-semibold ${varClass(subtotalVar)}`}>{fmt(subtotalVar)}</td>
             <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(subtotalPerUom)}</td>
           </tr>
         </>}

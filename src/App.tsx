@@ -82,6 +82,7 @@ import DataTemplates from './pages/DataTemplates';
 import StandardCosting from './pages/StandardCosting';
 import StandardCostingForm from './pages/StandardCostingForm';
 import ActualStandardCostSheet from './pages/ActualStandardCostSheet';
+import ActualStandardCostSheetBom from './pages/ActualStandardCostSheetBom';
 import GeneralCost from './pages/GeneralCost';
 import GeneralCostForm from './pages/GeneralCostForm';
 import MachineCost from './pages/MachineCost';
@@ -185,6 +186,9 @@ function App() {
             <Route path="standard-costing/:id" element={<StandardCostingForm />} />
             <Route path="standard-costing/actual/plan/:planId" element={<ActualStandardCostSheet />} />
             <Route path="standard-costing/actual/:id" element={<ActualStandardCostSheet />} />
+            <Route path="standard-cost-bom" element={<StandardCosting detailBasePath="/standard-cost-bom/plan" title="Standard Cost Sheet (BOM)" />} />
+            <Route path="standard-cost-bom/plan/:planId" element={<ActualStandardCostSheetBom />} />
+            <Route path="standard-cost-bom/:id" element={<ActualStandardCostSheetBom />} />
             <Route path="general-cost" element={<GeneralCost />} />
             <Route path="general-cost/new" element={<GeneralCostForm />} />
             <Route path="general-cost/:id" element={<GeneralCostForm />} />

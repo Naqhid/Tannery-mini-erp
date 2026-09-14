@@ -27,7 +27,14 @@ interface FilterOptions {
 
 interface Customer { id: number; name: string; }
 
-export default function StandardCosting() {
+interface StandardCostingProps {
+  /** Route to open a detail sheet for a plan. Defaults to the Actual sheet. */
+  detailBasePath?: string;
+  /** Page title override. */
+  title?: string;
+}
+
+export default function StandardCosting({ detailBasePath = '/standard-costing/actual/plan', title = 'Standard Cost (Actual)' }: StandardCostingProps = {}) {
   const navigate = useNavigate();
 
   const [data, setData] = useState<any[]>([]);
@@ -93,7 +100,7 @@ export default function StandardCosting() {
       toast.info('No production plan / cost data yet for this item');
       return;
     }
-    navigate(`/standard-costing/actual/plan/${row.plan_id}`);
+    navigate(`${detailBasePath}/${row.plan_id}`);
   };
 
   const formatQty = (n: number) => n != null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) : '0.00';
@@ -107,7 +114,7 @@ export default function StandardCosting() {
             <FileText size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Standard Cost (Actual)</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">{title}</h1>
             <p className="text-xs md:text-sm text-gray-500 mt-0.5">Order-wise cost analysis with material, machine & general cost summary.</p>
           </div>
         </div>
