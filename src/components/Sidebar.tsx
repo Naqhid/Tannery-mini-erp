@@ -110,9 +110,11 @@ export const menuItems: MenuItem[] = [
     ],
   },
   { label: 'Reports', icon: <FileBarChart size={20} />, children: [
-      { label: 'Production Reports', icon: <FileText size={16} />, path: '/reports' },
-      { label: 'Inventory Reports', icon: <FileBarChart size={16} />, path: '/inventory-reports' },
-      { label: 'Cost Analysis', icon: <FileText size={16} />, path: '/cost-analysis' },
+      { label: 'Inventory', icon: <Package size={16} />, path: '/reports/inventory' },
+      { label: 'Production Plan', icon: <ClipboardList size={16} />, path: '/reports/production-plan' },
+      { label: 'Actual Production', icon: <Factory size={16} />, path: '/reports/actual-production' },
+      { label: 'Sales Order', icon: <FileText size={16} />, path: '/reports/sales-order' },
+      { label: 'Stage Costing', icon: <FileBarChart size={16} />, path: '/reports/stage-costing' },
     ],
   },
   { label: 'Settings', icon: <Settings size={20} />, children: [

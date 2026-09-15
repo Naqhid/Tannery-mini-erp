@@ -92,6 +92,12 @@ import ProductionStatusForm from './pages/ProductionStatusForm';
 import CostingReport from './pages/CostingReport';
 import DepartmentMaster from './pages/DepartmentMaster';
 import DepartmentMasterForm from './pages/DepartmentMasterForm';
+// Reports Module (grouped into 5 tabbed pages)
+import InventoryReports from './pages/reports/InventoryReports';
+import ProductionPlanReports from './pages/reports/ProductionPlanReports';
+import ActualProductionReports from './pages/reports/ActualProductionReports';
+import SalesOrderReports from './pages/reports/SalesOrderReports';
+import StageCostingReports from './pages/reports/StageCostingReports';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -240,10 +246,15 @@ function App() {
             <Route path="batch-lot-tracking" element={<BatchLotTracking />} />
             <Route path="batch-lot-tracking/new" element={<BatchLotTracking />} />
             <Route path="batch-lot-tracking/:id" element={<BatchLotTracking />} />
-            {/* Reports */}
-            <Route path="reports" element={<PlaceholderPage />} />
-            <Route path="inventory-reports" element={<PlaceholderPage />} />
-            <Route path="cost-analysis" element={<PlaceholderPage />} />
+            {/* Reports — five grouped, tabbed pages */}
+            <Route path="reports" element={<Navigate to="/reports/inventory" replace />} />
+            <Route path="reports/inventory" element={<InventoryReports />} />
+            <Route path="reports/production-plan" element={<ProductionPlanReports />} />
+            <Route path="reports/actual-production" element={<ActualProductionReports />} />
+            <Route path="reports/sales-order" element={<SalesOrderReports />} />
+            <Route path="reports/stage-costing" element={<StageCostingReports />} />
+            <Route path="inventory-reports" element={<Navigate to="/reports/inventory" replace />} />
+            <Route path="cost-analysis" element={<Navigate to="/reports/stage-costing" replace />} />
             {/* Settings */}
             <Route path="users" element={<UsersPage />} />
             <Route path="users/new" element={<UserFormPage />} />
