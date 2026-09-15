@@ -28,7 +28,7 @@ export default function PlanVsActualOutput({ embedded, title, subtitle }: { embe
     { key: 'uom', header: 'UOM' },
     { key: 'planned_qty', header: 'Plan Qty', align: 'right', render: r => fmtQty(r.planned_qty) },
     { key: 'actual_output', header: 'Actual Output', align: 'right', render: r => fmtQty(r.actual_output) },
-    { key: 'variance', header: 'Variance', align: 'right', render: r => <span className={Number(r.variance) < 0 ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>{fmtQty(r.variance)}</span> },
+    { key: 'variance', header: 'Variance (Plan − Actual)', align: 'right', render: r => <span className={Number(r.variance) > 0 ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>{fmtQty(r.variance)}</span> },
     { key: 'variance_percent', header: 'Achieved %', align: 'right', render: r => fmtPct(r.variance_percent) },
   ];
 

@@ -33,11 +33,14 @@ export async function wipCostSheet({ stage, search, page = 1, limit = 10 }) {
   // stale when issued/completed qty change without a recalc.
   const wipExpr = `GREATEST(0, COALESCE(pso.issued_qty,0) - COALESCE(pso.completed_qty,0))`;
 
+  // Only In Progress stages: production has started (output > 0) AND WIP remains
+  // (input > output). Pending stages (no output yet) are excluded.
   const baseFrom = `
      FROM production_status_orders pso
      JOIN production_plans pp ON pso.production_plan_id = pp.id AND pp.deleted_at IS NULL
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
-     WHERE ${where} AND pso.deleted_at IS NULL AND ${wipExpr} > 0`;
+     WHERE ${where} AND pso.deleted_at IS NULL
+       AND COALESCE(pso.completed_qty,0) > 0 AND ${wipExpr} > 0`;
 
   const [rows] = await pool.query(
     `SELECT pso.id, COALESCE(so.order_no, pp.plan_no) AS order_no, pp.plan_no,
@@ -59,7 +62,7 @@ export async function wipCostSheet({ stage, search, page = 1, limit = 10 }) {
 // Order-level rollup: total material/general/machine cost, output & cost/pc.
 export async function fullOrderCostSheet({ customer, search, page = 1, limit = 10 }) {
   const params = [];
-  let where = 'o.deleted_at IS NULL';
+  let where = '1=1';
   if (customer) { where += ' AND o.customer_name = ?'; params.push(customer); }
   if (search) {
     where += ' AND (o.order_no LIKE ? OR o.article LIKE ? OR o.customer_name LIKE ?)';

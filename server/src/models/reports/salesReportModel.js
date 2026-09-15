@@ -98,27 +98,34 @@ export async function openSalesOrders({ customer_id, search, page = 1, limit = 1
   }
   const offset = (page - 1) * limit;
 
-  const shippedSql = `
+  // Completed = actual production output (measurement/last stage) for the plans
+  // linked to this SO + article. This is 0 until production actually produces
+  // output, so it will not show phantom "shipped" quantity.
+  const completedSql = `
     COALESCE((
-      SELECT SUM(dni.shipped_qty)
-      FROM delivery_notes dn
-      JOIN delivery_note_items dni ON dni.delivery_note_id = dn.id
-      WHERE dn.sales_order_id = so.id
-        AND dni.item_description COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
+      SELECT SUM(t.output_qty)
+      FROM production_plans pp
+      JOIN production_status_orders pso ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name FROM production_plan_stages s2 WHERE s2.plan_id = pp.id
+          ORDER BY s2.seq DESC, s2.id DESC LIMIT 1)
+      JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+        AND pp.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
     ), 0)`;
 
   const baseFrom = `
      FROM sales_order_items soi
      JOIN sales_orders so ON soi.sales_order_id = so.id
      LEFT JOIN customers c ON so.customer_id = c.id
-     WHERE ${where} AND (COALESCE(soi.quantity,0) - ${shippedSql}) > 0`;
+     WHERE ${where} AND (COALESCE(soi.quantity,0) - ${completedSql}) > 0`;
 
   const [rows] = await pool.query(
     `SELECT soi.id, so.order_no, so.order_date, so.delivery_date, c.name AS customer_name,
        soi.item_description AS article, soi.finish_color AS color, soi.uom,
        COALESCE(soi.quantity,0) AS order_qty,
-       ${shippedSql} AS completed_qty,
-       GREATEST(0, COALESCE(soi.quantity,0) - ${shippedSql}) AS balance_qty,
+       ${completedSql} AS completed_qty,
+       GREATEST(0, COALESCE(soi.quantity,0) - ${completedSql}) AS balance_qty,
        so.status AS production_status
      ${baseFrom}
      ORDER BY so.delivery_date ASC, so.id DESC

@@ -51,10 +51,10 @@ export async function planSummary({ from_date, to_date, customer_id, status, sea
       WHEN ${mOut} > 0 THEN 'In Progress'
       ELSE 'Planned' END`;
 
-  const havingStatus = status ? `HAVING status_val = ?` : '';
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const allowed = ['plan_no', 'plan_date', 'customer_name', 'article', 'planned_qty', 'output_qty'];
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'pp.plan_date DESC, pp.id DESC';
+  // Sort against the wrapped subquery's aliased columns (all prefixed with t.).
+  const allowed = { plan_no: 't.plan_no', plan_date: 't.plan_date', customer_name: 't.customer_name', article: 't.article', planned_qty: 't.planned_qty', output_qty: 't.output_qty' };
+  const orderClause = allowed[sortBy] ? `${allowed[sortBy]} ${ord}` : 't.plan_date DESC, t.id DESC';
   const offset = (page - 1) * limit;
 
   const selectSql = `
@@ -69,11 +69,11 @@ export async function planSummary({ from_date, to_date, customer_id, status, sea
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
      WHERE ${where}`;
 
-  const rowsSql = `SELECT * FROM (${selectSql}) t ${status ? 'WHERE status_val = ?' : ''} ORDER BY ${orderClause.replace('pp.', 't.').replace('plan_date DESC, t.id DESC', 'plan_date DESC, t.id DESC')} LIMIT ? OFFSET ?`;
+  const rowsSql = `SELECT * FROM (${selectSql}) t ${status ? 'WHERE t.status_val = ?' : ''} ORDER BY ${orderClause} LIMIT ? OFFSET ?`;
   const rowParams = status ? [...params, status, Number(limit), Number(offset)] : [...params, Number(limit), Number(offset)];
   const [rows] = await pool.query(rowsSql, rowParams);
 
-  const countSql = `SELECT COUNT(*) AS total FROM (${selectSql}) t ${status ? 'WHERE status_val = ?' : ''}`;
+  const countSql = `SELECT COUNT(*) AS total FROM (${selectSql}) t ${status ? 'WHERE t.status_val = ?' : ''}`;
   const [[{ total }]] = await pool.query(countSql, status ? [...params, status] : params);
 
   return { rows, total };
@@ -97,7 +97,7 @@ export async function planVsActual({ from_date, to_date, customer_id, search, pa
     `SELECT pp.id, pp.plan_no, pp.plan_date, c.name AS customer_name, pp.article, pp.color, pp.uom,
        COALESCE(pp.planned_qty,0) AS planned_qty,
        ${mOut} AS actual_output,
-       (${mOut} - COALESCE(pp.planned_qty,0)) AS variance,
+       (COALESCE(pp.planned_qty,0) - ${mOut}) AS variance,
        CASE WHEN COALESCE(pp.planned_qty,0) > 0
          THEN ROUND((${mOut}) / pp.planned_qty * 100, 2) ELSE 0 END AS variance_percent
      FROM production_plans pp

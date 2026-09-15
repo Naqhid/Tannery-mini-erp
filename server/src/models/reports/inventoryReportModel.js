@@ -4,7 +4,8 @@ import pool from '../../config/db.js';
 // Current on-hand quantity & value per material/warehouse (as-on = now).
 export async function stockSummary({ warehouse_id, group_id, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
-  let where = '1=1';
+  // Hide zero-stock items — only show items that currently have stock.
+  let where = 'ws.current_qty <> 0';
   if (warehouse_id) { where += ' AND ws.warehouse_id = ?'; params.push(warehouse_id); }
   if (group_id) { where += ' AND m.group_id = ?'; params.push(group_id); }
   if (search) {
