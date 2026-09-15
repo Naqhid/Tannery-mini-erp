@@ -29,9 +29,15 @@ export async function wipCostSheet({ stage, search, page = 1, limit = 10 }) {
   const machCost = `
     COALESCE((SELECT SUM(mh.total_amount) FROM machine_cost_headers mh WHERE mh.production_plan_id = pso.id), 0)`;
 
-  // WIP is derived (input - output), never the stored balance_qty which can go
-  // stale when issued/completed qty change without a recalc.
-  const wipExpr = `GREATEST(0, COALESCE(pso.issued_qty,0) - COALESCE(pso.completed_qty,0))`;
+  // Rejection qty for this stage from Daily Production transactions.
+  const rejExpr = `
+    COALESCE((
+      SELECT SUM(t.rejection_qty) FROM production_status_transactions t
+      WHERE t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+    ), 0)`;
+  // WIP is derived (input − output − rejection), never the stored balance_qty
+  // which can go stale when issued/completed qty change without a recalc.
+  const wipExpr = `GREATEST(0, COALESCE(pso.issued_qty,0) - COALESCE(pso.completed_qty,0) - ${rejExpr})`;
 
   // Only In Progress stages: production has started (output > 0) AND WIP remains
   // (input > output). Pending stages (no output yet) are excluded.
