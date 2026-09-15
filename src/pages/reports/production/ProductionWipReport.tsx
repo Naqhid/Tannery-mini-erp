@@ -7,7 +7,7 @@ import { fmtQty } from '../../../lib/reportFormat';
 
 interface Row extends Record<string, unknown> {
   id: number; sales_order_no: string; plan_no: string; stage: string; article: string; color: string; uom: string;
-  input_qty: number; output_qty: number; rejection_qty: number; opening_wip: number; closing_wip: number;
+  input_qty: number; output_qty: number; rejection_qty: number; plan_qty: number; wip_qty: number;
 }
 
 export default function ProductionWipReport({ embedded }: { embedded?: boolean }) {
@@ -26,11 +26,11 @@ export default function ProductionWipReport({ embedded }: { embedded?: boolean }
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },
     { key: 'uom', header: 'UOM' },
-    { key: 'opening_wip', header: 'Opening WIP', align: 'right', render: r => fmtQty(r.opening_wip) },
+    { key: 'plan_qty', header: 'Plan Qty', align: 'right', render: r => fmtQty(r.plan_qty) },
     { key: 'input_qty', header: 'Input', align: 'right', render: r => fmtQty(r.input_qty) },
     { key: 'output_qty', header: 'Output', align: 'right', render: r => fmtQty(r.output_qty) },
     { key: 'rejection_qty', header: 'Rejection', align: 'right', render: r => <span className="text-red-600">{fmtQty(r.rejection_qty)}</span> },
-    { key: 'closing_wip', header: 'Closing WIP', align: 'right', render: r => <span className="font-semibold text-amber-700">{fmtQty(r.closing_wip)}</span> },
+    { key: 'wip_qty', header: 'WIP (In − Out)', align: 'right', render: r => <span className="font-semibold text-amber-700">{fmtQty(r.wip_qty)}</span> },
   ];
 
   return (

@@ -15,6 +15,22 @@ const measurementOutputSql = (planCol) => `
       )
   ), 0)`;
 
+// First (by-seq) stage cumulative Daily Production input for a plan — the qty
+// that entered production. Used as the plan-level "input" for WIP = input−output.
+const firstStageInputSql = (planCol) => `
+  COALESCE((
+    SELECT SUM(t.input_qty)
+    FROM production_status_orders pso
+    JOIN production_status_transactions t
+      ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+    WHERE pso.production_plan_id = ${planCol} AND pso.deleted_at IS NULL
+      AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+        SELECT s2.stage_name FROM production_plan_stages s2
+        WHERE s2.plan_id = ${planCol}
+        ORDER BY s2.seq ASC, s2.id ASC LIMIT 1
+      )
+  ), 0)`;
+
 // ─── Production Plan Summary ─────────────────────────────────────────────────
 export async function planSummary({ from_date, to_date, customer_id, status, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
@@ -28,6 +44,7 @@ export async function planSummary({ from_date, to_date, customer_id, status, sea
   }
 
   const mOut = measurementOutputSql('pp.id');
+  const mIn = firstStageInputSql('pp.id');
   const statusExpr = `CASE
       WHEN (SELECT COUNT(*) FROM production_plan_stages s0 WHERE s0.plan_id = pp.id) = 0 THEN 'Planned'
       WHEN ${mOut} >= COALESCE(pp.planned_qty,0) AND COALESCE(pp.planned_qty,0) > 0 THEN 'Completed'
@@ -44,7 +61,7 @@ export async function planSummary({ from_date, to_date, customer_id, status, sea
      SELECT pp.id, pp.plan_no, pp.plan_date, c.name AS customer_name, so.order_no AS sales_order_no,
        pp.article, pp.color, COALESCE(pp.planned_qty,0) AS planned_qty, pp.uom,
        ${mOut} AS output_qty,
-       GREATEST(0, COALESCE(pp.planned_qty,0) - ${mOut}) AS wip_qty,
+       GREATEST(0, ${mIn} - ${mOut}) AS wip_qty,
        GREATEST(0, COALESCE(pp.planned_qty,0) - ${mOut}) AS balance_qty,
        ${statusExpr} AS status_val
      FROM production_plans pp
@@ -117,6 +134,13 @@ export async function planStatus({ from_date, to_date, stage, search, page = 1, 
       WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
         AND pso.process_stage COLLATE utf8mb4_unicode_ci = s.stage_name COLLATE utf8mb4_unicode_ci
     ), 0)`;
+  const stageInput = `
+    COALESCE((
+      SELECT SUM(t.input_qty) FROM production_status_orders pso
+      JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = s.stage_name COLLATE utf8mb4_unicode_ci
+    ), 0)`;
 
   const baseFrom = `
      FROM production_plan_stages s
@@ -126,7 +150,7 @@ export async function planStatus({ from_date, to_date, stage, search, page = 1, 
   const [rows] = await pool.query(
     `SELECT s.id, pp.plan_no, pp.plan_date, pp.article, pp.color, s.seq, s.stage_name,
        COALESCE(s.planned_qty,0) AS plan_qty, ${stageOutput} AS output_qty,
-       GREATEST(0, COALESCE(s.planned_qty,0) - ${stageOutput}) AS wip_qty,
+       GREATEST(0, ${stageInput} - ${stageOutput}) AS wip_qty,
        CASE WHEN COALESCE(s.planned_qty,0) > 0 THEN ROUND(${stageOutput}/s.planned_qty*100,2) ELSE 0 END AS completion_percent,
        CASE
          WHEN COALESCE(s.planned_qty,0) > 0 AND ${stageOutput} >= s.planned_qty THEN 'Completed'
@@ -154,6 +178,7 @@ export async function orderProductionPlan({ from_date, to_date, customer_id, sea
     const t = `%${search}%`; params.push(t, t, t, t);
   }
   const mOut = measurementOutputSql('pp.id');
+  const mIn = firstStageInputSql('pp.id');
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
@@ -161,7 +186,7 @@ export async function orderProductionPlan({ from_date, to_date, customer_id, sea
        c.name AS customer_name, pp.article, pp.color, pp.uom,
        COALESCE(pp.planned_qty,0) AS plan_qty,
        ${mOut} AS output_qty,
-       GREATEST(0, COALESCE(pp.planned_qty,0) - ${mOut}) AS wip_qty,
+       GREATEST(0, ${mIn} - ${mOut}) AS wip_qty,
        pp.status
      FROM production_plans pp
      LEFT JOIN customers c ON pp.customer_id = c.id
@@ -200,7 +225,8 @@ export async function dailyProductionOutput({ from_date, to_date, stage, search,
   const [rows] = await pool.query(
     `SELECT t.id, t.production_date, t.transaction_no, pso.order_no AS plan_no,
        pso.process_stage, pso.article, pso.color, t.uom,
-       t.input_qty, t.output_qty, t.rejection_qty, t.wip_qty
+       t.input_qty, t.output_qty, t.rejection_qty,
+       GREATEST(0, COALESCE(t.input_qty,0) - COALESCE(t.output_qty,0)) AS wip_qty
      ${baseFrom}
      ORDER BY t.production_date DESC, t.id DESC
      LIMIT ? OFFSET ?`,
@@ -235,7 +261,7 @@ export async function stageWiseProduction({ from_date, to_date, stage, search, p
        COALESCE(SUM(t.input_qty),0) AS input_qty,
        COALESCE(SUM(t.output_qty),0) AS output_qty,
        COALESCE(SUM(t.rejection_qty),0) AS rejection_qty,
-       COALESCE(SUM(t.wip_qty),0) AS wip_qty,
+       GREATEST(0, COALESCE(SUM(t.input_qty),0) - COALESCE(SUM(t.output_qty),0)) AS wip_qty,
        CASE WHEN SUM(t.input_qty) > 0 THEN ROUND(SUM(t.output_qty)/SUM(t.input_qty)*100,2) ELSE 0 END AS output_percent
      ${baseFrom}
      ORDER BY output_qty DESC
@@ -253,7 +279,8 @@ export async function stageWiseProduction({ from_date, to_date, stage, search, p
 }
 
 // ─── Production WIP Report ───────────────────────────────────────────────────
-// As-on WIP per plan+stage: planned − output.
+// As-on WIP per plan+stage: input − output (qty that entered the stage but has
+// not yet come out as finished/output).
 export async function productionWip({ stage, search, page = 1, limit = 10 }) {
   const params = [];
   let where = 'pp.deleted_at IS NULL';
@@ -286,17 +313,20 @@ export async function productionWip({ stage, search, page = 1, limit = 10 }) {
         AND pso.process_stage COLLATE utf8mb4_unicode_ci = s.stage_name COLLATE utf8mb4_unicode_ci
     ), 0)`;
 
+  // WIP = input − output for the stage.
+  const wipExpr = `GREATEST(0, ${stageInput} - ${stageOutput})`;
+
   const baseFrom = `
      FROM production_plan_stages s
      JOIN production_plans pp ON s.plan_id = pp.id
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
-     WHERE ${where} AND (COALESCE(s.planned_qty,0) - ${stageOutput}) > 0`;
+     WHERE ${where} AND ${wipExpr} > 0`;
 
   const [rows] = await pool.query(
     `SELECT s.id, so.order_no AS sales_order_no, pp.plan_no, s.stage_name AS stage, pp.article, pp.color, pp.uom,
        ${stageInput} AS input_qty, ${stageOutput} AS output_qty, ${stageRej} AS rejection_qty,
-       COALESCE(s.planned_qty,0) AS opening_wip,
-       GREATEST(0, COALESCE(s.planned_qty,0) - ${stageOutput}) AS closing_wip
+       COALESCE(s.planned_qty,0) AS plan_qty,
+       ${wipExpr} AS wip_qty
      ${baseFrom}
      ORDER BY pp.plan_date DESC, s.seq ASC
      LIMIT ? OFFSET ?`,

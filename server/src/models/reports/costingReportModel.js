@@ -29,16 +29,20 @@ export async function wipCostSheet({ stage, search, page = 1, limit = 10 }) {
   const machCost = `
     COALESCE((SELECT SUM(mh.total_amount) FROM machine_cost_headers mh WHERE mh.production_plan_id = pso.id), 0)`;
 
+  // WIP is derived (input - output), never the stored balance_qty which can go
+  // stale when issued/completed qty change without a recalc.
+  const wipExpr = `GREATEST(0, COALESCE(pso.issued_qty,0) - COALESCE(pso.completed_qty,0))`;
+
   const baseFrom = `
      FROM production_status_orders pso
      JOIN production_plans pp ON pso.production_plan_id = pp.id AND pp.deleted_at IS NULL
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
-     WHERE ${where} AND pso.deleted_at IS NULL AND pso.balance_qty > 0`;
+     WHERE ${where} AND pso.deleted_at IS NULL AND ${wipExpr} > 0`;
 
   const [rows] = await pool.query(
     `SELECT pso.id, COALESCE(so.order_no, pp.plan_no) AS order_no, pp.plan_no,
        pso.process_stage AS stage, pso.article, pso.color, pso.uom,
-       pso.issued_qty AS input_qty, pso.completed_qty AS output_qty, pso.balance_qty AS wip_qty,
+       pso.issued_qty AS input_qty, pso.completed_qty AS output_qty, ${wipExpr} AS wip_qty,
        ${matCost} AS material_cost, ${genCost} AS general_cost, ${machCost} AS machine_cost,
        (${matCost} + ${genCost} + ${machCost}) AS total_cost,
        CASE WHEN pso.completed_qty > 0 THEN (${matCost} + ${genCost} + ${machCost}) / pso.completed_qty ELSE 0 END AS cost_per_pc

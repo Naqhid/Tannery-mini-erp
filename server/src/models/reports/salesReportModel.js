@@ -160,6 +160,20 @@ export async function salesOrderProductionTracking({ customer_id, search, page =
       WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
         AND pp.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
     ), 0)`;
+  // Input = cumulative Daily Production input of each plan's FIRST stage — the
+  // qty that entered production. WIP = input − output.
+  const inputSql = `
+    COALESCE((
+      SELECT SUM(t.input_qty)
+      FROM production_plans pp
+      JOIN production_status_orders pso ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name FROM production_plan_stages s2 WHERE s2.plan_id = pp.id
+          ORDER BY s2.seq ASC, s2.id ASC LIMIT 1)
+      JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+        AND pp.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
+    ), 0)`;
 
   const baseFrom = `
      FROM sales_order_items soi
@@ -173,7 +187,7 @@ export async function salesOrderProductionTracking({ customer_id, search, page =
        COALESCE(soi.quantity,0) AS order_qty,
        ${plannedSql} AS plan_qty,
        ${outputSql} AS output_qty,
-       GREATEST(0, ${plannedSql} - ${outputSql}) AS wip_qty,
+       GREATEST(0, ${inputSql} - ${outputSql}) AS wip_qty,
        GREATEST(0, COALESCE(soi.quantity,0) - ${outputSql}) AS order_balance,
        so.status
      ${baseFrom}
