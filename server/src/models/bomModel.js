@@ -171,9 +171,9 @@ export async function addItem(bomId, data, createdBy = null) {
   // still reference materials (chemicals), so they must go to material_id.
   const isMachine = data.type === 'Machine';
   const [result] = await pool.query(
-    `INSERT INTO bom_items (bom_id, material_id, machine_id, type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [bomId, isMachine ? null : data.material_id, isMachine ? data.material_id : null, data.type, data.uom, data.qty,
+    `INSERT INTO bom_items (bom_id, material_id, machine_id, type, bom_type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [bomId, isMachine ? null : data.material_id, isMachine ? data.material_id : null, data.type, data.bom_type || null, data.uom, data.qty,
      data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null,
      data.remarks, data.supplier_id || null, createdBy]
   );
@@ -185,8 +185,8 @@ export async function updateItem(id, data, updatedBy = null) {
   // See addItem: only a genuine Machine line goes to machine_id.
   const isMachine = data.type === 'Machine';
   const [result] = await pool.query(
-    `UPDATE bom_items SET material_id=?, machine_id=?, type=?, uom=?, qty=?, unit_cost=?, amount=?, scrap_percent=?, effective_from=?, effective_to=?, remarks=?, supplier_id=?, updated_by=? WHERE id=?`,
-    [isMachine ? null : data.material_id, isMachine ? data.material_id : null, data.type, data.uom, data.qty, data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null, data.remarks, data.supplier_id || null, updatedBy, id]
+    `UPDATE bom_items SET material_id=?, machine_id=?, type=?, bom_type=?, uom=?, qty=?, unit_cost=?, amount=?, scrap_percent=?, effective_from=?, effective_to=?, remarks=?, supplier_id=?, updated_by=? WHERE id=?`,
+    [isMachine ? null : data.material_id, isMachine ? data.material_id : null, data.type, data.bom_type || null, data.uom, data.qty, data.unit_cost, data.amount, data.scrap_percent || 0, data.effective_from || null, data.effective_to || null, data.remarks, data.supplier_id || null, updatedBy, id]
   );
   if (result.affectedRows) {
     const [[item]] = await pool.query('SELECT bom_id FROM bom_items WHERE id=?', [id]);
@@ -323,9 +323,9 @@ export async function importBom(sourceBomId, createdBy = null) {
     // Copy all items from source
     for (const item of sourceItems) {
       await conn.query(
-        `INSERT INTO bom_items (bom_id, material_id, machine_id, type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [newBomId, item.material_id, item.machine_id, item.type, item.uom, item.qty,
+        `INSERT INTO bom_items (bom_id, material_id, machine_id, type, bom_type, uom, qty, unit_cost, amount, scrap_percent, effective_from, effective_to, remarks, supplier_id, created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [newBomId, item.material_id, item.machine_id, item.type, item.bom_type, item.uom, item.qty,
          item.unit_cost, item.amount, item.scrap_percent, item.effective_from, item.effective_to,
          item.remarks, item.supplier_id, createdBy]
       );

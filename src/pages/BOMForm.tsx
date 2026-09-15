@@ -18,6 +18,7 @@ interface BOMItemRow {
   material_code: string;
   material_name: string;
   type: string;
+  bom_type: string;
   uom: string;
   qty: number;
   unit_cost: number;
@@ -206,6 +207,7 @@ export default function BOMForm() {
           body: JSON.stringify({
             material_id: item.material_id,
             type: item.type,
+            bom_type: item.bom_type || null,
             uom: item.uom,
             qty: item.qty,
             unit_cost: item.unit_cost,
@@ -227,7 +229,7 @@ export default function BOMForm() {
   const addRow = () => {
     setItems(prev => [...prev, {
       id: Date.now(), material_id: 0, material_code: '', material_name: '',
-      type: '', uom: 'Kg', qty: 0, unit_cost: 0, amount: 0, scrap_percent: 0,
+      type: '', bom_type: 'Wet End', uom: 'Kg', qty: 0, unit_cost: 0, amount: 0, scrap_percent: 0,
       effective_from: '', effective_to: '', remarks: '', supplier_id: null, supplier_name: '',
     }]);
     setTimeout(() => {
@@ -296,6 +298,7 @@ export default function BOMForm() {
     const payload = {
       material_id: item.material_id,
       type: item.type,
+      bom_type: item.bom_type || null,
       uom: item.uom || 'Kg',
       qty: item.qty,
       unit_cost: item.unit_cost,
@@ -398,12 +401,6 @@ export default function BOMForm() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Select
-                label="BOM Type"
-                options={BOM_TYPES.map(t => ({ value: t, label: t }))}
-                value={formData.process_type || 'Wet End Chemicals'}
-                onChange={(e) => updateField('process_type', e.target.value)}
-              />
               <div>
                 <label className="block text-[11px] font-medium text-gray-600 mb-1">Status</label>
                 <Select
@@ -509,6 +506,16 @@ export default function BOMForm() {
                         placeholder="Select material..."
                       />
                     </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-gray-500">BOM Type</label>
+                      <select value={item.bom_type || ''}
+                        onChange={(e) => updateRow(item.id, 'bom_type', e.target.value)}
+                        onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-400 bg-white">
+                        <option value="">—</option>
+                        {BOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="text-[10px] font-medium text-gray-500">Qty</label>
@@ -565,6 +572,7 @@ export default function BOMForm() {
                     <tr className="bg-slate-50 border-b border-gray-200">
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[220px]">Material Name</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-28">BOM Type</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">Qty</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">UOM</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-24">Cost</th>
@@ -576,7 +584,7 @@ export default function BOMForm() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {items.length === 0 ? (
-                      <tr><td colSpan={9} className="py-8 text-center text-gray-400 text-xs">No products added. Click "Add Row" to start.</td></tr>
+                      <tr><td colSpan={10} className="py-8 text-center text-gray-400 text-xs">No products added. Click "Add Row" to start.</td></tr>
                     ) : items.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-blue-50/20">
                         <td className="py-1.5 px-2 text-gray-500">{idx + 1}</td>
@@ -587,6 +595,15 @@ export default function BOMForm() {
                             onChange={(val) => updateRow(item.id, 'material_id', Number(val))}
                             placeholder="Select..."
                           />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <select value={item.bom_type || ''}
+                            onChange={(e) => updateRow(item.id, 'bom_type', e.target.value)}
+                            onBlur={() => !isNew && item.material_id && saveRowToServer(item)}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+                            <option value="">—</option>
+                            {BOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
                         </td>
                         <td className="py-1.5 px-2">
                           <input type="number" value={item.qty || ''} onChange={(e) => updateRow(item.id, 'qty', Number(e.target.value))}
