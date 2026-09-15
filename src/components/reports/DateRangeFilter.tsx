@@ -27,7 +27,16 @@ export default function DateRangeFilter({ preset, onPresetChange, range, onRange
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset]);
 
-  const disableInputs = preset !== 'custom';
+  // Editing a date manually switches the preset to "Custom" so the typed value
+  // is kept (a preset would otherwise overwrite it on the next render).
+  const handleFrom = (v: string) => {
+    if (preset !== 'custom') onPresetChange('custom');
+    onRangeChange({ ...range, from: v });
+  };
+  const handleTo = (v: string) => {
+    if (preset !== 'custom') onPresetChange('custom');
+    onRangeChange({ ...range, to: v });
+  };
 
   return (
     <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
@@ -50,9 +59,8 @@ export default function DateRangeFilter({ preset, onPresetChange, range, onRange
         <input
           type="date"
           value={range.from}
-          disabled={disableInputs}
-          onChange={(e) => onRangeChange({ ...range, from: e.target.value })}
-          className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+          onChange={(e) => handleFrom(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div className="flex items-center gap-2">
@@ -60,9 +68,8 @@ export default function DateRangeFilter({ preset, onPresetChange, range, onRange
         <input
           type="date"
           value={range.to}
-          disabled={disableInputs}
-          onChange={(e) => onRangeChange({ ...range, to: e.target.value })}
-          className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+          onChange={(e) => handleTo(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
         />
       </div>
     </div>
