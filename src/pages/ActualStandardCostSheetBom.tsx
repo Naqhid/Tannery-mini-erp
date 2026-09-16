@@ -91,7 +91,7 @@ export default function ActualStandardCostSheetBom(){
   if(!data) return <div className="p-8 text-center text-red-500">Production plan not found.</div>;
   return <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 bg-[#fafbfe] min-h-full">
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost Sheet (BOM)</h1><span className="px-3 py-1 rounded bg-amber-50 text-amber-700 text-sm font-semibold border border-amber-200">Draft</span></div>
+      <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost (BOM)</h1><span className="px-3 py-1 rounded bg-amber-50 text-amber-700 text-sm font-semibold border border-amber-200">Draft</span></div>
       <div className="flex gap-3"><button onClick={()=>navigate('/standard-cost-bom')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold"><X size={16}/>Cancel</button><button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"><Save size={16}/>{saving?'Saving...':'Save'}</button></div>
     </div>
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">

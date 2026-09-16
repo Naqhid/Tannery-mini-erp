@@ -192,7 +192,7 @@ function App() {
             <Route path="standard-costing/:id" element={<StandardCostingForm />} />
             <Route path="standard-costing/actual/plan/:planId" element={<ActualStandardCostSheet />} />
             <Route path="standard-costing/actual/:id" element={<ActualStandardCostSheet />} />
-            <Route path="standard-cost-bom" element={<StandardCosting detailBasePath="/standard-cost-bom/plan" title="Standard Cost Sheet (BOM)" />} />
+            <Route path="standard-cost-bom" element={<StandardCosting detailBasePath="/standard-cost-bom/plan" title="Standard Cost (BOM)" />} />
             <Route path="standard-cost-bom/plan/:planId" element={<ActualStandardCostSheetBom />} />
             <Route path="standard-cost-bom/:id" element={<ActualStandardCostSheetBom />} />
             <Route path="general-cost" element={<GeneralCost />} />
