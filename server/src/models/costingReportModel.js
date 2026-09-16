@@ -230,40 +230,77 @@ export async function getActualCostDetailByPlan(planId) {
  * detail. Used by both getActualCostDetail and getActualCostDetailByPlan.
  */
 async function buildDetailFromSeed(seed) {
-  // Note: scalar subqueries are used for the process-stage UOM/seq (instead of
-  // LEFT JOINs) so that duplicate rows in process_stages / production_plan_stages
-  // can never multiply a stage into several summary/detail blocks.
+  // ── Order-level rollup ──────────────────────────────────────────────────
+  // A single sales order + article can be produced across MULTIPLE production
+  // plans (e.g. PRP-000004 + PRP-000005). Material issues, machine & general
+  // costs may be recorded against any of those sibling plans. So we gather all
+  // sibling plans for the same sales order + article + color and aggregate the
+  // whole order's cost, not just the one plan that was opened.
+  let siblingPlanIds = seed.production_plan_id ? [seed.production_plan_id] : [];
+  let siblingPlanNos = [];
+  if (seed.production_plan_id) {
+    const [siblings] = await pool.query(
+      `SELECT pp2.id, pp2.plan_no
+       FROM production_plans pp
+       JOIN production_plans pp2
+         ON ((pp.sales_order_id IS NOT NULL AND pp2.sales_order_id = pp.sales_order_id)
+             OR (pp.sales_order_id IS NULL AND pp2.id = pp.id))
+        AND pp2.deleted_at IS NULL
+        AND TRIM(REGEXP_REPLACE(COALESCE(pp2.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+            = TRIM(REGEXP_REPLACE(COALESCE(pp.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+       WHERE pp.id = ? AND pp.deleted_at IS NULL`,
+      [seed.production_plan_id]
+    );
+    if (siblings.length) {
+      siblingPlanIds = siblings.map(s => s.id);
+      siblingPlanNos = siblings.map(s => s.plan_no).filter(Boolean);
+    }
+  }
+  const planIdList = siblingPlanIds.length ? siblingPlanIds : [0];
+  const planNoList = siblingPlanNos.length ? siblingPlanNos : [''];
+
+  // Gather stage rows across ALL sibling plans, merged by process stage name so
+  // the same stage from two plans combines into one row. GROUP_CONCAT keeps the
+  // set of production_status_orders ids per stage (needed for machine/general
+  // cost which link by pso id).
   const [stages] = await pool.query(
-    `SELECT pso.id, pso.process_stage, pso.plan_date, pso.customer_name,
-            pso.article, pso.color, pso.order_no, pso.issued_qty AS order_qty,
-            pso.completed_qty, pso.balance_qty, pso.status, pso.production_plan_id,
-            -- UOM shown against each stage comes from the Daily Production status
-            -- (process stage master), falling back to the order uom.
-            COALESCE((
-              SELECT ps.uom FROM process_stages ps
-              WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
-              ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
-            ), pso.uom) AS uom,
-            -- Rejection qty from Daily Production for this stage.
-            COALESCE((
-              SELECT SUM(t.rejection_qty) FROM production_status_transactions t
-              WHERE t.production_status_order_id = pso.id AND t.deleted_at IS NULL
-            ), 0) AS rejection_qty,
-            -- Sequence follows the Process Stage master ordering.
-            COALESCE((
-              SELECT ps.seq FROM process_stages ps
-              WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
-              ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
-            ), (
-              SELECT pps.seq FROM production_plan_stages pps
-              WHERE pps.plan_id = pso.production_plan_id
-                AND pps.stage_name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
-              ORDER BY pps.id LIMIT 1
-            ), 999999) AS stage_seq
+    `SELECT
+        MIN(pso.id) AS id,
+        GROUP_CONCAT(DISTINCT pso.id) AS pso_ids,
+        pso.process_stage,
+        MIN(pso.plan_date) AS plan_date,
+        MAX(pso.customer_name) AS customer_name,
+        MAX(pso.article) AS article,
+        MAX(pso.color) AS color,
+        MAX(pso.order_no) AS order_no,
+        SUM(pso.issued_qty) AS order_qty,
+        SUM(pso.completed_qty) AS completed_qty,
+        SUM(pso.balance_qty) AS balance_qty,
+        MAX(pso.status) AS status,
+        MIN(pso.production_plan_id) AS production_plan_id,
+        COALESCE((
+          SELECT ps.uom FROM process_stages ps
+          WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+          ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
+        ), MAX(pso.uom)) AS uom,
+        COALESCE((
+          SELECT SUM(t.rejection_qty) FROM production_status_transactions t
+          JOIN production_status_orders p2 ON p2.id = t.production_status_order_id
+          WHERE p2.process_stage COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+            AND p2.production_plan_id IN (${planIdList.map(() => '?').join(',')})
+            AND t.deleted_at IS NULL AND p2.deleted_at IS NULL
+        ), 0) AS rejection_qty,
+        COALESCE((
+          SELECT ps.seq FROM process_stages ps
+          WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+          ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
+        ), 999999) AS stage_seq
      FROM production_status_orders pso
-     WHERE pso.deleted_at IS NULL AND pso.order_no=? AND pso.article=? AND COALESCE(pso.color,'')=COALESCE(?, '')
-     ORDER BY stage_seq ASC, pso.id ASC`,
-    [seed.order_no, seed.article, seed.color]
+     WHERE pso.deleted_at IS NULL
+       AND pso.production_plan_id IN (${planIdList.map(() => '?').join(',')})
+     GROUP BY pso.process_stage
+     ORDER BY stage_seq ASC, id ASC`,
+    [...planIdList, ...planIdList]
   );
 
   // Resolve the real Sales Order No and ordered quantity from the linked sales
@@ -412,6 +449,10 @@ async function buildDetailFromSeed(seed) {
   for (const stage of stages) {
     // Material Issues for this plan + stage. Item Group comes from the
     // material's group_master; Item Name is the material name.
+    // Material Issues across ALL sibling plans for this stage.
+    const psoIds = String(stage.pso_ids || stage.id).split(',').map(s => Number(s)).filter(Boolean);
+    const psoIdPlaceholders = psoIds.length ? psoIds.map(() => '?').join(',') : '0';
+    const batchPlaceholders = planNoList.map(() => '?').join(',');
     const [materialRows] = await pool.query(
       `SELECT 'Material Issue' AS data_source,
               COALESCE(g.name, '') AS item_group,
@@ -422,11 +463,11 @@ async function buildDetailFromSeed(seed) {
        JOIN material_issue_items i ON i.issue_id=h.id
        JOIN materials m ON m.id = i.material_id
        LEFT JOIN group_master g ON m.group_id = g.id
-       WHERE h.production_batch = ?
+       WHERE h.production_batch IN (${batchPlaceholders})
          AND COALESCE(h.process_stage,'') COLLATE utf8mb4_0900_ai_ci = COALESCE(?, '') COLLATE utf8mb4_0900_ai_ci
        GROUP BY g.name, m.name, i.uom
        ORDER BY g.name, m.name`,
-      [planNo, stage.process_stage]
+      [...planNoList, stage.process_stage]
     );
     const [generalRows] = await pool.query(
       `SELECT 'General Cost' AS data_source,
@@ -439,9 +480,9 @@ async function buildDetailFromSeed(seed) {
          SELECT mm.name AS material_name, gm.name AS group_name
          FROM materials mm LEFT JOIN group_master gm ON mm.group_id = gm.id
        ) mg ON mg.material_name COLLATE utf8mb4_0900_ai_ci = i.cost_category COLLATE utf8mb4_0900_ai_ci
-       WHERE h.production_plan_id=?
+       WHERE h.production_plan_id IN (${psoIdPlaceholders})
        GROUP BY mg.group_name, i.cost_category, i.uom
-       ORDER BY MIN(i.sort_order), MIN(i.id)`, [stage.id]
+       ORDER BY MIN(i.sort_order), MIN(i.id)`, psoIds.length ? psoIds : [0]
     );
     const [machineRows] = await pool.query(
       `SELECT 'Machine Cost' AS data_source,
@@ -451,9 +492,9 @@ async function buildDetailFromSeed(seed) {
        FROM machine_cost_headers h
        JOIN machine_cost_items i ON i.machine_cost_id=h.id
        LEFT JOIN group_master g ON i.group_id = g.id
-       WHERE h.production_plan_id=?
+       WHERE h.production_plan_id IN (${psoIdPlaceholders})
        GROUP BY COALESCE(g.name, i.group_name, ''), i.machine_name, i.uom
-       ORDER BY MIN(i.sort_order), MIN(i.id)`, [stage.id]
+       ORDER BY MIN(i.sort_order), MIN(i.id)`, psoIds.length ? psoIds : [0]
     );
     const outputQty = Number(stage.completed_qty) || 0;
     const perUom = (amt) => outputQty > 0 ? amt / outputQty : 0;
