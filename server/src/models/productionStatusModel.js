@@ -56,16 +56,17 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
         )
     ), 0)`;
 
-  // Per-stage (this row's) Daily Production sums, used for a correct WIP that
-  // never relies on the stored balance_qty (which can go stale).
-  const stageInputSql = `COALESCE((SELECT SUM(t.input_qty) FROM production_status_transactions t WHERE t.production_status_order_id = o.id AND t.deleted_at IS NULL), 0)`;
-  const stageOutputSql = `COALESCE((SELECT SUM(t.output_qty) FROM production_status_transactions t WHERE t.production_status_order_id = o.id AND t.deleted_at IS NULL), 0)`;
+  // Rejection for this row (stage) from Daily Production transactions.
   const stageRejectionSql = `COALESCE((SELECT SUM(t.rejection_qty) FROM production_status_transactions t WHERE t.production_status_order_id = o.id AND t.deleted_at IS NULL), 0)`;
 
+  // WIP must match the displayed columns exactly:
+  //   Input  = o.issued_qty (stored)
+  //   Output = completed_qty (measurement output alias below)
+  //   WIP    = GREATEST(0, Input − Output − Rejection)
   const [rows] = await pool.query(
     `SELECT o.*, ${measurementCompletedSql} AS completed_qty,
        ${stageRejectionSql} AS rejection_qty,
-       GREATEST(0, ${stageInputSql} - ${stageOutputSql} - ${stageRejectionSql}) AS balance_qty
+       GREATEST(0, COALESCE(o.issued_qty,0) - ${measurementCompletedSql} - ${stageRejectionSql}) AS balance_qty
        FROM production_status_orders o
        WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
