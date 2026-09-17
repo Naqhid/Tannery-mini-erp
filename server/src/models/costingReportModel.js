@@ -259,48 +259,70 @@ async function buildDetailFromSeed(seed) {
   const planIdList = siblingPlanIds.length ? siblingPlanIds : [0];
   const planNoList = siblingPlanNos.length ? siblingPlanNos : [''];
 
-  // Gather stage rows across ALL sibling plans, merged by process stage name so
-  // the same stage from two plans combines into one row. GROUP_CONCAT keeps the
-  // set of production_status_orders ids per stage (needed for machine/general
-  // cost which link by pso id).
+  // Build the stage list from the PLAN DEFINITION (production_plan_stages) across
+  // all sibling plans, UNIONed with any Daily Production stages, so EVERY defined
+  // stage appears (Wet End, Finishing, Measurement, Packing, ...) even if no
+  // daily-production/cost has been recorded for it yet. Stages are merged by name.
+  // planIdList holds validated integer plan ids, so they are safe to inline.
+  const idInList = planIdList.map(n => Number(n) || 0).join(',');
+  const seedPlanId = Number(seed.production_plan_id) || 0;
   const [stages] = await pool.query(
     `SELECT
-        MIN(pso.id) AS id,
-        GROUP_CONCAT(DISTINCT pso.id) AS pso_ids,
-        pso.process_stage,
-        MIN(pso.plan_date) AS plan_date,
-        MAX(pso.customer_name) AS customer_name,
-        MAX(pso.article) AS article,
-        MAX(pso.color) AS color,
-        MAX(pso.order_no) AS order_no,
-        SUM(pso.issued_qty) AS order_qty,
-        SUM(pso.completed_qty) AS completed_qty,
-        SUM(pso.balance_qty) AS balance_qty,
-        MAX(pso.status) AS status,
-        MIN(pso.production_plan_id) AS production_plan_id,
+        stage_union.stage_name AS process_stage,
+        (SELECT GROUP_CONCAT(DISTINCT pso.id)
+           FROM production_status_orders pso
+          WHERE pso.deleted_at IS NULL
+            AND pso.production_plan_id IN (${idInList})
+            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+        ) AS pso_ids,
+        (SELECT MIN(pso.id)
+           FROM production_status_orders pso
+          WHERE pso.deleted_at IS NULL
+            AND pso.production_plan_id IN (${idInList})
+            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+        ) AS id,
+        ${seedPlanId} AS production_plan_id,
+        COALESCE((
+          SELECT SUM(pso.completed_qty) FROM production_status_orders pso
+          WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
+            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+        ), 0) AS completed_qty,
+        COALESCE((
+          SELECT SUM(pso.issued_qty) FROM production_status_orders pso
+          WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
+            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+        ), 0) AS order_qty,
         COALESCE((
           SELECT ps.uom FROM process_stages ps
-          WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+          WHERE ps.name COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
           ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
-        ), MAX(pso.uom)) AS uom,
+        ), '') AS uom,
         COALESCE((
           SELECT SUM(t.rejection_qty) FROM production_status_transactions t
           JOIN production_status_orders p2 ON p2.id = t.production_status_order_id
-          WHERE p2.process_stage COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
-            AND p2.production_plan_id IN (${planIdList.map(() => '?').join(',')})
+          WHERE p2.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+            AND p2.production_plan_id IN (${idInList})
             AND t.deleted_at IS NULL AND p2.deleted_at IS NULL
         ), 0) AS rejection_qty,
         COALESCE((
           SELECT ps.seq FROM process_stages ps
-          WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+          WHERE ps.name COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
           ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
-        ), 999999) AS stage_seq
-     FROM production_status_orders pso
-     WHERE pso.deleted_at IS NULL
-       AND pso.production_plan_id IN (${planIdList.map(() => '?').join(',')})
-     GROUP BY pso.process_stage
-     ORDER BY stage_seq ASC, id ASC`,
-    [...planIdList, ...planIdList]
+        ), MIN(stage_union.min_seq), 999999) AS stage_seq
+     FROM (
+        SELECT s.stage_name COLLATE utf8mb4_unicode_ci AS stage_name, MIN(s.seq) AS min_seq
+          FROM production_plan_stages s
+         WHERE s.plan_id IN (${idInList})
+         GROUP BY s.stage_name COLLATE utf8mb4_unicode_ci
+        UNION
+        SELECT pso.process_stage COLLATE utf8mb4_unicode_ci AS stage_name, 999999 AS min_seq
+          FROM production_status_orders pso
+         WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
+         GROUP BY pso.process_stage COLLATE utf8mb4_unicode_ci
+     ) stage_union
+     GROUP BY stage_union.stage_name
+     ORDER BY stage_seq ASC`,
+    []
   );
 
   // Resolve the real Sales Order No and ordered quantity from the linked sales
@@ -363,16 +385,15 @@ async function buildDetailFromSeed(seed) {
     : stages.reduce((m, r) => Math.max(m, Number(r.order_qty) || 0), 0);
   const balanceQty = Math.max(0, orderQty - completedQty);
 
-  // Resolve the plan number so Material Issues (which link by plan_no +
-  // process_stage) can be aggregated per stage.
-  let planNo = null;
+  // Material Issues link by plan_no + process_stage. We aggregate across ALL
+  // sibling plan numbers so material issued under any plan of this sales order
+  // is included. planNoList was resolved above.
   let productId = null;
   if (seed.production_plan_id) {
     const [[pp]] = await pool.query(
-      `SELECT plan_no, product_id FROM production_plans WHERE id=? AND deleted_at IS NULL`,
+      `SELECT product_id FROM production_plans WHERE id=? AND deleted_at IS NULL`,
       [seed.production_plan_id]
     );
-    planNo = pp?.plan_no || null;
     productId = pp?.product_id || null;
   }
 
