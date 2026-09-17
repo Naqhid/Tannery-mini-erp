@@ -2,9 +2,9 @@ import * as model from '../models/productionPlanModel.js';
 
 export async function list(req, res, next) {
   try {
-    const { search, status, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, sortBy, sortOrder } = req.query;
+    const { search, status, plan_id, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const { rows, total } = await model.getAll({ search, status, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, page, limit, sortBy, sortOrder });
+    const { rows, total } = await model.getAll({ search, status, plan_id, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, page, limit, sortBy, sortOrder });
     res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (err) { next(err); }
 }

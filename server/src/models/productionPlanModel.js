@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 
 const ALLOWED_SORT = ['id', 'plan_no', 'plan_date', 'status', 'order_qty', 'planned_qty', 'created_at'];
 
-export async function getAll({ search, status, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
+export async function getAll({ search, status, plan_id, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
   const params = [];
   let where = 'pp.deleted_at IS NULL';
 
@@ -11,6 +11,9 @@ export async function getAll({ search, status, customer_id, product_id, article,
     const t = `%${search}%`;
     params.push(t, t, t, t, t);
   }
+  // Exact plan id (used by the sales-order-items expander which already knows
+  // the plan_id, avoiding fragile article-name matching).
+  if (plan_id) { where += ' AND pp.id = ?'; params.push(plan_id); }
   if (status) { where += ' AND pp.status = ?'; params.push(status); }
   if (customer_id) { where += ' AND pp.customer_id = ?'; params.push(customer_id); }
   if (product_id) { where += ' AND pp.product_id = ?'; params.push(product_id); }

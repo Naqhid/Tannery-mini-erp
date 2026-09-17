@@ -86,9 +86,16 @@ export default function ProductionPlan() {
     try {
       const params = new URLSearchParams();
       params.set('limit', '100');
-      if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
-      if (row.article) params.set('article', row.article);
-      if (row.color) params.set('color', row.color);
+      // Prefer the exact plan_id the sales-order-item already resolved — this
+      // avoids fragile article-name matching (e.g. "Sheep  Softy Black" on the
+      // order item vs "Sheep Softy" on the plan). Fall back to article/color.
+      if (row.plan_id) {
+        params.set('plan_id', String(row.plan_id));
+      } else {
+        if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
+        if (row.article) params.set('article', row.article);
+        if (row.color) params.set('color', row.color);
+      }
       const res = await api<{ data: any[] }>(`/production-plans?${params}`);
       setRowPlans((prev) => ({ ...prev, [row.item_id]: res.data || [] }));
     } catch {
