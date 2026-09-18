@@ -14,6 +14,7 @@ router.get('/inventory/stock-valuation', validatePagination, inv.stockValuation)
 router.get('/inventory/receipt-register', validatePagination, inv.receiptRegister);
 router.get('/inventory/issue-register', validatePagination, inv.issueRegister);
 router.get('/inventory/stock-movement', validatePagination, inv.stockMovement);
+router.get('/inventory/stock-ledger', validatePagination, inv.stockLedger);
 
 // ─── Production Reports (Plan + Actual) ──────────────────────────────────────
 router.get('/production/filters', prod.filters);

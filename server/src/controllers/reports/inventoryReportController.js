@@ -48,6 +48,15 @@ export async function stockMovement(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function stockLedger(req, res, next) {
+  try {
+    const { from_date, to_date, warehouse_id, material_id, transaction_type, search, sortBy, sortOrder } = req.query;
+    const { page, limit } = req;
+    const result = await model.stockLedger({ from_date, to_date, warehouse_id, material_id, transaction_type, search, page, limit, sortBy, sortOrder });
+    shape(res, result, page, limit);
+  } catch (err) { next(err); }
+}
+
 export async function filters(req, res, next) {
   try {
     res.json({ data: await model.getInventoryFilters() });

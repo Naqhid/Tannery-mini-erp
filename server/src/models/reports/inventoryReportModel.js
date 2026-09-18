@@ -238,6 +238,55 @@ export async function stockMovement({ from_date, to_date, warehouse_id, material
   return { rows, total, totals };
 }
 
+// ─── Stock Ledger Report (full raw ledger — every column) ────────────────────
+export async function stockLedger({ from_date, to_date, warehouse_id, material_id, transaction_type, search, page = 1, limit = 10, sortBy, sortOrder }) {
+  const params = [];
+  let where = '1=1';
+  if (from_date) { where += ' AND sl.transaction_date >= ?'; params.push(from_date); }
+  if (to_date) { where += ' AND sl.transaction_date <= ?'; params.push(to_date); }
+  if (warehouse_id) { where += ' AND sl.warehouse_id = ?'; params.push(warehouse_id); }
+  if (material_id) { where += ' AND sl.material_id = ?'; params.push(material_id); }
+  if (transaction_type) { where += ' AND sl.transaction_type = ?'; params.push(transaction_type); }
+  if (search) {
+    where += ' AND (sl.reference_no LIKE ? OR sl.reference_type LIKE ? OR sl.batch_no LIKE ? OR m.name LIKE ? OR m.code LIKE ?)';
+    const t = `%${search}%`; params.push(t, t, t, t, t);
+  }
+
+  const allowed = ['transaction_date', 'transaction_type', 'material_name', 'reference_no', 'reference_type', 'created_at'];
+  const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
+  const offset = (page - 1) * limit;
+
+  const baseFrom = `
+     FROM stock_ledger sl
+     LEFT JOIN materials m ON sl.material_id = m.id
+     LEFT JOIN warehouses w ON sl.warehouse_id = w.id
+     LEFT JOIN users u ON sl.created_by = u.id
+     WHERE ${where}`;
+
+  const [rows] = await pool.query(
+    `SELECT sl.id, sl.transaction_date, sl.transaction_type,
+       sl.reference_type, sl.reference_no,
+       m.code AS material_code, m.name AS material_name,
+       w.name AS warehouse_name, sl.uom,
+       sl.batch_no, sl.expiry_date,
+       sl.in_qty, sl.out_qty, sl.unit_cost AS rate, sl.amount, sl.balance_qty,
+       sl.remarks, u.full_name AS created_by_name, sl.created_at
+     ${baseFrom}
+     ORDER BY ${orderClause}
+     LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+
+  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${baseFrom}`, params);
+  const [[totals]] = await pool.query(
+    `SELECT COALESCE(SUM(sl.in_qty),0) AS total_in, COALESCE(SUM(sl.out_qty),0) AS total_out,
+       COALESCE(SUM(sl.amount),0) AS total_amount ${baseFrom}`, params
+  );
+
+  return { rows, total, totals };
+}
+
 // ─── Filter options ──────────────────────────────────────────────────────────
 export async function getInventoryFilters() {
   const [warehouses] = await pool.query(`SELECT id, name FROM warehouses ORDER BY name`);
