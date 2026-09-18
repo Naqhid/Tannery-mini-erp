@@ -752,6 +752,8 @@ export default function BOM() {
                         ]}
                         value={String(formData.product_id || '')}
                         onChange={(e) => handleProductChange(e.target.value)}
+                        addNewPath="/product-master/new"
+                        addNewLabel="Add Product"
                       />
                       {/* Leather Type — read-only, populated from Product */}
                       <div>
@@ -861,6 +863,8 @@ export default function BOM() {
                 ]}
                 value={itemForm.material_id}
                 onChange={(e) => setItemForm(prev => ({ ...prev, material_id: e.target.value }))}
+                addNewPath="/chemical-master/new"
+                addNewLabel="Add Material"
               />
               <Select
                 label="Supplier"
@@ -870,6 +874,8 @@ export default function BOM() {
                 ]}
                 value={itemForm.supplier_id}
                 onChange={(e) => setItemForm(prev => ({ ...prev, supplier_id: e.target.value }))}
+                addNewPath="/supplier-master/new"
+                addNewLabel="Add Supplier"
               />
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Qty" required type="number" value={itemForm.qty} onChange={(e) => setItemForm(prev => ({ ...prev, qty: e.target.value }))} />

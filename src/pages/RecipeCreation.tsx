@@ -907,6 +907,8 @@ export default function RecipeCreation() {
                       ]}
                       value={String(formData.product_id || '')}
                       onChange={(e) => handleProductChange(e.target.value)}
+                      addNewPath="/product-master/new"
+                      addNewLabel="Add Product"
                     />
                     <div>
                       <label className="block text-xs font-medium text-gray-900 mb-1">Version</label>
@@ -1208,6 +1210,8 @@ export default function RecipeCreation() {
                 ]}
                 value={itemForm.material_id}
                 onChange={(e) => setItemForm(prev => ({ ...prev, material_id: e.target.value }))}
+                addNewPath="/chemical-master/new"
+                addNewLabel="Add Material"
               />
               <Input label="Qty / Sq. Ft." required type="number" value={itemForm.qty} onChange={(e) => setItemForm(prev => ({ ...prev, qty: e.target.value }))} />
             </div>
@@ -1237,6 +1241,8 @@ export default function RecipeCreation() {
                   ]}
                   value={stageForm.process_stage_id}
                   onChange={(e) => handleStageChange(e.target.value)}
+                  addNewPath="/process-stage/new"
+                  addNewLabel="Add Process Stage"
                 />
               </div>
               <Select
@@ -1247,6 +1253,8 @@ export default function RecipeCreation() {
                 ]}
                 value={stageForm.machine_id}
                 onChange={(e) => setStageForm(prev => ({ ...prev, machine_id: e.target.value }))}
+                addNewPath="/machine/new"
+                addNewLabel="Add Machine"
               />
               <div className="grid grid-cols-3 gap-3">
                 <Input label="Duration (Min)" type="number" value={stageForm.duration} onChange={(e) => setStageForm(prev => ({ ...prev, duration: e.target.value }))} />

@@ -272,9 +272,11 @@ export default function MaterialMasterForm() {
             ]}
             value={form.group_id}
             onChange={(e) => handleGroupChange(e.target.value)}
+            addNewPath="/group-master/new"
+            addNewLabel="Add Group"
           />
-          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} />
-          <Select label="Secondary UOM" options={[{ value: '', label: 'NA' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} />
+          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} addNewPath="/uom/new" addNewLabel="Add UOM" />
+          <Select label="Secondary UOM" options={[{ value: '', label: 'NA' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} addNewPath="/uom/new" addNewLabel="Add UOM" />
           <Select label="Currency" options={CURRENCY_OPTIONS} value={form.currency} onChange={(e) => update('currency', e.target.value)} />
           {/* HSN auto-populated from group */}
           <div>
@@ -304,10 +306,10 @@ export default function MaterialMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">3. Inventory</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map(w => ({ value: w.name, label: w.name }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} />
+          <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map(w => ({ value: w.name, label: w.name }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
           <Input label="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
           <Input label="Maximum Level" type="number" value={form.maximum_level} onChange={(e) => update('maximum_level', e.target.value)} placeholder="0.00" />
-          <Select label="Preferred Supplier" options={supplierOptions} value={form.preferred_supplier_id} onChange={(e) => update('preferred_supplier_id', e.target.value)} />
+          <Select label="Preferred Supplier" options={supplierOptions} value={form.preferred_supplier_id} onChange={(e) => update('preferred_supplier_id', e.target.value)} addNewPath="/supplier-master/new" addNewLabel="Add Supplier" />
           <Input label="Lead Time (Days)" type="number" value={form.lead_time} onChange={(e) => update('lead_time', e.target.value)} placeholder="Enter lead time" />
         </div>
       </div>

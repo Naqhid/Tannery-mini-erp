@@ -406,6 +406,8 @@ export default function ProductionPlanDetail() {
               value={plan.customer_id}
               onChange={(val) => update('customer_id', val)}
               placeholder="Select customer..."
+              addNewPath="/customer-master/new"
+              addNewLabel="Add Customer"
             />
           </div>
         </div>

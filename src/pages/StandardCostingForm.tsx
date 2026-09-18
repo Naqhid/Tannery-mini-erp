@@ -293,6 +293,8 @@ export default function StandardCostingForm() {
               options={products.map(p => ({ value: String(p.id), label: p.name }))}
               placeholder="Select Article"
               disabled={isPosted}
+              addNewPath="/product-master/new"
+              addNewLabel="Add Product"
             />
           </div>
           <div>
@@ -437,6 +439,8 @@ export default function StandardCostingForm() {
                         options={materials.map(m => ({ value: String(m.id), label: m.name }))}
                         placeholder="Select"
                         disabled={isPosted}
+                        addNewPath="/chemical-master/new"
+                        addNewLabel="Add Material"
                       />
                     </td>
                     <td className="py-2">
@@ -446,6 +450,8 @@ export default function StandardCostingForm() {
                         options={groups.map(g => ({ value: String(g.id), label: g.name }))}
                         placeholder="Select"
                         disabled={isPosted}
+                        addNewPath="/group-master/new"
+                        addNewLabel="Add Group"
                       />
                     </td>
                     <td className="py-2">

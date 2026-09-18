@@ -693,6 +693,8 @@ export default function RecipeCreationForm() {
                             setRecipeItems(prev => prev.map(i => i.id === item.id ? { ...i, material_id: Number(val), material_code: mat?.code || '', material_name: mat?.name || '', uom: mat?.uom || i.uom } : i));
                           }}
                           placeholder="Search material..."
+                          addNewPath="/chemical-master/new"
+                          addNewLabel="Add Material"
                         />
                       </td>
                       <td className="py-1.5 px-2 text-gray-600">{item.uom || '-'}</td>

@@ -335,7 +335,7 @@ export default function MaterialReceiptEntryDetail() {
             </div>
           </div>
           <Input label="Receipt Date" type="date" required value={receipt.receipt_date} onChange={(e) => update('receipt_date', e.target.value)} />
-          <Select label="Supplier" required options={[{ value: '', label: 'Select supplier' }, ...suppliers.map((s) => ({ value: String(s.id), label: `${s.name}` }))]} value={receipt.supplier_id} onChange={(e) => update('supplier_id', e.target.value)} />
+          <Select label="Supplier" required options={[{ value: '', label: 'Select supplier' }, ...suppliers.map((s) => ({ value: String(s.id), label: `${s.name}` }))]} value={receipt.supplier_id} onChange={(e) => update('supplier_id', e.target.value)} addNewPath="/supplier-master/new" addNewLabel="Add Supplier" />
           <Input label="Challan / Invoice No." value={receipt.challan_no} onChange={(e) => update('challan_no', e.target.value)} placeholder="INV-4587" />
           <Input label="Challan / Invoice Date" type="date" value={receipt.challan_date} onChange={(e) => update('challan_date', e.target.value)} />
           {/* Row 2 */}
@@ -345,7 +345,7 @@ export default function MaterialReceiptEntryDetail() {
           <Input label="LR / GRN Date" type="date" value={receipt.lr_grn_date} onChange={(e) => update('lr_grn_date', e.target.value)} />
           <Input label="Transporter" value={receipt.transporter} onChange={(e) => update('transporter', e.target.value)} placeholder="Shree Logistics" />
           {/* Row 3 */}
-          <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={receipt.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} />
+          <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={receipt.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
           <Input label="Gate Entry No." value={receipt.gate_entry_no} onChange={(e) => update('gate_entry_no', e.target.value)} placeholder="GE-1254" />
           <Select label="Receipt Type" options={RECEIPT_TYPES} value={receipt.receipt_type} onChange={(e) => update('receipt_type', e.target.value)} />
           <div className="lg:col-span-2">
@@ -417,6 +417,8 @@ export default function MaterialReceiptEntryDetail() {
                       value={item.material_id}
                       onChange={(val) => updateItem(item._key, 'material_id', val)}
                       placeholder="Search item..."
+                      addNewPath="/chemical-master/new"
+                      addNewLabel="Add Material"
                     />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.primary_uom || '-'}</td>

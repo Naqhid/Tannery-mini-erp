@@ -521,7 +521,7 @@ export default function MaterialIssueToBatchDetail() {
               {issue.issue_no || <span className="italic">Will be auto-generated on save</span>}
             </div>
           </div>
-          <Select label="To Department" required options={[{ value: '', label: 'Select department' }, ...departmentOptions.map(d => ({ value: d.name, label: d.name }))]} value={issue.department} onChange={(e) => handleDepartmentChange(e.target.value)} />
+          <Select label="To Department" required options={[{ value: '', label: 'Select department' }, ...departmentOptions.map(d => ({ value: d.name, label: d.name }))]} value={issue.department} onChange={(e) => handleDepartmentChange(e.target.value)} addNewPath="/department-master/new" addNewLabel="Add Department" />
 
           {/* Row 2: Issue Date | Plan No | Stage | Planned Date */}
           <Input label="Issue Date" type="date" required value={issue.issue_date} onChange={(e) => update('issue_date', e.target.value)} />
@@ -572,7 +572,7 @@ export default function MaterialIssueToBatchDetail() {
           </div>
           <Input label="Article" value={issue.article} onChange={(e) => update('article', e.target.value)} />
           <Input label="Color" value={issue.color} onChange={(e) => update('color', e.target.value)} />
-          <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={issue.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} />
+          <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={issue.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
           {/* Row 4: Remarks (spans full or partial) */}
           <div className="lg:col-span-2">
             <Input label="Remarks" value={issue.remarks} onChange={(e) => update('remarks', e.target.value)} placeholder="Material issued for production." />
@@ -630,6 +630,8 @@ export default function MaterialIssueToBatchDetail() {
                       value={item.material_id}
                       onChange={(val) => handleMaterialChange(item._key, val)}
                       placeholder="Search item..."
+                      addNewPath="/chemical-master/new"
+                      addNewLabel="Add Material"
                     />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_code || '-'}</td>

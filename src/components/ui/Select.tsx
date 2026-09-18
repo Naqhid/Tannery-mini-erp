@@ -1,6 +1,6 @@
 import { SelectHTMLAttributes, useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, ChevronDown, X } from 'lucide-react';
+import { Search, ChevronDown, X, Plus } from 'lucide-react';
 
 interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange' | 'value'> {
   label?: string;
@@ -14,6 +14,10 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onC
   placeholder?: string;
   /** Disable the built-in search box (rarely needed) */
   searchable?: boolean;
+  /** When set, shows a "+ Add New" action that opens this master form in a new tab. */
+  addNewPath?: string;
+  /** Label for the add-new action (e.g. "Add Customer"). */
+  addNewLabel?: string;
 }
 
 const DROPDOWN_HEIGHT = 240;
@@ -35,6 +39,8 @@ export default function Select({
   disabled = false,
   placeholder,
   searchable = true,
+  addNewPath,
+  addNewLabel = 'Add New',
   ...rest
 }: SelectProps) {
   const [open, setOpen] = useState(false);
@@ -149,6 +155,17 @@ export default function Select({
                   />
                 </div>
               </div>
+            )}
+            {addNewPath && (
+              <a
+                href={addNewPath}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 border-b border-gray-100 transition-colors"
+              >
+                <Plus size={13} /> {addNewLabel}
+              </a>
             )}
             <div className="max-h-48 overflow-y-auto">
               {!required && emptyOption && (

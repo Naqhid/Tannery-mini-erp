@@ -241,8 +241,8 @@ export default function StockTransferEntryDetail() {
             </div>
           </div>
           <Input label="Transfer Date" type="date" required value={transfer.transfer_date} onChange={(e) => update('transfer_date', e.target.value)} />
-          <Select label="From Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.from_warehouse_id} onChange={(e) => update('from_warehouse_id', e.target.value)} />
-          <Select label="To Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.to_warehouse_id} onChange={(e) => update('to_warehouse_id', e.target.value)} />
+          <Select label="From Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.from_warehouse_id} onChange={(e) => update('from_warehouse_id', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
+          <Select label="To Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={transfer.to_warehouse_id} onChange={(e) => update('to_warehouse_id', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
           {/* Row 2 */}
           <Input label="Transporter (if any)" value={transfer.transporter} onChange={(e) => update('transporter', e.target.value)} placeholder="Shree Logistics" />
           <Input label="Delivery Challan No." value={transfer.delivery_challan_no} onChange={(e) => update('delivery_challan_no', e.target.value)} placeholder="DC-4587" />
@@ -315,6 +315,8 @@ export default function StockTransferEntryDetail() {
                       value={item.material_id}
                       onChange={(val) => handleItemChange(item._key, val)}
                       placeholder="Search item..."
+                      addNewPath="/chemical-master/new"
+                      addNewLabel="Add Material"
                     />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>

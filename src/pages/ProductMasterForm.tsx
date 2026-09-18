@@ -212,7 +212,7 @@ export default function ProductMasterForm() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Product Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Input label="Product Name" required value={form.name} disabled readOnly error={errors.name} placeholder="Auto: Leather Type + Finish Type + Color" />
-          <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} />
+          <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} addNewPath="/product-category/new" addNewLabel="Add Category" />
           <Select
             label="Group"
             options={[
@@ -221,11 +221,13 @@ export default function ProductMasterForm() {
             ]}
             value={form.group_id}
             onChange={(e) => handleGroupChange(e.target.value)}
+            addNewPath="/group-master/new"
+            addNewLabel="Add Group"
           />
-          <Select label="Leather Type" required options={[{ value: '', label: 'Select leather type' }, ...(dropdowns['leather-types']?.options || [])]} value={form.leather_type_id} onChange={(e) => update('leather_type_id', e.target.value)} error={errors.leather_type_id} />
-          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} />
-          <Select label="Secondary UOM" options={[{ value: '', label: 'Select Secondary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} />
-          <Select label="Thickness" required options={[{ value: '', label: 'Select thickness' }, ...(dropdowns['thickness']?.options || [])]} value={form.thickness_id} onChange={(e) => update('thickness_id', e.target.value)} error={errors.thickness_id} />
+          <Select label="Leather Type" required options={[{ value: '', label: 'Select leather type' }, ...(dropdowns['leather-types']?.options || [])]} value={form.leather_type_id} onChange={(e) => update('leather_type_id', e.target.value)} error={errors.leather_type_id} addNewPath="/leather-type/new" addNewLabel="Add Leather Type" />
+          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} addNewPath="/uom/new" addNewLabel="Add UOM" />
+          <Select label="Secondary UOM" options={[{ value: '', label: 'Select Secondary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} addNewPath="/uom/new" addNewLabel="Add UOM" />
+          <Select label="Thickness" required options={[{ value: '', label: 'Select thickness' }, ...(dropdowns['thickness']?.options || [])]} value={form.thickness_id} onChange={(e) => update('thickness_id', e.target.value)} error={errors.thickness_id} addNewPath="/thickness/new" addNewLabel="Add Thickness" />
         </div>
       </div>
 
@@ -233,10 +235,10 @@ export default function ProductMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">2. Specifications</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Select label="Standard Size" options={[{ value: '', label: 'Select size' }, ...(dropdowns['standard-sizes']?.options || [])]} value={form.standard_size_id} onChange={(e) => update('standard_size_id', e.target.value)} />
-          <Select label="Color" options={[{ value: '', label: 'Select color' }, ...(dropdowns['colors']?.options || [])]} value={form.color_id} onChange={(e) => update('color_id', e.target.value)} />
-          <Select label="Finish Type" options={[{ value: '', label: 'Select finish type' }, ...(dropdowns['finish-types']?.options || [])]} value={form.finish_type_id} onChange={(e) => update('finish_type_id', e.target.value)} />
-          <Select label="Grade" options={[{ value: '', label: 'Select grade' }, ...(dropdowns['grades']?.options || [])]} value={form.grade_id} onChange={(e) => update('grade_id', e.target.value)} />
+          <Select label="Standard Size" options={[{ value: '', label: 'Select size' }, ...(dropdowns['standard-sizes']?.options || [])]} value={form.standard_size_id} onChange={(e) => update('standard_size_id', e.target.value)} addNewPath="/standard-size/new" addNewLabel="Add Standard Size" />
+          <Select label="Color" options={[{ value: '', label: 'Select color' }, ...(dropdowns['colors']?.options || [])]} value={form.color_id} onChange={(e) => update('color_id', e.target.value)} addNewPath="/color/new" addNewLabel="Add Color" />
+          <Select label="Finish Type" options={[{ value: '', label: 'Select finish type' }, ...(dropdowns['finish-types']?.options || [])]} value={form.finish_type_id} onChange={(e) => update('finish_type_id', e.target.value)} addNewPath="/finish-type/new" addNewLabel="Add Finish Type" />
+          <Select label="Grade" options={[{ value: '', label: 'Select grade' }, ...(dropdowns['grades']?.options || [])]} value={form.grade_id} onChange={(e) => update('grade_id', e.target.value)} addNewPath="/grade/new" addNewLabel="Add Grade" />
           {/* HSN auto-populated from group */}
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">HSN Code <span className="text-gray-400">(from Group)</span></label>

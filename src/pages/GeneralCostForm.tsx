@@ -500,6 +500,8 @@ export default function GeneralCostForm() {
                           onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
                           placeholder="Search cost category..."
                           disabled={outputZero}
+                          addNewPath="/chemical-master/new"
+                          addNewLabel="Add Material"
                         />
                       )}
                     </td>
@@ -575,6 +577,8 @@ export default function GeneralCostForm() {
                           onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
                           placeholder="Search cost category..."
                           disabled={outputZero}
+                          addNewPath="/chemical-master/new"
+                          addNewLabel="Add Material"
                         />
                       )}
                     </div>

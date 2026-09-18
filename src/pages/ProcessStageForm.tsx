@@ -103,6 +103,8 @@ export default function ProcessStageForm() {
               value={form.uom}
               onChange={(val) => setForm(p => ({ ...p, uom: val }))}
               placeholder="Search UOM..."
+              addNewPath="/uom/new"
+              addNewLabel="Add UOM"
             />
           </div>
           <div className="sm:col-span-2 lg:col-span-3">

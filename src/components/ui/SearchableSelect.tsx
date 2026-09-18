@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, ChevronDown, X } from 'lucide-react';
+import { Search, ChevronDown, X, Plus } from 'lucide-react';
 
 interface Option {
   value: string;
@@ -13,9 +13,13 @@ interface SearchableSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** When set, shows a "+ Add New" action that opens this master form in a new tab. */
+  addNewPath?: string;
+  /** Label for the add-new action (e.g. "Add Customer"). */
+  addNewLabel?: string;
 }
 
-export default function SearchableSelect({ options, value, onChange, placeholder = 'Search...', disabled = false }: SearchableSelectProps) {
+export default function SearchableSelect({ options, value, onChange, placeholder = 'Search...', disabled = false, addNewPath, addNewLabel = 'Add New' }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number; openAbove: boolean }>({ top: 0, left: 0, width: 0, openAbove: false });
@@ -125,6 +129,19 @@ export default function SearchableSelect({ options, value, onChange, placeholder
               />
             </div>
           </div>
+          {/* Add New action — opens the master form in a new tab so the
+              in-progress form isn't lost. */}
+          {addNewPath && (
+            <a
+              href={addNewPath}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 border-b border-gray-100 transition-colors"
+            >
+              <Plus size={13} /> {addNewLabel}
+            </a>
+          )}
           {/* Options list */}
           <div className="max-h-48 overflow-y-auto">
             {filtered.length === 0 ? (

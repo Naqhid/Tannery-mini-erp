@@ -147,7 +147,7 @@ export default function MachineForm() {
           <Select label="Supplier / Vendor" options={[
             { value: '', label: 'Select supplier' },
             ...suppliers.map(s => ({ value: String(s.id), label: `${s.code} - ${s.name}` })),
-          ]} value={form.supplier_id} onChange={(e) => update('supplier_id', e.target.value)} />
+          ]} value={form.supplier_id} onChange={(e) => update('supplier_id', e.target.value)} addNewPath="/supplier-master/new" addNewLabel="Add Supplier" />
           <div className="sm:col-span-2 lg:col-span-3">
             <label className="block text-xs font-medium text-gray-900 mb-1">Description</label>
             <textarea rows={3} value={form.description} onChange={(e) => update('description', e.target.value)} placeholder="Enter description..." className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:border-gray-500 transition-all resize-none" />

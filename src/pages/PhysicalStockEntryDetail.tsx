@@ -327,6 +327,8 @@ export default function PhysicalStockEntryDetail() {
                       value={item.material_id}
                       onChange={(val) => handleItemChange(item._key, val)}
                       placeholder="Search item..."
+                      addNewPath="/chemical-master/new"
+                      addNewLabel="Add Material"
                     />
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-600">{item.uom || '—'}</td>
@@ -336,6 +338,8 @@ export default function PhysicalStockEntryDetail() {
                       value={item.location}
                       onChange={(val) => updateItem(item._key, 'location', val)}
                       placeholder="Select location..."
+                      addNewPath="/location-rack/new"
+                      addNewLabel="Add Location"
                     />
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-gray-700 font-medium">{fmt(item.system_qty)}</td>

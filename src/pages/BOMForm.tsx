@@ -389,6 +389,8 @@ export default function BOMForm() {
                   value={String(formData.customer_id || '')}
                   onChange={handleCustomerChange}
                   placeholder="Select customer..."
+                  addNewPath="/customer-master/new"
+                  addNewLabel="Add Customer"
                 />
               </div>
               <div>
@@ -397,6 +399,8 @@ export default function BOMForm() {
                   options={productOptions}
                   value={String(formData.product_id || '')}
                   onChange={(e) => handleProductChange(e.target.value)}
+                  addNewPath="/product-master/new"
+                  addNewLabel="Add Product"
                 />
               </div>
             </div>
@@ -504,6 +508,8 @@ export default function BOMForm() {
                         value={String(item.material_id || '')}
                         onChange={(val) => updateRow(item.id, 'material_id', Number(val))}
                         placeholder="Select material..."
+                        addNewPath="/chemical-master/new"
+                        addNewLabel="Add Material"
                       />
                     </div>
                     <div>
@@ -594,6 +600,8 @@ export default function BOMForm() {
                             value={String(item.material_id || '')}
                             onChange={(val) => updateRow(item.id, 'material_id', Number(val))}
                             placeholder="Select..."
+                            addNewPath="/chemical-master/new"
+                            addNewLabel="Add Material"
                           />
                         </td>
                         <td className="py-1.5 px-2">

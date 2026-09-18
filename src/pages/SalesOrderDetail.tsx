@@ -496,6 +496,8 @@ export default function SalesOrderDetail() {
                 value={String(order.customer_id || '')}
                 onChange={(v) => handleCustomerChange(v)}
                 placeholder="Select customer *"
+                addNewPath="/customer-master/new"
+                addNewLabel="Add Customer"
               />
             </div>
             <Input label="Order Date" required type="date" value={order.order_date} onChange={(e) => updateField('order_date', e.target.value)} />
@@ -597,6 +599,8 @@ export default function SalesOrderDetail() {
                             <SearchableSelect
                               options={[{ value: '', label: '-- Select Article --' }, ...products.map(p => ({ value: String(p.id), label: p.name }))]}
                               value={item.product_id ? String(item.product_id) : ''}
+                              addNewPath="/product-master/new"
+                              addNewLabel="Add Product"
                               onChange={(val) => {
                                 const productId = Number(val);
                                 const product = products.find(p => p.id === productId);
