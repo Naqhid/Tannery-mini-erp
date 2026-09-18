@@ -25,6 +25,10 @@ export default function DatabaseBackups() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(backups.length / pageSize));
+  const pagedBackups = backups.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const fetchBackups = async () => {
     try {
@@ -41,6 +45,11 @@ export default function DatabaseBackups() {
   useEffect(() => {
     fetchBackups();
   }, []);
+
+  // Keep the current page within range when the list shrinks (e.g. after delete).
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
 
   const handleCreateBackup = async () => {
     try {
@@ -163,7 +172,7 @@ export default function DatabaseBackups() {
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {backups.map((backup) => (
+            {pagedBackups.map((backup) => (
               <div
                 key={backup.filename}
                 className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
@@ -198,6 +207,32 @@ export default function DatabaseBackups() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!loading && backups.length > pageSize && (
+          <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50/50">
+            <p className="text-xs text-gray-500">
+              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, backups.length)} of {backups.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-xs font-medium text-gray-700 px-2">{currentPage} / {totalPages}</span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

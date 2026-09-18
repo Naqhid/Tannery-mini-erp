@@ -578,7 +578,7 @@ export default function BOMForm() {
                     <tr className="bg-slate-50 border-b border-gray-200">
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[220px]">Material Name</th>
-                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-28">BOM Type</th>
+                      <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[150px] w-40">BOM Type</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">Qty</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">UOM</th>
                       <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-24">Cost</th>

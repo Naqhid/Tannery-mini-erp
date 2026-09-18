@@ -626,7 +626,7 @@ export default function SalesOrderDetail() {
                             <input value={item.thickness} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="mm" />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={item.uom} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="UOM" />
+                            <input value={item.uom} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[110px] cursor-not-allowed" placeholder="UOM" />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input type="number" value={item.quantity} onChange={(e) => {
@@ -708,7 +708,19 @@ export default function SalesOrderDetail() {
                         <input type="number" value={order.freight} onChange={(e) => updateField('freight', Number(e.target.value))} min={0} className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                       </div>
                       <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-600">Tax ({order.tax_percent}%)</span>
+                        <span className="text-sm text-gray-600 flex items-center gap-1">
+                          Tax
+                          <input
+                            type="number"
+                            value={order.tax_percent}
+                            onChange={(e) => updateField('tax_percent', Number(e.target.value))}
+                            min={0}
+                            max={100}
+                            step="0.01"
+                            className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
+                          />
+                          %
+                        </span>
                         <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
                       </div>
                       <div className="border-t border-gray-200 pt-3 mt-2">
