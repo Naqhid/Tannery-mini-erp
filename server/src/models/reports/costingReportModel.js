@@ -37,16 +37,17 @@ export async function wipCostSheet({ stage, search, page = 1, limit = 10 }) {
     ), 0)`;
   // WIP is derived (input − output − rejection), never the stored balance_qty
   // which can go stale when issued/completed qty change without a recalc.
-  const wipExpr = `GREATEST(0, COALESCE(pso.issued_qty,0) - COALESCE(pso.completed_qty,0) - ${rejExpr})`;
+  // Negative values flag data errors (output exceeds input).
+  const wipExpr = `(COALESCE(pso.issued_qty,0) - COALESCE(pso.completed_qty,0) - ${rejExpr})`;
 
   // Only In Progress stages: production has started (output > 0) AND WIP remains
-  // (input > output). Pending stages (no output yet) are excluded.
+  // (input != output). Show both positive and negative WIP to flag data errors.
   const baseFrom = `
      FROM production_status_orders pso
      JOIN production_plans pp ON pso.production_plan_id = pp.id AND pp.deleted_at IS NULL
      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
      WHERE ${where} AND pso.deleted_at IS NULL
-       AND COALESCE(pso.completed_qty,0) > 0 AND ${wipExpr} > 0`;
+       AND COALESCE(pso.completed_qty,0) > 0 AND ${wipExpr} <> 0`;
 
   const [rows] = await pool.query(
     `SELECT pso.id, COALESCE(so.order_no, pp.plan_no) AS order_no, pp.plan_no,

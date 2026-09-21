@@ -16,12 +16,11 @@ const measurementOutputSql = (planCol) => `
   ), 0)`;
 
 // Plan-level WIP = sum of per-stage WIP, where each stage's WIP is
-// (input − output − rejection) clamped at 0. This applies the WIP rule at the
-// stage level (where input/output/rejection belong together) and aggregates,
-// avoiding any dependency on stage sequence ordering.
+// (input − output − rejection). Negative values indicate data errors
+// (output exceeds input) and are shown to flag issues.
 const planWipSql = (planCol) => `
   COALESCE((
-    SELECT SUM(GREATEST(0, stage_totals.in_qty - stage_totals.out_qty - stage_totals.rej_qty))
+    SELECT SUM(stage_totals.in_qty - stage_totals.out_qty - stage_totals.rej_qty)
     FROM (
       SELECT pso.process_stage,
         SUM(t.input_qty) AS in_qty,
@@ -161,7 +160,7 @@ export async function planStatus({ from_date, to_date, stage, search, page = 1, 
   const [rows] = await pool.query(
     `SELECT s.id, pp.plan_no, pp.plan_date, pp.article, pp.color, s.seq, s.stage_name,
        COALESCE(s.planned_qty,0) AS plan_qty, ${stageOutput} AS output_qty,
-       GREATEST(0, ${stageInput} - ${stageOutput} - ${stageRej}) AS wip_qty,
+       (${stageInput} - ${stageOutput} - ${stageRej}) AS wip_qty,
        CASE WHEN COALESCE(s.planned_qty,0) > 0 THEN ROUND(${stageOutput}/s.planned_qty*100,2) ELSE 0 END AS completion_percent,
        CASE
          WHEN COALESCE(s.planned_qty,0) > 0 AND ${stageOutput} >= s.planned_qty THEN 'Completed'
@@ -237,7 +236,7 @@ export async function dailyProductionOutput({ from_date, to_date, stage, search,
     `SELECT t.id, t.production_date, t.transaction_no, pso.order_no AS plan_no,
        pso.process_stage, pso.article, pso.color, t.uom,
        t.input_qty, t.output_qty, t.rejection_qty,
-       GREATEST(0, COALESCE(t.input_qty,0) - COALESCE(t.output_qty,0) - COALESCE(t.rejection_qty,0)) AS wip_qty
+       (COALESCE(t.input_qty,0) - COALESCE(t.output_qty,0) - COALESCE(t.rejection_qty,0)) AS wip_qty
      ${baseFrom}
      ORDER BY t.production_date DESC, t.id DESC
      LIMIT ? OFFSET ?`,
@@ -272,7 +271,7 @@ export async function stageWiseProduction({ from_date, to_date, stage, search, p
        COALESCE(SUM(t.input_qty),0) AS input_qty,
        COALESCE(SUM(t.output_qty),0) AS output_qty,
        COALESCE(SUM(t.rejection_qty),0) AS rejection_qty,
-       GREATEST(0, COALESCE(SUM(t.input_qty),0) - COALESCE(SUM(t.output_qty),0) - COALESCE(SUM(t.rejection_qty),0)) AS wip_qty,
+       (COALESCE(SUM(t.input_qty),0) - COALESCE(SUM(t.output_qty),0) - COALESCE(SUM(t.rejection_qty),0)) AS wip_qty,
        CASE WHEN SUM(t.input_qty) > 0 THEN ROUND(SUM(t.output_qty)/SUM(t.input_qty)*100,2) ELSE 0 END AS output_percent
      ${baseFrom}
      ORDER BY output_qty DESC
@@ -324,8 +323,8 @@ export async function productionWip({ stage, search, page = 1, limit = 10 }) {
         AND pso.process_stage COLLATE utf8mb4_unicode_ci = s.stage_name COLLATE utf8mb4_unicode_ci
     ), 0)`;
 
-  // WIP = input − output − rejection for the stage.
-  const wipExpr = `GREATEST(0, ${stageInput} - ${stageOutput} - ${stageRej})`;
+  // WIP = input − output − rejection for the stage. Negative values flag data errors.
+  const wipExpr = `(${stageInput} - ${stageOutput} - ${stageRej})`;
 
   const baseFrom = `
      FROM production_plan_stages s

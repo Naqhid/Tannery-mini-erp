@@ -23,7 +23,7 @@ export default function StageWiseProduction({ embedded }: { embedded?: boolean }
     { key: 'input_qty', header: 'Input Qty', align: 'right', render: r => fmtQty(r.input_qty) },
     { key: 'output_qty', header: 'Output Qty', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.output_qty)}</span> },
     { key: 'rejection_qty', header: 'Rejection', align: 'right', render: r => <span className="text-red-600">{fmtQty(r.rejection_qty)}</span> },
-    { key: 'wip_qty', header: 'WIP', align: 'right', render: r => fmtQty(r.wip_qty) },
+    { key: 'wip_qty', header: 'WIP', align: 'right', render: r => <span className={Number(r.wip_qty) < 0 ? 'text-red-600 font-semibold' : ''}>{fmtQty(r.wip_qty)}</span> },
     { key: 'output_percent', header: 'Output %', align: 'right', render: r => fmtPct(r.output_percent) },
   ];
 

@@ -26,7 +26,7 @@ export default function WipCostSheetReport({ embedded }: { embedded?: boolean })
     { key: 'article', header: 'Article' },
     { key: 'input_qty', header: 'Input', align: 'right', render: r => fmtQty(r.input_qty) },
     { key: 'output_qty', header: 'Output', align: 'right', render: r => fmtQty(r.output_qty) },
-    { key: 'wip_qty', header: 'WIP', align: 'right', render: r => <span className="font-semibold text-amber-700">{fmtQty(r.wip_qty)}</span> },
+    { key: 'wip_qty', header: 'WIP', align: 'right', render: r => <span className={Number(r.wip_qty) < 0 ? 'font-semibold text-red-600' : 'font-semibold text-amber-700'}>{fmtQty(r.wip_qty)}</span> },
     { key: 'material_cost', header: 'Material', align: 'right', render: r => fmtNum(r.material_cost) },
     { key: 'general_cost', header: 'General', align: 'right', render: r => fmtNum(r.general_cost) },
     { key: 'machine_cost', header: 'Machine', align: 'right', render: r => fmtNum(r.machine_cost) },

@@ -25,7 +25,7 @@ export default function StandardVsActualCostReport({ embedded }: { embedded?: bo
       subtitle="Cost-component-wise standard (BOM) cost against actual cost with variance."
       endpoint="/reports/costing/standard-vs-actual"
       columns={columns}
-      datePreset="this_year"
+      datePreset="this_month"
       embedded={embedded}
       exportFileName="Standard_vs_Actual_Cost"
       footer={(rows, totals) => totals && (

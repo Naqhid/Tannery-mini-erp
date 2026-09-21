@@ -30,7 +30,7 @@ export default function ProductionPlanSummary({ embedded }: { embedded?: boolean
     { key: 'color', header: 'Color' },
     { key: 'planned_qty', header: 'Planned Qty', align: 'right', render: r => fmtQty(r.planned_qty) },
     { key: 'output_qty', header: 'Actual Output', align: 'right', render: r => fmtQty(r.output_qty) },
-    { key: 'wip_qty', header: 'WIP', align: 'right', render: r => fmtQty(r.wip_qty) },
+    { key: 'wip_qty', header: 'WIP', align: 'right', render: r => <span className={Number(r.wip_qty) < 0 ? 'text-red-600 font-semibold' : ''}>{fmtQty(r.wip_qty)}</span> },
     { key: 'balance_qty', header: 'Balance', align: 'right', render: r => fmtQty(r.balance_qty) },
     { key: 'status_val', header: 'Status', render: r => <StatusBadge status={r.status_val} /> },
   ];
