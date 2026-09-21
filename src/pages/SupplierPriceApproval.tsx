@@ -309,8 +309,9 @@ export default function SupplierPriceApproval() {
             <h1 className="text-lg font-bold text-blue-700">Pending Price Approvals</h1>
           </div>
 
-          {/* Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+          {/* Filters — 3 per row so they wrap onto multiple lines and the
+              action buttons remain fully visible. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Supplier</label>
               <select value={filters.supplier} onChange={e => setFilters(p => ({ ...p, supplier: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
@@ -351,7 +352,7 @@ export default function SupplierPriceApproval() {
                 <option value="Rejected">Rejected</option>
               </select>
             </div>
-            <div className="flex items-end gap-2">
+            <div className="flex items-end justify-end gap-2 sm:col-span-2 lg:col-span-3">
               <button onClick={clearFilters} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                 <X className="w-4 h-4" /> Clear
               </button>

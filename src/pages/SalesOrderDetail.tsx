@@ -699,24 +699,25 @@ export default function SalesOrderDetail() {
                       <div className="flex items-center justify-between py-1">
                         <span className="text-sm text-gray-600">Additional Discount</span>
                         <div className="flex items-center gap-2">
-                          <input type="number" value={order.discount} onChange={(e) => updateField('discount', Number(e.target.value))} min={0} className="w-20 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
+                          <input type="number" value={order.discount || ''} onChange={(e) => updateField('discount', e.target.value === '' ? 0 : Number(e.target.value))} min={0} placeholder="0" className="w-20 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                           <span className="text-xs text-gray-500 w-20 text-right">-{formatCurrency(order.discount)}</span>
                         </div>
                       </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-sm text-gray-600">Freight</span>
-                        <input type="number" value={order.freight} onChange={(e) => updateField('freight', Number(e.target.value))} min={0} className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
+                        <input type="number" value={order.freight || ''} onChange={(e) => updateField('freight', e.target.value === '' ? 0 : Number(e.target.value))} min={0} placeholder="0" className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                       </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-sm text-gray-600 flex items-center gap-1">
                           Tax
                           <input
                             type="number"
-                            value={order.tax_percent}
-                            onChange={(e) => updateField('tax_percent', Number(e.target.value))}
+                            value={order.tax_percent || ''}
+                            onChange={(e) => updateField('tax_percent', e.target.value === '' ? 0 : Number(e.target.value))}
                             min={0}
                             max={100}
                             step="0.01"
+                            placeholder="0"
                             className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
                           />
                           %
