@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, FileText, Download, Factory,
+  ChevronDown, ChevronRight as ChevronRightIcon, Loader2,
 } from 'lucide-react';
 import { useDebounce } from '../lib/useDebounce';
 import api from '../lib/api';
@@ -27,22 +28,49 @@ interface FilterOptions {
 
 interface Customer { id: number; name: string; }
 
+interface ItemRow {
+  item_id: number;
+  sales_order_no: string;
+  customer_name: string;
+  customer_order_no: string;
+  article: string;
+  color: string;
+  order_qty: number;
+  completed_qty: number;
+  balance_qty: number;
+  status: string;
+  plan_id: number | null;
+}
+
+interface GroupedOrder {
+  sales_order_no: string;
+  customer_name: string;
+  customer_order_no: string;
+  total_order_qty: number;
+  total_completed_qty: number;
+  total_balance_qty: number;
+  status: string;
+  items: ItemRow[];
+}
+
 interface StandardCostingProps {
-  /** Route to open a detail sheet for a plan. Defaults to the Actual sheet. */
   detailBasePath?: string;
-  /** Page title override. */
   title?: string;
 }
 
 export default function StandardCosting({ detailBasePath = '/standard-costing/actual/plan', title = 'Standard Cost (Actual)' }: StandardCostingProps = {}) {
   const navigate = useNavigate();
 
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<ItemRow[]>([]);
+  const [groupedData, setGroupedData] = useState<GroupedOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Accordion state
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   // Filters
   const [customerId, setCustomerId] = useState('');
@@ -74,17 +102,50 @@ export default function StandardCosting({ detailBasePath = '/standard-costing/ac
       setLoading(true);
       const params = new URLSearchParams();
       params.set('page', String(currentPage));
-      params.set('limit', String(pageSize));
+      params.set('limit', '500'); // Fetch more to group properly
       if (customerId) params.set('customer_id', customerId);
       if (article) params.set('article', article);
       if (color) params.set('color', color);
       if (debouncedSearch) params.set('search', debouncedSearch);
-      const res = await api<{ data: any[]; total: number; totalPages: number }>(`/production-plans/sales-order-items?${params}`);
-      setData(res.data || []);
-      setTotalRecords(res.total || 0);
-      setTotalPages(res.totalPages || 0);
+      const res = await api<{ data: ItemRow[]; total: number; totalPages: number }>(`/production-plans/sales-order-items?${params}`);
+      const items = res.data || [];
+      setData(items);
+      
+      // Group by sales_order_no
+      const grouped: Record<string, GroupedOrder> = {};
+      for (const item of items) {
+        const key = item.sales_order_no || 'NO-ORDER';
+        if (!grouped[key]) {
+          grouped[key] = {
+            sales_order_no: item.sales_order_no,
+            customer_name: item.customer_name,
+            customer_order_no: item.customer_order_no,
+            total_order_qty: 0,
+            total_completed_qty: 0,
+            total_balance_qty: 0,
+            status: item.status,
+            items: [],
+          };
+        }
+        grouped[key].items.push(item);
+        grouped[key].total_order_qty += Number(item.order_qty) || 0;
+        grouped[key].total_completed_qty += Number(item.completed_qty) || 0;
+        grouped[key].total_balance_qty += Number(item.balance_qty) || 0;
+        // Update status: if any item is In Progress, group is In Progress; if all Completed, group is Completed
+        if (item.status === 'In Progress' || item.status === 'In-Process') {
+          grouped[key].status = 'In Progress';
+        } else if (grouped[key].status === 'Completed' && item.status !== 'Completed') {
+          grouped[key].status = item.status;
+        }
+      }
+      
+      const groupedArray = Object.values(grouped);
+      setGroupedData(groupedArray);
+      setTotalRecords(groupedArray.length);
+      setTotalPages(Math.ceil(groupedArray.length / pageSize));
     } catch {
       setData([]);
+      setGroupedData([]);
       setTotalRecords(0);
       setTotalPages(0);
     } finally {
@@ -95,15 +156,22 @@ export default function StandardCosting({ detailBasePath = '/standard-costing/ac
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setCurrentPage(1); }, [customerId, article, color, debouncedSearch]);
 
-  const openDetail = (row: any) => {
-    if (!row.plan_id) {
+  const openDetail = (item: ItemRow) => {
+    if (!item.plan_id) {
       toast.info('No production plan / cost data yet for this item');
       return;
     }
-    navigate(`${detailBasePath}/${row.plan_id}`);
+    navigate(`${detailBasePath}/${item.plan_id}`);
+  };
+
+  const toggleAccordion = (salesOrderNo: string) => {
+    setExpandedRow(expandedRow === salesOrderNo ? null : salesOrderNo);
   };
 
   const formatQty = (n: number) => n != null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) : '0.00';
+
+  // Paginate grouped data
+  const paginatedData = groupedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
@@ -180,12 +248,11 @@ export default function StandardCosting({ detailBasePath = '/standard-costing/ac
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase w-10"></th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase w-8">#</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sale Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer Order No.</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Article</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Color</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Completed Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Balance Qty<br />(Sq.Ft.)</th>
@@ -196,43 +263,87 @@ export default function StandardCosting({ detailBasePath = '/standard-costing/ac
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 10 }).map((_, j) => (
+                    {Array.from({ length: 9 }).map((_, j) => (
                       <td key={j} className="py-3 px-3">
                         <div className="h-4 bg-gray-100 rounded animate-pulse" />
                       </td>
                     ))}
                   </tr>
                 ))
-              ) : data.length === 0 ? (
+              ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <Factory size={32} className="mx-auto text-gray-300 mb-3" />
                     <p className="text-sm font-medium text-gray-500">No cost sheets found</p>
                     <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
                   </td>
                 </tr>
               ) : (
-                data.map((row, i) => (
-                  <tr
-                    key={row.item_id}
-                    className="hover:bg-indigo-50/40 transition-all cursor-pointer"
-                    onClick={() => openDetail(row)}
-                  >
-                    <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
-                    <td className="py-2.5 px-3 text-xs font-medium text-indigo-700">{row.sales_order_no || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-800">{row.customer_name || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.customer_order_no || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.article || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.color || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.order_qty)}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.completed_qty)}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.balance_qty)}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                  </tr>
+                paginatedData.map((group, i) => (
+                  <>
+                    <tr
+                      key={group.sales_order_no}
+                      className="hover:bg-indigo-50/40 transition-all cursor-pointer"
+                    >
+                      <td className="py-2.5 px-3" onClick={() => toggleAccordion(group.sales_order_no)}>
+                        <button className="p-1 hover:bg-gray-200 rounded transition-colors">
+                          {expandedRow === group.sales_order_no ? (
+                            <ChevronDown size={14} className="text-indigo-600" />
+                          ) : (
+                            <ChevronRightIcon size={14} className="text-gray-400" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
+                      <td className="py-2.5 px-3 text-xs font-medium text-indigo-700" onClick={() => toggleAccordion(group.sales_order_no)}>{group.sales_order_no || '—'}</td>
+                      <td className="py-2.5 px-3 text-xs text-gray-800">{group.customer_name || '—'}</td>
+                      <td className="py-2.5 px-3 text-xs text-gray-700">{group.customer_order_no || '—'}</td>
+                      <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(group.total_order_qty)}</td>
+                      <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(group.total_completed_qty)}</td>
+                      <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(group.total_balance_qty)}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[group.status] || 'bg-gray-100 text-gray-700'}`}>
+                          {group.status}
+                        </span>
+                      </td>
+                    </tr>
+                    {/* Accordion Content - Item Details */}
+                    {expandedRow === group.sales_order_no && (
+                      <tr className="bg-slate-50/70">
+                        <td colSpan={9} className="p-0">
+                          <div className="px-6 py-4 border-t border-slate-200">
+                            <h4 className="text-sm font-bold text-slate-700 mb-3">Items for {group.sales_order_no}</h4>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-200">
+                                  <th className="text-left py-2 px-3 font-semibold text-slate-600">Article</th>
+                                  <th className="text-left py-2 px-3 font-semibold text-slate-600">Color</th>
+                                  <th className="text-right py-2 px-3 font-semibold text-slate-600">Order Qty (Sq.Ft.)</th>
+                                  <th className="text-right py-2 px-3 font-semibold text-slate-600">Completed Qty (Sq.Ft.)</th>
+                                  <th className="text-right py-2 px-3 font-semibold text-slate-600">Balance Qty (Sq.Ft.)</th>
+                                  <th className="text-center py-2 px-3 font-semibold text-slate-600">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {group.items.map((item) => (
+                                  <tr key={item.item_id} onClick={() => openDetail(item)} className="border-b border-slate-100 hover:bg-indigo-50 cursor-pointer transition-colors">
+                                    <td className="py-2 px-3 font-medium text-slate-700">{item.article || '—'}</td>
+                                    <td className="py-2 px-3 text-slate-600">{item.color || '—'}</td>
+                                    <td className="py-2 px-3 text-right text-slate-600">{formatQty(item.order_qty)}</td>
+                                    <td className="py-2 px-3 text-right text-slate-600">{formatQty(item.completed_qty)}</td>
+                                    <td className="py-2 px-3 text-right text-slate-600">{formatQty(item.balance_qty)}</td>
+                                    <td className="py-2 px-3 text-center">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[item.status] || 'bg-gray-100 text-gray-600'}`}>{item.status}</span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))
               )}
             </tbody>
@@ -245,38 +356,69 @@ export default function StandardCosting({ detailBasePath = '/standard-costing/ac
             <div className="p-4 space-y-3">
               {[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
             </div>
-          ) : data.length === 0 ? (
+          ) : paginatedData.length === 0 ? (
             <div className="py-16 text-center">
               <p className="text-sm text-gray-500">No cost sheets found</p>
             </div>
           ) : (
-            data.map((row) => (
-              <div key={row.item_id} className="p-4 active:bg-indigo-50 transition-colors cursor-pointer" onClick={() => openDetail(row)}>
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
-                    <p className="text-xs text-indigo-700 font-mono mt-0.5">{row.sales_order_no || '—'}</p>
+            paginatedData.map((group) => (
+              <div key={group.sales_order_no}>
+                <div className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => toggleAccordion(group.sales_order_no)} className="p-1 hover:bg-gray-200 rounded transition-colors">
+                        {expandedRow === group.sales_order_no ? (
+                          <ChevronDown size={14} className="text-indigo-600" />
+                        ) : (
+                          <ChevronRightIcon size={14} className="text-gray-400" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{group.customer_name || '—'}</p>
+                        <p className="text-xs text-indigo-700 font-mono mt-0.5">{group.sales_order_no || '—'}</p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[group.status] || 'bg-gray-100 text-gray-700'}`}>{group.status}</span>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>{row.status}</span>
+                  <div className="text-xs text-gray-600 mb-2.5 ml-7">
+                    <span>{group.items.length} item(s)</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100 ml-7">
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
+                      <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(group.total_order_qty)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p>
+                      <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(group.total_completed_qty)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
+                      <p className="text-xs font-bold text-amber-700 tabular-nums">{formatQty(group.total_balance_qty)}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-600 mb-2.5">
-                  <span className="truncate">{row.article || '—'}</span>
-                  {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
-                </div>
-                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
-                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.order_qty)}</p>
+                {/* Mobile Accordion */}
+                {expandedRow === group.sales_order_no && (
+                  <div className="px-4 pb-4 bg-slate-50">
+                    <div className="space-y-2">
+                      {group.items.map((item) => (
+                        <div key={item.item_id} onClick={() => openDetail(item)} className="bg-white rounded-lg p-3 border border-slate-200 active:bg-indigo-50 cursor-pointer">
+                          <div className="flex justify-between items-center mb-2">
+                            <p className="text-xs font-bold text-slate-700">{item.article || '—'}</p>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[item.status] || 'bg-gray-100 text-gray-600'}`}>{item.status}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mb-2">{item.color || '—'}</p>
+                          <div className="grid grid-cols-3 gap-2 text-[10px]">
+                            <div><span className="text-slate-500">Order:</span> <span className="font-medium">{formatQty(item.order_qty)}</span></div>
+                            <div><span className="text-slate-500">Completed:</span> <span className="font-medium">{formatQty(item.completed_qty)}</span></div>
+                            <div><span className="text-slate-500">Balance:</span> <span className="font-medium">{formatQty(item.balance_qty)}</span></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p>
-                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.completed_qty)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
-                    <p className="text-xs font-bold text-amber-700 tabular-nums">{formatQty(row.balance_qty)}</p>
-                  </div>
-                </div>
+                )}
               </div>
             ))
           )}
