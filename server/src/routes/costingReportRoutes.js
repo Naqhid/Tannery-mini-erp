@@ -7,6 +7,7 @@ const router = Router();
 router.get('/', validatePagination, ctrl.list);
 router.get('/filters', ctrl.getFilters);
 router.get('/plan/:planId/detail', ctrl.getDetailByPlan);
+router.get('/plan/:planId/summary', ctrl.getSummaryByPlan);
 router.get('/:id/detail', ctrl.getDetail);
 
 export default router;

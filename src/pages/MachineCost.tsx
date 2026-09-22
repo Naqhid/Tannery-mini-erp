@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, ArrowUp, ArrowDown, ChevronsUpDown,
-  Factory,
+  Factory, ChevronDown, ChevronRight as ChevronRightIcon, Loader2,
 } from 'lucide-react';
 import SkeletonLoader from '../components/ui/SkeletonLoader';
 import EmptyState from '../components/ui/EmptyState';
@@ -24,6 +24,23 @@ interface OrderRow {
   machine_cost_id: number | null;
   transaction_no: string | null;
   cost_status: string | null;
+  production_plan_id?: number;
+}
+
+interface StageCost {
+  process_stage: string;
+  material_cost: number;
+  general_cost: number;
+  machine_cost: number;
+  total_cost: number;
+}
+
+interface CostSummary {
+  stages: StageCost[];
+  total_material: number;
+  total_general: number;
+  total_machine: number;
+  grand_total: number;
 }
 
 type SortField = 'customer_name' | 'order_no' | 'article' | 'color' | 'order_qty' | 'status';
@@ -36,6 +53,7 @@ const STATUS_COLORS: Record<string, string> = {
   Pending: 'bg-amber-50 text-amber-700 border border-amber-200',
   Planned: 'bg-violet-50 text-violet-700 border border-violet-200',
   Draft: 'bg-slate-50 text-slate-700 border border-slate-200',
+  Posted: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
 };
 
 export default function MachineCost() {
@@ -49,6 +67,11 @@ export default function MachineCost() {
   const [sortBy, setSortBy] = useState<SortField | ''>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
+
+  // Accordion state
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [costSummary, setCostSummary] = useState<Record<number, CostSummary>>({});
+  const [loadingCost, setLoadingCost] = useState<number | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -88,6 +111,30 @@ export default function MachineCost() {
     }
   };
 
+  const toggleAccordion = async (e: React.MouseEvent, row: OrderRow) => {
+    e.stopPropagation();
+    const planId = row.production_plan_id || row.id;
+    
+    if (expandedRow === row.id) {
+      setExpandedRow(null);
+      return;
+    }
+
+    setExpandedRow(row.id);
+
+    if (!costSummary[planId]) {
+      setLoadingCost(row.id);
+      try {
+        const res = await api<{ data: CostSummary }>(`/costing-report/plan/${planId}/summary`);
+        setCostSummary(prev => ({ ...prev, [planId]: res.data }));
+      } catch {
+        // silently fail
+      } finally {
+        setLoadingCost(null);
+      }
+    }
+  };
+
   const handleSort = (field: SortField) => {
     if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     else { setSortBy(field); setSortOrder('asc'); }
@@ -99,6 +146,7 @@ export default function MachineCost() {
   };
 
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
+  const formatCurrency = (n: number) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
@@ -170,6 +218,7 @@ export default function MachineCost() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-10"></th>
                   <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
                   </th>
@@ -193,18 +242,97 @@ export default function MachineCost() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((row, idx) => (
-                  <tr key={row.id} onClick={() => handleRowClick(row)} className={`cursor-pointer transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                    <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.order_qty)}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
-                    <td className="px-4 py-3.5 text-sm text-right tabular-nums"><span className={`font-semibold ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{formatNumber(row.balance_qty)}</span></td>
-                    <td className="px-4 py-3.5 text-center"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>{row.status}</span></td>
-                  </tr>
-                ))}
+                {rows.map((row, idx) => {
+                  const planId = row.production_plan_id || row.id;
+                  return (
+                    <>
+                      <tr key={row.id} onClick={() => handleRowClick(row)} className={`cursor-pointer transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                        <td className="px-3 py-3.5" onClick={(e) => toggleAccordion(e, row)}>
+                          <button className="p-1 hover:bg-gray-200 rounded transition-colors">
+                            {loadingCost === row.id ? (
+                              <Loader2 size={14} className="animate-spin text-violet-600" />
+                            ) : expandedRow === row.id ? (
+                              <ChevronDown size={14} className="text-violet-600" />
+                            ) : (
+                              <ChevronRightIcon size={14} className="text-gray-400" />
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
+                        <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
+                        <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
+                        <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
+                        <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.order_qty)}</td>
+                        <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
+                        <td className="px-4 py-3.5 text-sm text-right tabular-nums"><span className={`font-semibold ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{formatNumber(row.balance_qty)}</span></td>
+                        <td className="px-4 py-3.5 text-center"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>{row.status}</span></td>
+                      </tr>
+                      {/* Accordion Content */}
+                      {expandedRow === row.id && (
+                        <tr className="bg-slate-50/70">
+                          <td colSpan={9} className="p-0">
+                            <div className="px-6 py-4 border-t border-slate-200">
+                              {loadingCost === row.id ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <Loader2 size={24} className="animate-spin text-violet-600" />
+                                  <span className="ml-2 text-sm text-gray-500">Loading cost summary...</span>
+                                </div>
+                              ) : costSummary[planId] ? (
+                                <div className="space-y-4">
+                                  <h4 className="text-sm font-bold text-slate-700">Stage-wise Cost Summary</h4>
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="border-b border-slate-200">
+                                        <th className="text-left py-2 px-3 font-semibold text-slate-600">Stage</th>
+                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">Material Cost (₹)</th>
+                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">General Cost (₹)</th>
+                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">Machine Cost (₹)</th>
+                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">Total (₹)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {costSummary[planId].stages.map((stage, i) => (
+                                        <tr key={i} className="border-b border-slate-100">
+                                          <td className="py-2 px-3 font-medium text-slate-700">{stage.process_stage || 'N/A'}</td>
+                                          <td className="py-2 px-3 text-right text-slate-600">{formatCurrency(stage.material_cost)}</td>
+                                          <td className="py-2 px-3 text-right text-slate-600">{formatCurrency(stage.general_cost)}</td>
+                                          <td className="py-2 px-3 text-right text-violet-700 font-semibold">{formatCurrency(stage.machine_cost)}</td>
+                                          <td className="py-2 px-3 text-right font-semibold text-slate-700">{formatCurrency(stage.total_cost)}</td>
+                                        </tr>
+                                      ))}
+                                      {costSummary[planId].stages.length === 0 && (
+                                        <tr><td colSpan={5} className="py-4 text-center text-slate-400">No cost data available</td></tr>
+                                      )}
+                                    </tbody>
+                                    {costSummary[planId].stages.length > 0 && (
+                                      <tfoot className="border-t-2 border-slate-300 bg-slate-100">
+                                        <tr>
+                                          <td className="py-2 px-3 font-bold text-slate-700">Grand Total</td>
+                                          <td className="py-2 px-3 text-right font-bold text-blue-700">{formatCurrency(costSummary[planId].total_material)}</td>
+                                          <td className="py-2 px-3 text-right font-bold text-blue-700">{formatCurrency(costSummary[planId].total_general)}</td>
+                                          <td className="py-2 px-3 text-right font-bold text-violet-700">{formatCurrency(costSummary[planId].total_machine)}</td>
+                                          <td className="py-2 px-3 text-right font-bold text-indigo-700">{formatCurrency(costSummary[planId].grand_total)}</td>
+                                        </tr>
+                                      </tfoot>
+                                    )}
+                                  </table>
+                                  <div className="flex justify-end">
+                                    <button onClick={(e) => { e.stopPropagation(); handleRowClick(row); }}
+                                      className="text-xs font-medium text-violet-600 hover:text-violet-800 flex items-center gap-1">
+                                      View Full Details <ChevronRightIcon size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="py-4 text-center text-slate-400">No cost data available</div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -235,26 +363,69 @@ export default function MachineCost() {
           <EmptyState title="No orders found" description="No production status orders match your current filters." />
         ) : (
           <>
-            {rows.map(row => (
-              <div key={row.id} onClick={() => handleRowClick(row)} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm active:bg-blue-50 transition-colors cursor-pointer">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
-                    <p className="text-xs text-blue-700 font-mono mt-0.5">{row.order_no || '—'}</p>
+            {rows.map(row => {
+              const planId = row.production_plan_id || row.id;
+              return (
+                <div key={row.id}>
+                  <div onClick={() => handleRowClick(row)} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm active:bg-blue-50 transition-colors cursor-pointer">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <button onClick={(e) => toggleAccordion(e, row)} className="p-1 hover:bg-gray-200 rounded transition-colors">
+                          {loadingCost === row.id ? (
+                            <Loader2 size={14} className="animate-spin text-violet-600" />
+                          ) : expandedRow === row.id ? (
+                            <ChevronDown size={14} className="text-violet-600" />
+                          ) : (
+                            <ChevronRightIcon size={14} className="text-gray-400" />
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
+                          <p className="text-xs text-blue-700 font-mono mt-0.5">{row.order_no || '—'}</p>
+                        </div>
+                      </div>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600'}`}>{row.status}</span>
+                    </div>
+                    <div className="flex items-center gap-3 mb-3 text-xs text-gray-600 ml-7">
+                      <span className="truncate">{row.article || '—'}</span>
+                      {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100 ml-7">
+                      <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Planned</p><p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p></div>
+                      <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p><p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.completed_qty)}</p></div>
+                      <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p><p className={`text-sm font-bold tabular-nums ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{formatNumber(row.balance_qty)}</p></div>
+                    </div>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600'}`}>{row.status}</span>
+                  {/* Mobile Accordion */}
+                  {expandedRow === row.id && (
+                    <div className="px-4 pb-4 bg-slate-50 rounded-b-xl border-x border-b border-gray-200 -mt-2">
+                      {loadingCost === row.id ? (
+                        <div className="flex items-center justify-center py-4"><Loader2 size={20} className="animate-spin text-violet-600" /></div>
+                      ) : costSummary[planId] ? (
+                        <div className="space-y-2 pt-2">
+                          {costSummary[planId].stages.map((stage, i) => (
+                            <div key={i} className="bg-white rounded-lg p-3 border border-slate-200">
+                              <p className="text-xs font-bold text-slate-700 mb-2">{stage.process_stage || 'N/A'}</p>
+                              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                <div><span className="text-slate-500">Material:</span> <span className="font-medium">₹{formatCurrency(stage.material_cost)}</span></div>
+                                <div><span className="text-slate-500">General:</span> <span className="font-medium">₹{formatCurrency(stage.general_cost)}</span></div>
+                                <div><span className="text-slate-500">Machine:</span> <span className="font-bold text-violet-700">₹{formatCurrency(stage.machine_cost)}</span></div>
+                                <div><span className="text-slate-500">Total:</span> <span className="font-bold text-indigo-700">₹{formatCurrency(stage.total_cost)}</span></div>
+                              </div>
+                            </div>
+                          ))}
+                          <div className="bg-violet-50 rounded-lg p-3 border border-violet-200">
+                            <p className="text-xs font-bold text-violet-800">Grand Total: ₹{formatCurrency(costSummary[planId].grand_total)}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 text-center py-2">No cost data</p>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 mb-3 text-xs text-gray-600">
-                  <span className="truncate">{row.article || '—'}</span>
-                  {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
-                </div>
-                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
-                  <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Planned</p><p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p></div>
-                  <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p><p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.completed_qty)}</p></div>
-                  <div className="text-center"><p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p><p className={`text-sm font-bold tabular-nums ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{formatNumber(row.balance_qty)}</p></div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {totalRecords > 0 && (
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-gray-500">{(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords}</p>

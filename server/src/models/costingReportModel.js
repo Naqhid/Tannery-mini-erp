@@ -225,6 +225,108 @@ export async function getActualCostDetailByPlan(planId) {
 }
 
 /**
+ * Get cost summary by production plan ID for accordion display.
+ * Returns stage-wise cost breakdown with material, general, and machine costs.
+ */
+export async function getCostSummaryByPlan(planId) {
+  const planIdNum = Number(planId);
+  if (!planIdNum) return null;
+
+  // Get plan number for material issue lookup
+  const [[planInfo]] = await pool.query(
+    `SELECT plan_no FROM production_plans WHERE id = ? AND deleted_at IS NULL`,
+    [planIdNum]
+  );
+  if (!planInfo) return null;
+
+  // Get all stages for this plan from production_status_orders
+  const [stages] = await pool.query(
+    `SELECT DISTINCT pso.process_stage
+     FROM production_status_orders pso
+     WHERE pso.production_plan_id = ? AND pso.deleted_at IS NULL
+       AND pso.process_stage IS NOT NULL AND pso.process_stage != ''
+     UNION
+     SELECT DISTINCT s.stage_name AS process_stage
+     FROM production_plan_stages s
+     WHERE s.plan_id = ? AND s.stage_name IS NOT NULL AND s.stage_name != ''
+     ORDER BY process_stage`,
+    [planIdNum, planIdNum]
+  );
+
+  const result = {
+    stages: [],
+    total_material: 0,
+    total_general: 0,
+    total_machine: 0,
+    grand_total: 0,
+  };
+
+  for (const stageRow of stages) {
+    const stageName = stageRow.process_stage;
+
+    // Get pso IDs for this plan+stage
+    const [psoRows] = await pool.query(
+      `SELECT id FROM production_status_orders 
+       WHERE production_plan_id = ? AND process_stage = ? AND deleted_at IS NULL`,
+      [planIdNum, stageName]
+    );
+    const psoIds = psoRows.map(r => r.id);
+
+    // Material cost from material_issues
+    const [[matCost]] = await pool.query(
+      `SELECT COALESCE(SUM(mii.amount), 0) AS total
+       FROM material_issues mi
+       JOIN material_issue_items mii ON mii.issue_id = mi.id
+       WHERE mi.production_batch = ?
+         AND COALESCE(mi.process_stage, '') COLLATE utf8mb4_0900_ai_ci = COALESCE(?, '') COLLATE utf8mb4_0900_ai_ci`,
+      [planInfo.plan_no, stageName]
+    );
+
+    // General cost from general_cost_headers
+    let generalCost = 0;
+    if (psoIds.length > 0) {
+      const [[genCost]] = await pool.query(
+        `SELECT COALESCE(SUM(gh.total_amount), 0) AS total
+         FROM general_cost_headers gh
+         WHERE gh.production_plan_id IN (?)`,
+        [psoIds]
+      );
+      generalCost = Number(genCost?.total) || 0;
+    }
+
+    // Machine cost from machine_cost_headers  
+    let machineCost = 0;
+    if (psoIds.length > 0) {
+      const [[machCost]] = await pool.query(
+        `SELECT COALESCE(SUM(mh.total_amount), 0) AS total
+         FROM machine_cost_headers mh
+         WHERE mh.production_plan_id IN (?)`,
+        [psoIds]
+      );
+      machineCost = Number(machCost?.total) || 0;
+    }
+
+    const materialCost = Number(matCost?.total) || 0;
+    const stageTotalCost = materialCost + generalCost + machineCost;
+
+    result.stages.push({
+      process_stage: stageName,
+      material_cost: materialCost,
+      general_cost: generalCost,
+      machine_cost: machineCost,
+      total_cost: stageTotalCost,
+    });
+
+    result.total_material += materialCost;
+    result.total_general += generalCost;
+    result.total_machine += machineCost;
+    result.grand_total += stageTotalCost;
+  }
+
+  return result;
+}
+
+/**
  * Shared aggregation: given a seed production_status_orders row, group all
  * matching rows on order_no + article + color and build the stage-wise cost
  * detail. Used by both getActualCostDetail and getActualCostDetailByPlan.
