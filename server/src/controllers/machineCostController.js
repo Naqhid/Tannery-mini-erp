@@ -10,6 +10,13 @@ export async function listOrders(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function getOrdersByPlan(req, res, next) {
+  try {
+    const rows = await model.getOrdersByPlan(req.params.planId);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
 export async function getOne(req, res, next) {
   try {
     const entry = await model.getById(req.params.id);

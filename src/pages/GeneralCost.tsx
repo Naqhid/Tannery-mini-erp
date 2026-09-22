@@ -14,13 +14,27 @@ import BarcodeScanner from '../components/BarcodeScanner';
 
 interface StageOption { id: number; name: string; }
 
-interface OrderRow {
-  id: number;
+interface PlanRow {
+  plan_id: number;
   plan_no: string;
   customer_name: string;
-  order_no: string;
   article: string;
   color: string;
+  order_qty: number;
+  completed_qty: number;
+  balance_qty: number;
+  status: string;
+  uom: string;
+  cost_entry_count: number;
+}
+
+interface DetailRow {
+  id: number;
+  order_no: string;
+  customer_name: string;
+  article: string;
+  color: string;
+  process_stage: string;
   order_qty: number;
   completed_qty: number;
   balance_qty: number;
@@ -29,7 +43,6 @@ interface OrderRow {
   general_cost_id: number | null;
   transaction_no: string | null;
   cost_status: string | null;
-  production_plan_id?: number;
 }
 
 interface TxnRow {
@@ -45,23 +58,7 @@ interface TxnRow {
   cost_per_piece: number;
 }
 
-interface StageCost {
-  process_stage: string;
-  material_cost: number;
-  general_cost: number;
-  machine_cost: number;
-  total_cost: number;
-}
-
-interface CostSummary {
-  stages: StageCost[];
-  total_material: number;
-  total_general: number;
-  total_machine: number;
-  grand_total: number;
-}
-
-type SortField = 'customer_name' | 'order_no' | 'article' | 'color' | 'order_qty' | 'status';
+type SortField = 'customer_name' | 'plan_no' | 'article' | 'color' | 'order_qty' | 'status';
 type SortOrder = 'asc' | 'desc';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -71,11 +68,12 @@ const STATUS_COLORS: Record<string, string> = {
   Pending: 'bg-amber-50 text-amber-700 border border-amber-200',
   Planned: 'bg-violet-50 text-violet-700 border border-violet-200',
   Draft: 'bg-slate-50 text-slate-700 border border-slate-200',
+  Posted: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
 };
 
 export default function GeneralCost() {
   const navigate = useNavigate();
-  const [rows, setRows] = useState<OrderRow[]>([]);
+  const [rows, setRows] = useState<PlanRow[]>([]);
   const [txnRows, setTxnRows] = useState<TxnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
@@ -90,8 +88,8 @@ export default function GeneralCost() {
 
   // Accordion state
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [costSummary, setCostSummary] = useState<Record<number, CostSummary>>({});
-  const [loadingCost, setLoadingCost] = useState<number | null>(null);
+  const [detailRows, setDetailRows] = useState<Record<number, DetailRow[]>>({});
+  const [loadingDetail, setLoadingDetail] = useState<number | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -115,7 +113,7 @@ export default function GeneralCost() {
         setTotalRecords(res.total || 0);
         setTotalPages(res.totalPages || 0);
       } else {
-        const res = await api<{ data: OrderRow[]; total: number; totalPages: number }>(`/general-costs?${params.toString()}`);
+        const res = await api<{ data: PlanRow[]; total: number; totalPages: number }>(`/general-costs?${params.toString()}`);
         setRows(res.data || []);
         setTotalRecords(res.total || 0);
         setTotalPages(res.totalPages || 0);
@@ -141,34 +139,34 @@ export default function GeneralCost() {
     })();
   }, []);
 
-  const handleRowClick = (row: OrderRow) => {
-    if (row.general_cost_id) {
-      navigate(`/general-cost/${row.general_cost_id}`);
+  const handleDetailRowClick = (detail: DetailRow) => {
+    if (detail.general_cost_id) {
+      navigate(`/general-cost/${detail.general_cost_id}`);
     } else {
-      navigate(`/general-cost/new?planId=${row.id}`);
+      navigate(`/general-cost/new?planId=${detail.id}`);
     }
   };
 
-  const toggleAccordion = async (e: React.MouseEvent, row: OrderRow) => {
+  const toggleAccordion = async (e: React.MouseEvent, row: PlanRow) => {
     e.stopPropagation();
-    const planId = row.production_plan_id || row.id;
+    const planId = row.plan_id;
     
-    if (expandedRow === row.id) {
+    if (expandedRow === planId) {
       setExpandedRow(null);
       return;
     }
 
-    setExpandedRow(row.id);
+    setExpandedRow(planId);
 
-    if (!costSummary[planId]) {
-      setLoadingCost(row.id);
+    if (!detailRows[planId]) {
+      setLoadingDetail(planId);
       try {
-        const res = await api<{ data: CostSummary }>(`/costing-report/plan/${planId}/summary`);
-        setCostSummary(prev => ({ ...prev, [planId]: res.data }));
+        const res = await api<{ data: DetailRow[] }>(`/general-costs/plan/${planId}/orders`);
+        setDetailRows(prev => ({ ...prev, [planId]: res.data || [] }));
       } catch {
         // silently fail
       } finally {
-        setLoadingCost(null);
+        setLoadingDetail(null);
       }
     }
   };
@@ -188,7 +186,6 @@ export default function GeneralCost() {
   };
 
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
-  const formatCurrency = (n: number) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
@@ -250,7 +247,7 @@ export default function GeneralCost() {
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search customer, order no..."
+                placeholder="Search customer, plan no..."
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-64 md:w-72 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
@@ -325,8 +322,8 @@ export default function GeneralCost() {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-10"></th>
-                  <th onClick={() => handleSort('order_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
+                  <th onClick={() => handleSort('plan_no')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                    <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="plan_no" /></span>
                   </th>
                   <th onClick={() => handleSort('customer_name')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Customer <SortIcon field="customer_name" /></span>
@@ -348,109 +345,95 @@ export default function GeneralCost() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((row, idx) => {
-                  const planId = row.production_plan_id || row.id;
-                  return (
-                    <>
-                      <tr
-                        key={row.id}
-                        onClick={() => handleRowClick(row)}
-                        className={`cursor-pointer transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
-                      >
-                        <td className="px-3 py-3.5" onClick={(e) => toggleAccordion(e, row)}>
-                          <button className="p-1 hover:bg-gray-200 rounded transition-colors">
-                            {loadingCost === row.id ? (
-                              <Loader2 size={14} className="animate-spin text-blue-600" />
-                            ) : expandedRow === row.id ? (
-                              <ChevronDown size={14} className="text-blue-600" />
+                {rows.map((row, idx) => (
+                  <>
+                    <tr
+                      key={row.plan_id}
+                      className={`cursor-pointer transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
+                    >
+                      <td className="px-3 py-3.5" onClick={(e) => toggleAccordion(e, row)}>
+                        <button className="p-1 hover:bg-gray-200 rounded transition-colors">
+                          {loadingDetail === row.plan_id ? (
+                            <Loader2 size={14} className="animate-spin text-blue-600" />
+                          ) : expandedRow === row.plan_id ? (
+                            <ChevronDown size={14} className="text-blue-600" />
+                          ) : (
+                            <ChevronRightIcon size={14} className="text-gray-400" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.plan_no || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.order_qty)}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
+                      <td className="px-4 py-3.5 text-sm text-right tabular-nums">
+                        <span className={`font-semibold ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+                          {formatNumber(row.balance_qty)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                    </tr>
+                    {/* Accordion Content - Detail Rows */}
+                    {expandedRow === row.plan_id && (
+                      <tr className="bg-slate-50/70">
+                        <td colSpan={9} className="p-0">
+                          <div className="px-6 py-4 border-t border-slate-200">
+                            {loadingDetail === row.plan_id ? (
+                              <div className="flex items-center justify-center py-8">
+                                <Loader2 size={24} className="animate-spin text-blue-600" />
+                                <span className="ml-2 text-sm text-gray-500">Loading details...</span>
+                              </div>
+                            ) : detailRows[row.plan_id]?.length > 0 ? (
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-bold text-slate-700 mb-3">Stage Details for {row.plan_no}</h4>
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-slate-200">
+                                      <th className="text-left py-2 px-3 font-semibold text-slate-600">Process Stage</th>
+                                      <th className="text-right py-2 px-3 font-semibold text-slate-600">Planned Qty</th>
+                                      <th className="text-right py-2 px-3 font-semibold text-slate-600">Completed Qty</th>
+                                      <th className="text-right py-2 px-3 font-semibold text-slate-600">Balance Qty</th>
+                                      <th className="text-center py-2 px-3 font-semibold text-slate-600">Status</th>
+                                      <th className="text-center py-2 px-3 font-semibold text-slate-600">Cost Entry</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {detailRows[row.plan_id].map((detail) => (
+                                      <tr key={detail.id} onClick={() => handleDetailRowClick(detail)} className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition-colors">
+                                        <td className="py-2 px-3 font-medium text-slate-700">{detail.process_stage || 'N/A'}</td>
+                                        <td className="py-2 px-3 text-right text-slate-600">{formatNumber(detail.order_qty)}</td>
+                                        <td className="py-2 px-3 text-right text-slate-600">{formatNumber(detail.completed_qty)}</td>
+                                        <td className="py-2 px-3 text-right text-slate-600">{formatNumber(detail.balance_qty)}</td>
+                                        <td className="py-2 px-3 text-center">
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[detail.status] || 'bg-gray-100 text-gray-600'}`}>{detail.status}</span>
+                                        </td>
+                                        <td className="py-2 px-3 text-center">
+                                          {detail.general_cost_id ? (
+                                            <span className="text-xs text-emerald-600 font-medium">{detail.transaction_no}</span>
+                                          ) : (
+                                            <span className="text-xs text-gray-400">—</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
                             ) : (
-                              <ChevronRightIcon size={14} className="text-gray-400" />
+                              <div className="py-4 text-center text-slate-400">No stage details available</div>
                             )}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || row.plan_no || '—'}</td>
-                        <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
-                        <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
-                        <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
-                        <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.order_qty)}</td>
-                        <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
-                        <td className="px-4 py-3.5 text-sm text-right tabular-nums">
-                          <span className={`font-semibold ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
-                            {formatNumber(row.balance_qty)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                            {row.status}
-                          </span>
+                          </div>
                         </td>
                       </tr>
-                      {/* Accordion Content */}
-                      {expandedRow === row.id && (
-                        <tr className="bg-slate-50/70">
-                          <td colSpan={9} className="p-0">
-                            <div className="px-6 py-4 border-t border-slate-200">
-                              {loadingCost === row.id ? (
-                                <div className="flex items-center justify-center py-8">
-                                  <Loader2 size={24} className="animate-spin text-blue-600" />
-                                  <span className="ml-2 text-sm text-gray-500">Loading cost summary...</span>
-                                </div>
-                              ) : costSummary[planId] ? (
-                                <div className="space-y-4">
-                                  <h4 className="text-sm font-bold text-slate-700">Stage-wise Cost Summary</h4>
-                                  <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className="border-b border-slate-200">
-                                        <th className="text-left py-2 px-3 font-semibold text-slate-600">Stage</th>
-                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">Material Cost (₹)</th>
-                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">General Cost (₹)</th>
-                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">Machine Cost (₹)</th>
-                                        <th className="text-right py-2 px-3 font-semibold text-slate-600">Total (₹)</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {costSummary[planId].stages.map((stage, i) => (
-                                        <tr key={i} className="border-b border-slate-100">
-                                          <td className="py-2 px-3 font-medium text-slate-700">{stage.process_stage || 'N/A'}</td>
-                                          <td className="py-2 px-3 text-right text-slate-600">{formatCurrency(stage.material_cost)}</td>
-                                          <td className="py-2 px-3 text-right text-blue-700 font-semibold">{formatCurrency(stage.general_cost)}</td>
-                                          <td className="py-2 px-3 text-right text-slate-600">{formatCurrency(stage.machine_cost)}</td>
-                                          <td className="py-2 px-3 text-right font-semibold text-slate-700">{formatCurrency(stage.total_cost)}</td>
-                                        </tr>
-                                      ))}
-                                      {costSummary[planId].stages.length === 0 && (
-                                        <tr><td colSpan={5} className="py-4 text-center text-slate-400">No cost data available</td></tr>
-                                      )}
-                                    </tbody>
-                                    {costSummary[planId].stages.length > 0 && (
-                                      <tfoot className="border-t-2 border-slate-300 bg-slate-100">
-                                        <tr>
-                                          <td className="py-2 px-3 font-bold text-slate-700">Grand Total</td>
-                                          <td className="py-2 px-3 text-right font-bold text-emerald-700">{formatCurrency(costSummary[planId].total_material)}</td>
-                                          <td className="py-2 px-3 text-right font-bold text-blue-700">{formatCurrency(costSummary[planId].total_general)}</td>
-                                          <td className="py-2 px-3 text-right font-bold text-violet-700">{formatCurrency(costSummary[planId].total_machine)}</td>
-                                          <td className="py-2 px-3 text-right font-bold text-indigo-700">{formatCurrency(costSummary[planId].grand_total)}</td>
-                                        </tr>
-                                      </tfoot>
-                                    )}
-                                  </table>
-                                  <div className="flex justify-end">
-                                    <button onClick={(e) => { e.stopPropagation(); handleRowClick(row); }}
-                                      className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                                      View Full Details <ChevronRightIcon size={14} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="py-4 text-center text-slate-400">No cost data available</div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })}
+                    )}
+                  </>
+                ))}
               </tbody>
             </table>
           </div>
@@ -547,95 +530,89 @@ export default function GeneralCost() {
           <EmptyState title="No orders found" description="No production plans match your current filters." />
         ) : (
           <>
-            {rows.map(row => {
-              const planId = row.production_plan_id || row.id;
-              return (
-                <div key={row.id}>
-                  <div
-                    onClick={() => handleRowClick(row)}
-                    className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm active:bg-blue-50 transition-colors cursor-pointer"
-                  >
-                    {/* Top: Customer + Status */}
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <button onClick={(e) => toggleAccordion(e, row)} className="p-1 hover:bg-gray-200 rounded transition-colors">
-                          {loadingCost === row.id ? (
-                            <Loader2 size={14} className="animate-spin text-blue-600" />
-                          ) : expandedRow === row.id ? (
-                            <ChevronDown size={14} className="text-blue-600" />
-                          ) : (
-                            <ChevronRightIcon size={14} className="text-gray-400" />
-                          )}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
-                          <p className="text-xs text-blue-700 font-mono mt-0.5">{row.order_no || row.plan_no || '—'}</p>
-                        </div>
+            {rows.map(row => (
+              <div key={row.plan_id}>
+                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  {/* Top: Customer + Status */}
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <button onClick={(e) => toggleAccordion(e, row)} className="p-1 hover:bg-gray-200 rounded transition-colors">
+                        {loadingDetail === row.plan_id ? (
+                          <Loader2 size={14} className="animate-spin text-blue-600" />
+                        ) : expandedRow === row.plan_id ? (
+                          <ChevronDown size={14} className="text-blue-600" />
+                        ) : (
+                          <ChevronRightIcon size={14} className="text-gray-400" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
+                        <p className="text-xs text-blue-700 font-mono mt-0.5">{row.plan_no || '—'}</p>
                       </div>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                        {row.status}
-                      </span>
                     </div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                      {row.status}
+                    </span>
+                  </div>
 
-                    {/* Middle: Article + Color */}
-                    <div className="flex items-center gap-3 mb-3 text-xs text-gray-600 ml-7">
-                      <span className="truncate">{row.article || '—'}</span>
-                      {row.color && (
-                        <>
-                          <span className="text-gray-300">•</span>
-                          <span>{row.color}</span>
-                        </>
-                      )}
+                  {/* Middle: Article + Color */}
+                  <div className="flex items-center gap-3 mb-3 text-xs text-gray-600 ml-7">
+                    <span className="truncate">{row.article || '—'}</span>
+                    {row.color && (
+                      <>
+                        <span className="text-gray-300">•</span>
+                        <span>{row.color}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Bottom: Qty info */}
+                  <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100 ml-7">
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Planned</p>
+                      <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p>
                     </div>
-
-                    {/* Bottom: Qty info */}
-                    <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100 ml-7">
-                      <div className="text-center">
-                        <p className="text-[10px] text-gray-400 uppercase font-medium">Planned</p>
-                        <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.order_qty)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p>
-                        <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.completed_qty)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
-                        <p className={`text-sm font-bold tabular-nums ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
-                          {formatNumber(row.balance_qty)}
-                        </p>
-                      </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p>
+                      <p className="text-sm font-bold text-gray-900 tabular-nums">{formatNumber(row.completed_qty)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
+                      <p className={`text-sm font-bold tabular-nums ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+                        {formatNumber(row.balance_qty)}
+                      </p>
                     </div>
                   </div>
-                  {/* Mobile Accordion */}
-                  {expandedRow === row.id && (
-                    <div className="px-4 pb-4 bg-slate-50 rounded-b-xl border-x border-b border-gray-200 -mt-2">
-                      {loadingCost === row.id ? (
-                        <div className="flex items-center justify-center py-4"><Loader2 size={20} className="animate-spin text-blue-600" /></div>
-                      ) : costSummary[planId] ? (
-                        <div className="space-y-2 pt-2">
-                          {costSummary[planId].stages.map((stage, i) => (
-                            <div key={i} className="bg-white rounded-lg p-3 border border-slate-200">
-                              <p className="text-xs font-bold text-slate-700 mb-2">{stage.process_stage || 'N/A'}</p>
-                              <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                <div><span className="text-slate-500">Material:</span> <span className="font-medium">₹{formatCurrency(stage.material_cost)}</span></div>
-                                <div><span className="text-slate-500">General:</span> <span className="font-bold text-blue-700">₹{formatCurrency(stage.general_cost)}</span></div>
-                                <div><span className="text-slate-500">Machine:</span> <span className="font-medium">₹{formatCurrency(stage.machine_cost)}</span></div>
-                                <div><span className="text-slate-500">Total:</span> <span className="font-bold text-indigo-700">₹{formatCurrency(stage.total_cost)}</span></div>
-                              </div>
-                            </div>
-                          ))}
-                          <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                            <p className="text-xs font-bold text-blue-800">Grand Total: ₹{formatCurrency(costSummary[planId].grand_total)}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-400 text-center py-2">No cost data</p>
-                      )}
-                    </div>
-                  )}
                 </div>
-              );
-            })}
+                {/* Mobile Accordion */}
+                {expandedRow === row.plan_id && (
+                  <div className="px-4 pb-4 bg-slate-50 rounded-b-xl border-x border-b border-gray-200 -mt-2">
+                    {loadingDetail === row.plan_id ? (
+                      <div className="flex items-center justify-center py-4"><Loader2 size={20} className="animate-spin text-blue-600" /></div>
+                    ) : detailRows[row.plan_id]?.length > 0 ? (
+                      <div className="space-y-2 pt-2">
+                        {detailRows[row.plan_id].map((detail) => (
+                          <div key={detail.id} onClick={() => handleDetailRowClick(detail)} className="bg-white rounded-lg p-3 border border-slate-200 active:bg-blue-50 cursor-pointer">
+                            <div className="flex justify-between items-center mb-2">
+                              <p className="text-xs font-bold text-slate-700">{detail.process_stage || 'N/A'}</p>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[detail.status] || 'bg-gray-100 text-gray-600'}`}>{detail.status}</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-[10px]">
+                              <div><span className="text-slate-500">Planned:</span> <span className="font-medium">{formatNumber(detail.order_qty)}</span></div>
+                              <div><span className="text-slate-500">Completed:</span> <span className="font-medium">{formatNumber(detail.completed_qty)}</span></div>
+                              <div><span className="text-slate-500">Balance:</span> <span className="font-medium">{formatNumber(detail.balance_qty)}</span></div>
+                            </div>
+                            {detail.general_cost_id && <p className="text-[10px] text-emerald-600 font-medium mt-1">Cost: {detail.transaction_no}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 text-center py-2">No stage details</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
 
             {/* Mobile Pagination */}
             {totalRecords > 0 && (

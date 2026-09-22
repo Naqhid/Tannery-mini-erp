@@ -7,6 +7,7 @@ const router = Router();
 
 router.get('/', validatePagination, ctrl.listOrders);
 router.get('/next-no', ctrl.getNextNo);
+router.get('/plan/:planId/orders', ctrl.getOrdersByPlan);
 router.get('/by-plan/:planId', ctrl.getByPlan);
 router.get('/:id', validateId, ctrl.getOne);
 
