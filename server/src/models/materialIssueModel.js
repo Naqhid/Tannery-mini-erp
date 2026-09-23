@@ -1,5 +1,5 @@
 import pool from '../config/db.js';
-import { updateStock, addLedgerEntry, allowsNegativeStock } from './stockLedgerModel.js';
+import { updateStock, addLedgerEntry, allowsNegativeStock, rebuildAndReprice } from './stockLedgerModel.js';
 import { getIssueItemInfo, replaceReferenceTransactions } from './materialTransactionModel.js';
 
 export async function getAll({ search, status, warehouse_id, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
@@ -150,6 +150,12 @@ export async function create(data, items = [], createdBy = null) {
         issue_qty: parseFloat(item.issue_qty) || 0,
         issue_value: parseFloat(item.amount) || 0,
       })));
+
+      // Date-ordered rebuild of the live stock ledger (System A) so a backdated
+      // issue correctly shifts later balances/rates in the inventory reports.
+      for (const item of items) {
+        await rebuildAndReprice(conn, data.warehouse_id, item.material_id);
+      }
     }
 
     await conn.commit();
@@ -172,8 +178,17 @@ export async function update(id, data, items = [], updatedBy = null) {
     const wasPosted = current && current.status === 'Posted';
     const newStatus = data.status || current?.status || 'Draft';
 
+    // Track every (warehouse, material) pair affected by old or new version.
+    const affectedPairs = new Map();
+
     // If it was posted, reverse old stock first
     if (wasPosted) {
+      const [prevLedger] = await conn.query(
+        'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+        ['material_issue', id]
+      );
+      for (const p of prevLedger) affectedPairs.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
+
       const [oldItems] = await conn.query(
         'SELECT material_id, uom, issue_qty FROM material_issue_items WHERE issue_id=?', [id]
       );
@@ -246,6 +261,13 @@ export async function update(id, data, items = [], updatedBy = null) {
         issue_qty: parseFloat(item.issue_qty) || 0,
         issue_value: parseFloat(item.amount) || 0,
       })));
+
+      for (const it of items) affectedPairs.set(`${data.warehouse_id}:${it.material_id}`, { w: data.warehouse_id, m: it.material_id });
+    }
+
+    // Date-ordered rebuild of System A for every affected pair (old + new).
+    for (const p of affectedPairs.values()) {
+      await rebuildAndReprice(conn, p.w, p.m);
     }
 
     await conn.commit();
@@ -274,6 +296,11 @@ export async function remove(id) {
     await replaceReferenceTransactions(conn, 'material_issue', id, []);
     await conn.query('DELETE FROM material_issue_items WHERE issue_id=?', [id]);
     const [result] = await conn.query('DELETE FROM material_issues WHERE id=?', [id]);
+
+    // Rebuild valuation for the affected materials after removing ledger rows.
+    for (const item of items) {
+      await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+    }
 
     await conn.commit();
     return result.affectedRows > 0;

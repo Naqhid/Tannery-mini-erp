@@ -1,5 +1,5 @@
 import pool from '../config/db.js';
-import { updateStock, addLedgerEntry, allowsNegativeStock } from './stockLedgerModel.js';
+import { updateStock, addLedgerEntry, allowsNegativeStock, rebuildAndReprice } from './stockLedgerModel.js';
 
 export async function getAll({ search, status, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
@@ -155,6 +155,13 @@ export async function create(data, items = [], createdBy = null) {
       });
     }
 
+    // Date-ordered rebuild of both source and destination warehouses so a
+    // backdated transfer correctly shifts later balances/rates on both sides.
+    for (const item of items) {
+      await rebuildAndReprice(conn, data.from_warehouse_id, item.material_id);
+      await rebuildAndReprice(conn, data.to_warehouse_id, item.material_id);
+    }
+
     await conn.commit();
     return { id: transferId, transfer_no };
   } catch (err) {
@@ -169,6 +176,13 @@ export async function update(id, data, items = [], updatedBy = null) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+
+    // Capture the (warehouse, material) pairs the OLD version touched (from the
+    // ledger) so their valuation is rebuilt even if warehouses/items changed.
+    const [prevLedger] = await conn.query(
+      'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+      ['stock_transfer', id]
+    );
 
     // Reverse old movements
     const [oldItems] = await conn.query(
@@ -206,6 +220,56 @@ export async function update(id, data, items = [], updatedBy = null) {
       );
       await updateStock(conn, data.from_warehouse_id, item.material_id, item.uom, -(parseFloat(item.transfer_qty) || 0), 0);
       await updateStock(conn, data.to_warehouse_id, item.material_id, item.uom, item.transfer_qty || 0, item.unit_cost || 0);
+
+      // Re-create the ledger movements (Out from source, In to destination) so
+      // the date-ordered rebuild has the full history to replay.
+      await addLedgerEntry(conn, {
+        transaction_date: data.transfer_date,
+        transaction_type: 'Transfer Out',
+        reference_type: 'stock_transfer',
+        reference_id: id,
+        reference_no: data.transfer_no || null,
+        warehouse_id: data.from_warehouse_id,
+        material_id: item.material_id,
+        uom: item.uom,
+        batch_no: item.batch_no,
+        in_qty: 0,
+        out_qty: item.transfer_qty || 0,
+        unit_cost: item.unit_cost || 0,
+        amount: item.amount || 0,
+        balance_qty: -(item.transfer_qty || 0),
+        remarks: `Transfer to ${data.to_warehouse_name || ''}`,
+        created_by: updatedBy,
+      });
+      await addLedgerEntry(conn, {
+        transaction_date: data.transfer_date,
+        transaction_type: 'Transfer In',
+        reference_type: 'stock_transfer',
+        reference_id: id,
+        reference_no: data.transfer_no || null,
+        warehouse_id: data.to_warehouse_id,
+        material_id: item.material_id,
+        uom: item.uom,
+        batch_no: item.batch_no,
+        in_qty: item.transfer_qty || 0,
+        out_qty: 0,
+        unit_cost: item.unit_cost || 0,
+        amount: item.amount || 0,
+        balance_qty: item.transfer_qty || 0,
+        remarks: `Transfer from ${data.from_warehouse_name || ''}`,
+        created_by: updatedBy,
+      });
+    }
+
+    // Rebuild valuation for every pair touched by the old OR new version.
+    const pairs = new Map();
+    for (const p of prevLedger) pairs.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
+    for (const it of items) {
+      pairs.set(`${data.from_warehouse_id}:${it.material_id}`, { w: data.from_warehouse_id, m: it.material_id });
+      pairs.set(`${data.to_warehouse_id}:${it.material_id}`, { w: data.to_warehouse_id, m: it.material_id });
+    }
+    for (const p of pairs.values()) {
+      await rebuildAndReprice(conn, p.w, p.m);
     }
 
     await conn.commit();
@@ -234,6 +298,12 @@ export async function remove(id) {
     await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['stock_transfer', id]);
     await conn.query('DELETE FROM stock_transfer_items WHERE transfer_id=?', [id]);
     const [result] = await conn.query('DELETE FROM stock_transfers WHERE id=?', [id]);
+
+    // Rebuild valuation for both warehouses after removing the transfer.
+    for (const item of items) {
+      await rebuildAndReprice(conn, item.from_warehouse_id, item.material_id);
+      await rebuildAndReprice(conn, item.to_warehouse_id, item.material_id);
+    }
 
     await conn.commit();
     return result.affectedRows > 0;

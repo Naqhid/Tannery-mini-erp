@@ -1,5 +1,5 @@
 import pool from '../config/db.js';
-import { updateStock, addLedgerEntry } from './stockLedgerModel.js';
+import { updateStock, addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
 
 export async function getAll({ search, status, warehouse_id, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
@@ -116,6 +116,11 @@ export async function create(data, items = [], createdBy = null) {
       });
     }
 
+    // Date-ordered rebuild so backdated openings correct all later balances.
+    for (const item of items) {
+      await rebuildAndReprice(conn, data.warehouse_id, item.material_id);
+    }
+
     await conn.commit();
     return { id: entryId, entry_no };
   } catch (err) {
@@ -143,6 +148,13 @@ export async function update(id, data, items = [], updatedBy = null) {
         data.reference_no || null, data.costing_method || 'FIFO', data.remarks || null,
         totalAmount, updatedBy, id,
       ]
+    );
+
+    // Capture the (warehouse, material) pairs the old version touched so we can
+    // rebuild their valuation even if the warehouse or item set changed.
+    const [prevLedger] = await conn.query(
+      'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+      ['stock_opening', id]
     );
 
     // Reverse old stock movements
@@ -185,6 +197,14 @@ export async function update(id, data, items = [], updatedBy = null) {
       });
     }
 
+    // Rebuild valuation for every pair touched by the old OR new version.
+    const pairs = new Map();
+    for (const p of prevLedger) pairs.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
+    for (const it of items) pairs.set(`${data.warehouse_id}:${it.material_id}`, { w: data.warehouse_id, m: it.material_id });
+    for (const p of pairs.values()) {
+      await rebuildAndReprice(conn, p.w, p.m);
+    }
+
     await conn.commit();
     return true;
   } catch (err) {
@@ -210,6 +230,11 @@ export async function remove(id) {
     await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['stock_opening', id]);
     await conn.query('DELETE FROM stock_opening_items WHERE entry_id=?', [id]);
     const [result] = await conn.query('DELETE FROM stock_opening_entries WHERE id=?', [id]);
+
+    // Rebuild valuation after removing this entry's ledger rows.
+    for (const item of items) {
+      await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+    }
 
     await conn.commit();
     return result.affectedRows > 0;

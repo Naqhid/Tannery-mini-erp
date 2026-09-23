@@ -1,5 +1,5 @@
 import pool from '../config/db.js';
-import { updateStock, addLedgerEntry } from './stockLedgerModel.js';
+import { updateStock, addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
 import { replaceReferenceTransactions } from './materialTransactionModel.js';
 
 export async function getAll({ search, status, warehouse_id, page = 1, limit = 10, sortBy, sortOrder }) {
@@ -183,6 +183,13 @@ async function postReceiptTransactions(conn, receiptId, receipt_no, data, items,
     issue_qty: 0,
     issue_value: 0,
   })));
+
+  // Date-ordered rebuild of the live stock ledger (System A) so a backdated
+  // receipt correctly shifts every later balance and average rate that the
+  // inventory/stock reports read from warehouse_stock.
+  for (const item of items) {
+    await rebuildAndReprice(conn, data.warehouse_id, item.material_id);
+  }
 }
 
 export async function update(id, data, items = [], updatedBy = null) {
@@ -221,8 +228,18 @@ export async function update(id, data, items = [], updatedBy = null) {
       ]
     );
 
+    // Remember the (warehouse, material) pairs the old posted version affected so
+    // we can rebuild their valuation even if the item set / warehouse changed.
+    const affectedPairs = new Map();
+
     // If it was posted, reverse old stock first
     if (wasPosted) {
+      const [prevLedger] = await conn.query(
+        'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+        ['material_receipt', id]
+      );
+      for (const p of prevLedger) affectedPairs.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
+
       const [oldItems] = await conn.query(
         'SELECT material_id, uom, received_qty, primary_uom_qty FROM material_receipt_items WHERE receipt_id=?', [id]
       );
@@ -261,7 +278,16 @@ export async function update(id, data, items = [], updatedBy = null) {
     // Only create stock/transactions if posting
     if (newStatus === 'Posted') {
       const receipt_no = data.receipt_no || current?.receipt_no || null;
+      // postReceiptTransactions rebuilds the new pairs; record them so any old
+      // pair that's no longer present still gets rebuilt below.
       await postReceiptTransactions(conn, id, receipt_no, data, items, updatedBy);
+      for (const it of items) affectedPairs.set(`${data.warehouse_id}:${it.material_id}`, { w: data.warehouse_id, m: it.material_id });
+    }
+
+    // Rebuild any pair that was affected by the OLD version but not repriced
+    // above (e.g. an item removed on edit, or the receipt was un-posted).
+    for (const p of affectedPairs.values()) {
+      await rebuildAndReprice(conn, p.w, p.m);
     }
 
     await conn.commit();
@@ -290,6 +316,11 @@ export async function remove(id) {
     await replaceReferenceTransactions(conn, 'material_receipt', id, []);
     await conn.query('DELETE FROM material_receipt_items WHERE receipt_id=?', [id]);
     const [result] = await conn.query('DELETE FROM material_receipts WHERE id=?', [id]);
+
+    // Rebuild valuation for the affected materials after removing ledger rows.
+    for (const item of items) {
+      await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+    }
 
     await conn.commit();
     return result.affectedRows > 0;
