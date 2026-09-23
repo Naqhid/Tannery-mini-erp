@@ -422,6 +422,20 @@ export default function SalesOrderDetail() {
   const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.Draft;
   const StatusIcon = statusConfig.icon;
 
+  // Hybrid status control:
+  //   - Draft / Confirmed / Processing are auto-managed by production progress
+  //     and are NOT user-selectable (they'd just get recomputed).
+  //   - Shipped / Delivered / Cancelled are the user's to set.
+  //   - The current auto status is always shown so the user can see where it is.
+  const AUTO_STATUSES = ['Draft', 'Confirmed', 'Processing'];
+  const MANUAL_STATUSES = ['Shipped', 'Delivered', 'Cancelled'];
+  const statusOptions = [
+    ...(AUTO_STATUSES.includes(order.status)
+      ? [{ value: order.status, label: `${order.status} (auto)` }]
+      : []),
+    ...MANUAL_STATUSES.map((s) => ({ value: s, label: s })),
+  ];
+
   const tabs = [
     { id: 'items' as const, label: 'Items', icon: Package, count: order.items.length },
     { id: 'payment' as const, label: 'Payment Details', icon: CreditCard, count: order.receipts.length },
@@ -516,7 +530,17 @@ export default function SalesOrderDetail() {
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
               <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
             </div>
-            <Select label="Status" options={['Draft', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'].map(s => ({ value: s, label: s }))} value={order.status} onChange={(e) => updateField('status', e.target.value)} />
+            <div>
+              <Select
+                label="Status"
+                options={statusOptions}
+                value={order.status}
+                onChange={(e) => updateField('status', e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-gray-400 leading-tight">
+                Draft, Confirmed &amp; Processing are set automatically from production progress. You control Shipped, Delivered &amp; Cancelled.
+              </p>
+            </div>
           </div>
         </div>
 

@@ -218,17 +218,18 @@ export async function remove(id) {
 }
 
 /**
- * Recompute a sales order's status from its linked production plans + deliveries.
+ * Recompute a sales order's status from its linked production plans.
  *
- * Auto-managed lifecycle (Draft → Confirmed → Processing):
- *   - No production plan linked            → leave as-is (user-controlled, default Draft)
+ * Hybrid model — the system owns the early lifecycle, the user owns the rest.
+ *
+ * Auto-managed (Draft → Confirmed → Processing):
+ *   - No production plan linked            → Draft
  *   - Plan linked, zero production output  → Confirmed
  *   - Some production output               → Processing
- *   - A delivery note exists               → Shipped
  *
- * Manual terminal statuses are never overridden:
- *   Shipped, Delivered, Cancelled are left untouched so users keep control
- *   of the shipping/delivery lifecycle.
+ * Manual & permanently locked (never auto-changed):
+ *   - Shipped, Delivered, Cancelled — once a user sets any of these,
+ *     production progress will not move the status again.
  */
 export async function recalcStatusFromProduction(orderId) {
   if (!orderId) return;
@@ -239,21 +240,14 @@ export async function recalcStatusFromProduction(orderId) {
   );
   if (!order) return;
 
-  // Deliveries against this sales order.
-  const [[dn]] = await pool.query(
-    'SELECT COUNT(*) AS cnt FROM delivery_notes WHERE sales_order_id = ?',
-    [orderId]
-  );
+  // Manual/terminal statuses are user-controlled and permanently locked.
+  // Once a user marks an order Shipped, Delivered, or Cancelled, production
+  // progress never auto-changes it again.
+  const LOCKED = ['Shipped', 'Delivered', 'Cancelled'];
+  if (LOCKED.includes(order.status)) return;
 
-  // Never auto-change a manually-set terminal status.
-  //   - Delivered / Cancelled are always user-controlled.
-  //   - Shipped is auto-driven by deliveries; only leave it locked while a
-  //     delivery still exists. If all deliveries were removed, allow it to
-  //     recompute back down to Processing/Confirmed/Draft.
-  if (order.status === 'Delivered' || order.status === 'Cancelled') return;
-  if (order.status === 'Shipped' && dn.cnt > 0) return;
-
-  // Production plans linked to this sales order.
+  // Auto-managed lifecycle covers only Draft → Confirmed → Processing,
+  // driven purely by linked production plans.
   const [[plan]] = await pool.query(
     `SELECT
        COUNT(*) AS plan_count,
@@ -265,12 +259,12 @@ export async function recalcStatusFromProduction(orderId) {
 
   let status = order.status || 'Draft';
 
-  if (dn.cnt > 0) {
-    status = 'Shipped';
-  } else if (plan.plan_count > 0) {
+  if (plan.plan_count > 0) {
     status = Number(plan.total_output) > 0 ? 'Processing' : 'Confirmed';
+  } else {
+    // No production plan linked → back to Draft (unless already locked above).
+    status = 'Draft';
   }
-  // else: no plan and no delivery → leave existing status (Draft)
 
   if (status !== order.status) {
     await pool.query('UPDATE sales_orders SET status = ? WHERE id = ?', [status, orderId]);
@@ -345,7 +339,6 @@ export async function createDelivery(orderId, data, items = [], createdBy = null
       );
     }
     await conn.commit();
-    await recalcStatusFromProduction(orderId);
     return { id: dnId, delivery_no };
   } catch (err) {
     await conn.rollback();
@@ -454,11 +447,7 @@ export async function updateAttachment(attachmentId, data) {
 
 // ---- Delete Delivery Note ----
 export async function deleteDelivery(dnId) {
-  const [[dn]] = await pool.query('SELECT sales_order_id FROM delivery_notes WHERE id = ?', [dnId]);
   const [result] = await pool.query('DELETE FROM delivery_notes WHERE id = ?', [dnId]);
-  if (result.affectedRows > 0 && dn?.sales_order_id) {
-    await recalcStatusFromProduction(dn.sales_order_id);
-  }
   return result.affectedRows > 0;
 }
 
