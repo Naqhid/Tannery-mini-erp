@@ -1,4 +1,23 @@
 import pool from '../config/db.js';
+import { recalcStatusFromProduction } from './salesOrderModel.js';
+
+/** Find the sales order linked to a production status order (via its plan) and refresh its status. */
+async function syncLinkedSalesOrderStatus(orderId) {
+  try {
+    const [[row]] = await pool.query(
+      `SELECT pp.sales_order_id AS sales_order_id
+       FROM production_status_orders o
+       JOIN production_plans pp ON pp.id = o.production_plan_id
+       WHERE o.id = ?`,
+      [orderId]
+    );
+    if (row?.sales_order_id) {
+      await recalcStatusFromProduction(row.sales_order_id);
+    }
+  } catch {
+    // Non-fatal: never let status propagation break a production transaction.
+  }
+}
 
 // ─── Orders (main list) ──────────────────────────────────────────────────────
 
@@ -62,11 +81,11 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
   // WIP must match the displayed columns exactly:
   //   Input  = o.issued_qty (stored)
   //   Output = completed_qty (measurement output alias below)
-  //   WIP    = GREATEST(0, Input − Output − Rejection)
+  //   WIP    = Input − Output − Rejection (can be negative, e.g. over-production)
   const [rows] = await pool.query(
     `SELECT o.*, ${measurementCompletedSql} AS completed_qty,
        ${stageRejectionSql} AS rejection_qty,
-       GREATEST(0, COALESCE(o.issued_qty,0) - ${measurementCompletedSql} - ${stageRejectionSql}) AS balance_qty
+       (COALESCE(o.issued_qty,0) - ${measurementCompletedSql} - ${stageRejectionSql}) AS balance_qty
        FROM production_status_orders o
        WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
@@ -182,12 +201,19 @@ export async function recalcOrderTotals(orderId) {
 
   // Don't overwrite status if already posted
   const [[current]] = await pool.query('SELECT posted_at FROM production_status_orders WHERE id=?', [orderId]);
-  if (current && current.posted_at) return; // Don't modify posted records
+  if (current && current.posted_at) {
+    // Posted records still drive linked sales order status.
+    await syncLinkedSalesOrderStatus(orderId);
+    return;
+  }
 
   await pool.query(
     `UPDATE production_status_orders SET issued_qty=?, completed_qty=?, balance_qty=?, status=? WHERE id=?`,
     [issuedQty, completedQty, balanceQty, status, orderId]
   );
+
+  // Propagate production progress up to the linked sales order.
+  await syncLinkedSalesOrderStatus(orderId);
 }
 
 // ─── Transactions ────────────────────────────────────────────────────────────
@@ -346,5 +372,9 @@ export async function postOrder(id, userId = null) {
     `UPDATE production_status_orders SET posted_at = NOW(), posted_by = ?, status = 'Posted', updated_by = ? WHERE id = ? AND deleted_at IS NULL`,
     [userId, userId, id]
   );
+
+  if (result.affectedRows > 0) {
+    await syncLinkedSalesOrderStatus(id);
+  }
   return result.affectedRows > 0;
 }

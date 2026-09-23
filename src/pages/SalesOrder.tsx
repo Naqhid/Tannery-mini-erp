@@ -16,7 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function SalesOrder() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ total: 0, draft: 0, confirmed: 0, delivered: 0 });
+  const [stats, setStats] = useState({ total: 0, draft: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0 });
 
   const fetchStats = useCallback(async () => {
     try {
@@ -43,6 +43,8 @@ export default function SalesOrder() {
     { label: 'Total Orders', value: stats.total, color: 'text-blue-900', bg: 'bg-blue-50 border-blue-200', iconColor: 'from-blue-500 to-indigo-600' },
     { label: 'Draft', value: stats.draft, color: 'text-amber-900', bg: 'bg-amber-50 border-amber-200', iconColor: 'from-amber-500 to-orange-600' },
     { label: 'Confirmed', value: stats.confirmed, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200', iconColor: 'from-emerald-500 to-green-600' },
+    { label: 'Processing', value: stats.processing, color: 'text-blue-900', bg: 'bg-blue-50 border-blue-200', iconColor: 'from-blue-500 to-indigo-600' },
+    { label: 'Shipped', value: stats.shipped, color: 'text-violet-900', bg: 'bg-violet-50 border-violet-200', iconColor: 'from-violet-500 to-purple-600' },
     { label: 'Delivered', value: stats.delivered, color: 'text-purple-900', bg: 'bg-purple-50 border-purple-200', iconColor: 'from-purple-500 to-violet-600' },
   ];
 

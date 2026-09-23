@@ -71,6 +71,13 @@ export async function stats(_req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function resyncStatuses(_req, res, next) {
+  try {
+    const data = await model.resyncAllStatuses();
+    res.json({ data, message: `Resynced ${data.updated} of ${data.total} sales orders` });
+  } catch (err) { next(err); }
+}
+
 export async function nextNo(_req, res, next) {
   try {
     const order_no = await model.getNextOrderNo();

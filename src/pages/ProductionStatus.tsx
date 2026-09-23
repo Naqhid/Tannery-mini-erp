@@ -261,7 +261,7 @@ export default function ProductionStatus() {
                     <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.issued_qty)}</td>
                     <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
                     <td className="px-3 py-3.5 text-sm text-rose-600 font-semibold text-right tabular-nums">{formatNumber((row as any).rejection_qty || 0)}</td>
-                    <td className="px-3 py-3.5 text-sm text-amber-700 font-semibold text-right tabular-nums">{formatNumber(row.balance_qty)}</td>
+                    <td className={`px-3 py-3.5 text-sm font-semibold text-right tabular-nums ${Number(row.balance_qty) < 0 ? 'text-rose-600' : 'text-amber-700'}`}>{formatNumber(row.balance_qty)}</td>
                     <td className="px-3 py-3.5 text-center">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
                         {row.status}
