@@ -115,14 +115,12 @@ async function getCustomerState(conn, customerId) {
 
 /**
  * Split a total tax amount into CGST/SGST (intra-state) or IGST (inter-state).
- * The party's state is compared against the home state (Tamil Nadu).
- * Caller may pass an explicit taxType to override the auto decision.
+ * The decision is driven purely by the party's state vs the home state
+ * (Tamil Nadu) — it is not user-overridable.
  */
-function splitGst(taxAmount, partyState, explicitType) {
+function splitGst(taxAmount, partyState) {
   const amt = Number(taxAmount) || 0;
-  const isIntra = explicitType
-    ? explicitType.toUpperCase() !== 'IGST'
-    : normState(partyState) === normState(HOME_STATE);
+  const isIntra = normState(partyState) === normState(HOME_STATE);
 
   if (isIntra) {
     const half = Number((amt / 2).toFixed(2));
@@ -138,9 +136,9 @@ export async function create(data, items = [], createdBy = null) {
     const order_no = data.order_no || await getNextOrderNo();
     const { subTotal, taxAmount, grandTotal } = calcTotals(items, data.discount, data.freight, data.tax_percent);
 
-    // Decide CGST/SGST vs IGST from the customer's state (or an explicit override).
+    // Decide CGST/SGST vs IGST purely from the customer's state.
     const custState = await getCustomerState(conn, data.customer_id);
-    const gst = splitGst(taxAmount, custState, data.tax_type);
+    const gst = splitGst(taxAmount, custState);
 
     const [result] = await conn.query(
       `INSERT INTO sales_orders (
@@ -197,7 +195,7 @@ export async function update(id, data, items = [], updatedBy = null) {
     const { subTotal, taxAmount, grandTotal } = calcTotals(items, data.discount, data.freight, data.tax_percent);
 
     const custState = await getCustomerState(conn, data.customer_id);
-    const gst = splitGst(taxAmount, custState, data.tax_type);
+    const gst = splitGst(taxAmount, custState);
 
     await conn.query(
       `UPDATE sales_orders SET

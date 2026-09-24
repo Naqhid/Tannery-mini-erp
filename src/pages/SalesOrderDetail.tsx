@@ -787,15 +787,12 @@ export default function SalesOrderDetail() {
                             className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
                           />
                           %
-                          <select
-                            value={order.tax_type}
-                            onChange={(e) => updateField('tax_type', e.target.value)}
-                            className="ml-1 px-1.5 py-1 text-[11px] border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30"
-                            title="Intra-state (Tamil Nadu) → CGST+SGST. Inter-state → IGST."
+                          <span
+                            className="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-gray-100 text-gray-600 border border-gray-200"
+                            title="Set automatically from the customer's state. Intra-state (Tamil Nadu) → CGST+SGST, inter-state → IGST."
                           >
-                            <option value="CGST_SGST">CGST + SGST</option>
-                            <option value="IGST">IGST</option>
-                          </select>
+                            {order.tax_type === 'CGST_SGST' ? 'CGST + SGST' : 'IGST'}
+                          </span>
                         </span>
                         <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
                       </div>

@@ -500,15 +500,12 @@ export default function MaterialReceiptEntryDetail() {
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
               <span className="text-xs font-medium text-gray-700">GST %</span>
               <div className="flex items-center gap-2">
-                <select
-                  value={receipt.tax_type}
-                  onChange={(e) => update('tax_type', e.target.value)}
-                  className="px-1.5 py-1.5 text-[11px] border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  title="Intra-state (Tamil Nadu) → CGST+SGST. Inter-state → IGST."
+                <span
+                  className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-gray-100 text-gray-600 border border-gray-200"
+                  title="Set automatically from the supplier's state. Intra-state (Tamil Nadu) → CGST+SGST, inter-state → IGST."
                 >
-                  <option value="CGST_SGST">CGST + SGST</option>
-                  <option value="IGST">IGST</option>
-                </select>
+                  {receipt.tax_type === 'CGST_SGST' ? 'CGST + SGST' : 'IGST'}
+                </span>
                 <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
                   className="w-20 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
               </div>

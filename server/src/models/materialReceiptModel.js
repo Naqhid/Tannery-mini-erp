@@ -19,16 +19,13 @@ async function getSupplierState(conn, supplierId) {
 }
 
 /**
- * Compute the GST breakup for a receipt.
+ * Compute the GST breakup for a receipt. Driven purely by the supplier's state.
  *   Intra-state (supplier in home state)  → CGST + SGST (half each).
  *   Inter-state (any other state)         → IGST (full rate, no split).
- * An explicit data.tax_type overrides the auto decision.
  */
-function computeReceiptGst(totalAmountInr, gstPercent, supplierState, explicitType) {
+function computeReceiptGst(totalAmountInr, gstPercent, supplierState) {
   const total = (Number(totalAmountInr) || 0) * (Number(gstPercent) || 0) / 100;
-  const isIntra = explicitType
-    ? explicitType.toUpperCase() !== 'IGST'
-    : normState(supplierState) === normState(HOME_STATE);
+  const isIntra = normState(supplierState) === normState(HOME_STATE);
 
   if (isIntra) {
     const cgst = Number((total / 2).toFixed(4));
@@ -115,7 +112,7 @@ export async function create(data, items = [], createdBy = null) {
     const totalAmountInr = items.reduce((s, i) => s + (parseFloat(i.amount_inr) || 0), 0);
     const gstPercent = parseFloat(data.gst_percent) || 0;
     const supplierState = await getSupplierState(conn, data.supplier_id);
-    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState, data.tax_type);
+    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState);
     const totalOtherCharges = (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
     const grandTotal = totalAmountInr + gst.total_gst_amount + totalOtherCharges;
 
@@ -240,7 +237,7 @@ export async function update(id, data, items = [], updatedBy = null) {
     const totalAmountInr = items.reduce((s, i) => s + (parseFloat(i.amount_inr) || 0), 0);
     const gstPercent = parseFloat(data.gst_percent) || 0;
     const supplierState = await getSupplierState(conn, data.supplier_id);
-    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState, data.tax_type);
+    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState);
     const totalOtherCharges = (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
     const grandTotal = totalAmountInr + gst.total_gst_amount + totalOtherCharges;
 
