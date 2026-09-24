@@ -292,7 +292,7 @@ export async function getDropdown() {
        m.primary_uom_id, m.secondary_uom_id, m.currency,
        m.standard_cost, m.last_purchase_price, m.preferred_supplier_id,
        pu.name AS primary_uom_name, su.name AS secondary_uom_name,
-       pc.name AS category_name, g.name AS group_name
+       pc.name AS category_name, g.name AS group_name, g.gst_rate AS group_gst_rate
      FROM materials m
      LEFT JOIN uom pu ON m.primary_uom_id = pu.id
      LEFT JOIN uom su ON m.secondary_uom_id = su.id

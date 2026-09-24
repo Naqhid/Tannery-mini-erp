@@ -91,6 +91,46 @@ function calcTotals(items, discount, freight, taxPercent) {
   return { subTotal, taxAmount, grandTotal };
 }
 
+// The company's home state. Intra-state (same state) → CGST + SGST split.
+// Inter-state (any other state) → IGST (full rate, no split).
+const HOME_STATE = 'Tamil Nadu';
+
+function normState(s) {
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Resolve a customer's state (text) so we can decide intra vs inter state.
+ */
+async function getCustomerState(conn, customerId) {
+  if (!customerId) return null;
+  const [[row]] = await conn.query(
+    `SELECT COALESCE(s.name, c.state) AS state_name
+       FROM customers c LEFT JOIN states s ON c.state_id = s.id
+      WHERE c.id = ?`,
+    [customerId]
+  );
+  return row?.state_name || null;
+}
+
+/**
+ * Split a total tax amount into CGST/SGST (intra-state) or IGST (inter-state).
+ * The party's state is compared against the home state (Tamil Nadu).
+ * Caller may pass an explicit taxType to override the auto decision.
+ */
+function splitGst(taxAmount, partyState, explicitType) {
+  const amt = Number(taxAmount) || 0;
+  const isIntra = explicitType
+    ? explicitType.toUpperCase() !== 'IGST'
+    : normState(partyState) === normState(HOME_STATE);
+
+  if (isIntra) {
+    const half = Number((amt / 2).toFixed(2));
+    return { tax_type: 'CGST_SGST', cgst_amount: half, sgst_amount: Number((amt - half).toFixed(2)), igst_amount: 0 };
+  }
+  return { tax_type: 'IGST', cgst_amount: 0, sgst_amount: 0, igst_amount: Number(amt.toFixed(2)) };
+}
+
 export async function create(data, items = [], createdBy = null) {
   const conn = await pool.getConnection();
   try {
@@ -98,13 +138,18 @@ export async function create(data, items = [], createdBy = null) {
     const order_no = data.order_no || await getNextOrderNo();
     const { subTotal, taxAmount, grandTotal } = calcTotals(items, data.discount, data.freight, data.tax_percent);
 
+    // Decide CGST/SGST vs IGST from the customer's state (or an explicit override).
+    const custState = await getCustomerState(conn, data.customer_id);
+    const gst = splitGst(taxAmount, custState, data.tax_type);
+
     const [result] = await conn.query(
       `INSERT INTO sales_orders (
         order_no, customer_id, order_date, delivery_date, customer_po_no, order_type,
         contact_person, delivery_address, payment_terms, currency, price_list,
         sales_person, status, terms_conditions, discount, freight,
-        tax_percent, sub_total, tax_amount, grand_total, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        tax_percent, sub_total, tax_amount, cgst_amount, sgst_amount, igst_amount, tax_type,
+        grand_total, remarks, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         order_no, data.customer_id, data.order_date, data.delivery_date || null,
         data.customer_po_no || null, data.order_type || 'Standard',
@@ -112,7 +157,8 @@ export async function create(data, items = [], createdBy = null) {
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
         data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
-        subTotal, taxAmount, grandTotal, data.remarks || null, createdBy,
+        subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
+        grandTotal, data.remarks || null, createdBy,
       ]
     );
     const orderId = result.insertId;
@@ -150,12 +196,16 @@ export async function update(id, data, items = [], updatedBy = null) {
     await conn.beginTransaction();
     const { subTotal, taxAmount, grandTotal } = calcTotals(items, data.discount, data.freight, data.tax_percent);
 
+    const custState = await getCustomerState(conn, data.customer_id);
+    const gst = splitGst(taxAmount, custState, data.tax_type);
+
     await conn.query(
       `UPDATE sales_orders SET
         customer_id=?, order_date=?, delivery_date=?, customer_po_no=?, order_type=?,
         contact_person=?, delivery_address=?, payment_terms=?, currency=?, price_list=?,
         sales_person=?, status=?, terms_conditions=?, discount=?, freight=?,
-        tax_percent=?, sub_total=?, tax_amount=?, grand_total=?, remarks=?, updated_by=?
+        tax_percent=?, sub_total=?, tax_amount=?, cgst_amount=?, sgst_amount=?, igst_amount=?, tax_type=?,
+        grand_total=?, remarks=?, updated_by=?
        WHERE id=?`,
       [
         data.customer_id, data.order_date, data.delivery_date || null,
@@ -164,7 +214,8 @@ export async function update(id, data, items = [], updatedBy = null) {
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
         data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
-        subTotal, taxAmount, grandTotal, data.remarks || null, updatedBy, id,
+        subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
+        grandTotal, data.remarks || null, updatedBy, id,
       ]
     );
 

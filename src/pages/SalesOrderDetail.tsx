@@ -13,7 +13,7 @@ import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
 // ---- Types ----
-interface Customer { id: number; code: string; name: string; contact_person?: string; address?: string; billing_address?: string; shipping_address?: string; payment_terms?: string; city?: string; state?: string; }
+interface Customer { id: number; code: string; name: string; contact_person?: string; address?: string; billing_address?: string; shipping_address?: string; payment_terms?: string; city?: string; state?: string; state_name?: string; }
 interface SalesOrderItem {
   _key?: string;
   product_id?: number | null;
@@ -33,7 +33,7 @@ interface DeliveryNote { id?: number; delivery_no?: string; delivery_date: strin
 interface PaymentReceipt { id?: number; receipt_no?: string; receipt_date: string; payment_mode: string; amount: number; remarks: string; }
 interface Invoice { id?: number; invoice_no?: string; invoice_date?: string; invoice_amount: number; paid_amount: number; balance: number; status: string; due_date?: string; }
 interface Attachment { id?: number; file_name: string; file_path?: string; file_type?: string; category: string; uploaded_at?: string; remarks?: string; }
-interface ProductDropdown { id: number; code: string; name: string; leather_type: string; thickness: string; uom: string; leather_type_name?: string; uom_name?: string; thickness_name?: string; color_name?: string; finish_type_name?: string; display_name?: string; }
+interface ProductDropdown { id: number; code: string; name: string; leather_type: string; thickness: string; uom: string; leather_type_name?: string; uom_name?: string; thickness_name?: string; color_name?: string; finish_type_name?: string; display_name?: string; group_gst_rate?: number | string; }
 
 interface SalesOrderFull {
   id?: number;
@@ -55,8 +55,12 @@ interface SalesOrderFull {
   discount: number;
   freight: number;
   tax_percent: number;
+  tax_type: string;
   sub_total: number;
   tax_amount: number;
+  cgst_amount: number;
+  sgst_amount: number;
+  igst_amount: number;
   grand_total: number;
   remarks: string;
   items: SalesOrderItem[];
@@ -71,7 +75,8 @@ const emptyOrder: SalesOrderFull = {
   delivery_date: '', customer_po_no: '', order_type: 'Standard', contact_person: '',
   delivery_address: '', payment_terms: '', currency: 'INR', price_list: '',
   sales_person: '', status: 'Draft', terms_conditions: '', discount: 0, freight: 0,
-  tax_percent: 18, sub_total: 0, tax_amount: 0, grand_total: 0, remarks: '',
+  tax_percent: 18, tax_type: 'IGST', sub_total: 0, tax_amount: 0,
+  cgst_amount: 0, sgst_amount: 0, igst_amount: 0, grand_total: 0, remarks: '',
   items: [], deliveries: [], receipts: [], invoices: [], attachments: [],
 };
 
@@ -109,12 +114,26 @@ function colorOnly(value: string): string {
   return parts[parts.length - 1].trim();
 }
 
-function calcTotals(items: SalesOrderItem[], discount: number, freight: number, taxPercent: number) {
+function calcTotals(items: SalesOrderItem[], discount: number, freight: number, taxPercent: number, taxType: string) {
   const subTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
   const taxable = subTotal - discount + freight;
   const taxAmount = parseFloat(((taxable * taxPercent) / 100).toFixed(2));
   const grandTotal = parseFloat((taxable + taxAmount).toFixed(2));
-  return { sub_total: parseFloat(subTotal.toFixed(2)), tax_amount: taxAmount, grand_total: grandTotal };
+
+  // Intra-state (CGST_SGST) → split 50/50; inter-state (IGST) → full into IGST.
+  let cgst = 0, sgst = 0, igst = 0;
+  if (taxType === 'CGST_SGST') {
+    cgst = parseFloat((taxAmount / 2).toFixed(2));
+    sgst = parseFloat((taxAmount - cgst).toFixed(2));
+  } else {
+    igst = taxAmount;
+  }
+  return {
+    sub_total: parseFloat(subTotal.toFixed(2)),
+    tax_amount: taxAmount,
+    cgst_amount: cgst, sgst_amount: sgst, igst_amount: igst,
+    grand_total: grandTotal,
+  };
 }
 
 
@@ -173,8 +192,12 @@ export default function SalesOrderDetail() {
         discount: Number(d.discount) || 0,
         freight: Number(d.freight) || 0,
         tax_percent: Number(d.tax_percent) || 18,
+        tax_type: d.tax_type || 'IGST',
         sub_total: Number(d.sub_total) || 0,
         tax_amount: Number(d.tax_amount) || 0,
+        cgst_amount: Number(d.cgst_amount) || 0,
+        sgst_amount: Number(d.sgst_amount) || 0,
+        igst_amount: Number(d.igst_amount) || 0,
         grand_total: Number(d.grand_total) || 0,
         items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, delivery_date: i.delivery_date?.split('T')[0] || '' })),
         deliveries: d.deliveries || [],
@@ -201,18 +224,26 @@ export default function SalesOrderDetail() {
   const updateField = (field: keyof SalesOrderFull, value: any) => {
     setOrder(prev => {
       const updated = { ...prev, [field]: value };
-      const tots = calcTotals(updated.items, Number(updated.discount), Number(updated.freight), Number(updated.tax_percent));
+      const tots = calcTotals(updated.items, Number(updated.discount), Number(updated.freight), Number(updated.tax_percent), updated.tax_type);
       return { ...updated, ...tots };
     });
   };
+
+  const HOME_STATE = 'tamil nadu';
+  const stateIsIntra = (s?: string) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ') === HOME_STATE;
 
   const handleCustomerChange = (customerId: string) => {
     const customer = customers.find(c => c.id === Number(customerId));
     // Auto-populate delivery & shipping details based on customer selection
     const shipping = customer?.shipping_address || customer?.billing_address || customer?.address || '';
+    // Intra-state (Tamil Nadu) → CGST + SGST; inter-state → IGST.
+    const custState = customer?.state_name || customer?.state || '';
+    const taxType = stateIsIntra(custState) ? 'CGST_SGST' : 'IGST';
     setOrder(prev => ({
       ...prev,
       customer_id: customer ? customer.id : null,
+      tax_type: taxType,
+      ...calcTotals(prev.items, Number(prev.discount), Number(prev.freight), Number(prev.tax_percent), taxType),
       contact_person: customer?.contact_person || prev.contact_person,
       delivery_address: shipping || prev.delivery_address,
       payment_terms: customer?.payment_terms || prev.payment_terms,
@@ -238,7 +269,7 @@ export default function SalesOrderDetail() {
     } else {
       newItems = [...order.items, computed];
     }
-    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
     const updatedOrder = { ...order, items: newItems, ...tots };
 
     // For new orders that haven't been saved yet, just update local state
@@ -260,7 +291,7 @@ export default function SalesOrderDetail() {
 
   const handleDeleteItem = async (key: string) => {
     const newItems = order.items.filter(i => i._key !== key);
-    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
     const updatedOrder = { ...order, items: newItems, ...tots };
 
     if (isNew) {
@@ -638,7 +669,18 @@ export default function SalesOrderDetail() {
                                   thickness: product?.thickness_name || product?.thickness || '',
                                   uom: product?.uom_name || product?.uom || '',
                                 } : it);
-                                setOrder(prev => ({ ...prev, items: newItems }));
+                                // Auto-fill GST% from the selected article's group (editable afterwards).
+                                const gstRate = product?.group_gst_rate != null && product.group_gst_rate !== ''
+                                  ? Number(product.group_gst_rate) : null;
+                                setOrder(prev => {
+                                  const nextTaxPercent = gstRate != null ? gstRate : prev.tax_percent;
+                                  return {
+                                    ...prev,
+                                    items: newItems,
+                                    tax_percent: nextTaxPercent,
+                                    ...calcTotals(newItems, Number(prev.discount), Number(prev.freight), Number(nextTaxPercent), prev.tax_type),
+                                  };
+                                });
                               }}
                               placeholder="Search article..."
                             />
@@ -656,7 +698,7 @@ export default function SalesOrderDetail() {
                             <input type="number" value={item.quantity} onChange={(e) => {
                               const updated = calcItem({ ...item, quantity: Number(e.target.value) });
                               const newItems = order.items.map(it => it._key === item._key ? updated : it);
-                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
                               setOrder(prev => ({ ...prev, items: newItems, ...tots }));
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="0" />
                           </td>
@@ -670,7 +712,7 @@ export default function SalesOrderDetail() {
                             <input type="number" value={item.unit_price} onChange={(e) => {
                               const updated = calcItem({ ...item, unit_price: Number(e.target.value) });
                               const newItems = order.items.map(it => it._key === item._key ? updated : it);
-                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
                               setOrder(prev => ({ ...prev, items: newItems, ...tots }));
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[70px]" placeholder="0.00" />
                           </td>
@@ -678,7 +720,7 @@ export default function SalesOrderDetail() {
                             <input type="number" value={item.discount_percent} onChange={(e) => {
                               const updated = calcItem({ ...item, discount_percent: Number(e.target.value) });
                               const newItems = order.items.map(it => it._key === item._key ? updated : it);
-                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
                               setOrder(prev => ({ ...prev, items: newItems, ...tots }));
                             }} min={0} max={100} className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-400/30" placeholder="0" />
                           </td>
@@ -733,7 +775,7 @@ export default function SalesOrderDetail() {
                       </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-sm text-gray-600 flex items-center gap-1">
-                          Tax
+                          GST
                           <input
                             type="number"
                             value={order.tax_percent || ''}
@@ -745,8 +787,38 @@ export default function SalesOrderDetail() {
                             className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
                           />
                           %
+                          <select
+                            value={order.tax_type}
+                            onChange={(e) => updateField('tax_type', e.target.value)}
+                            className="ml-1 px-1.5 py-1 text-[11px] border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30"
+                            title="Intra-state (Tamil Nadu) → CGST+SGST. Inter-state → IGST."
+                          >
+                            <option value="CGST_SGST">CGST + SGST</option>
+                            <option value="IGST">IGST</option>
+                          </select>
                         </span>
                         <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
+                      </div>
+                      {order.tax_type === 'CGST_SGST' ? (
+                        <>
+                          <div className="flex items-center justify-between py-1 pl-3">
+                            <span className="text-xs text-gray-500">CGST ({(Number(order.tax_percent) / 2).toFixed(2)}%)</span>
+                            <span className="text-xs text-gray-700 w-24 text-right">{formatCurrency(order.cgst_amount)}</span>
+                          </div>
+                          <div className="flex items-center justify-between py-1 pl-3">
+                            <span className="text-xs text-gray-500">SGST ({(Number(order.tax_percent) / 2).toFixed(2)}%)</span>
+                            <span className="text-xs text-gray-700 w-24 text-right">{formatCurrency(order.sgst_amount)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between py-1 pl-3">
+                          <span className="text-xs text-gray-500">IGST ({Number(order.tax_percent).toFixed(2)}%)</span>
+                          <span className="text-xs text-gray-700 w-24 text-right">{formatCurrency(order.igst_amount)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-sm font-medium text-gray-700">Total GST</span>
+                        <span className="text-sm font-semibold text-gray-900 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
                       </div>
                       <div className="border-t border-gray-200 pt-3 mt-2">
                         <div className="flex items-center justify-between">

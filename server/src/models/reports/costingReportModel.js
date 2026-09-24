@@ -40,6 +40,26 @@ export async function wipCostSheet({ stage, search, page = 1, limit = 10 }) {
   // Negative values flag data errors (output exceeds input).
   const wipExpr = `(COALESCE(pso.issued_qty,0) - COALESCE(pso.completed_qty,0) - ${rejExpr})`;
 
+  // Output qty of the MEASUREMENT stage for the same production plan. This is the
+  // finished sq.ft used as the denominator for cost/sq.ft across all stages.
+  const measurementOutput = `
+    COALESCE((
+      SELECT SUM(pso_m.completed_qty) FROM production_status_orders pso_m
+      WHERE pso_m.production_plan_id = pp.id AND pso_m.deleted_at IS NULL
+        AND pso_m.process_stage COLLATE utf8mb4_0900_ai_ci = 'Measurement'
+    ), 0)`;
+
+  // Selling price (rate) from the sales order line matching this article.
+  // Only meaningful at the Measurement stage — other stages show 0.
+  const sellingPrice = `
+    COALESCE((
+      SELECT AVG(soi.unit_price) FROM sales_order_items soi
+      WHERE soi.sales_order_id = so.id
+        AND soi.item_description COLLATE utf8mb4_0900_ai_ci = pso.article COLLATE utf8mb4_0900_ai_ci
+    ), 0)`;
+
+  const totalCostExpr = `(${matCost} + ${genCost} + ${machCost})`;
+
   // Only In Progress stages: production has started (output > 0) AND WIP remains
   // (input != output). Show both positive and negative WIP to flag data errors.
   const baseFrom = `
@@ -53,9 +73,18 @@ export async function wipCostSheet({ stage, search, page = 1, limit = 10 }) {
     `SELECT pso.id, COALESCE(so.order_no, pp.plan_no) AS order_no, pp.plan_no,
        pso.process_stage AS stage, pso.article, pso.color, pso.uom,
        pso.issued_qty AS input_qty, pso.completed_qty AS output_qty, ${wipExpr} AS wip_qty,
+       ${rejExpr} AS rejection_qty,
        ${matCost} AS material_cost, ${genCost} AS general_cost, ${machCost} AS machine_cost,
-       (${matCost} + ${genCost} + ${machCost}) AS total_cost,
-       CASE WHEN pso.completed_qty > 0 THEN (${matCost} + ${genCost} + ${machCost}) / pso.completed_qty ELSE 0 END AS cost_per_pc
+       ${totalCostExpr} AS total_cost,
+       CASE WHEN pso.completed_qty > 0 THEN ${totalCostExpr} / pso.completed_qty ELSE 0 END AS cost_per_pc,
+       -- Selling price only applies at the Measurement stage.
+       CASE WHEN pso.process_stage COLLATE utf8mb4_0900_ai_ci = 'Measurement' THEN ${sellingPrice} ELSE 0 END AS selling_price,
+       -- Cost per sq.ft = total cost / measurement-stage output (finished sqft).
+       CASE WHEN ${measurementOutput} > 0 THEN ${totalCostExpr} / ${measurementOutput} ELSE 0 END AS cost_per_sqft,
+       -- Variance = selling price − cost/sqft (only meaningful at Measurement).
+       CASE WHEN pso.process_stage COLLATE utf8mb4_0900_ai_ci = 'Measurement'
+            THEN ${sellingPrice} - (CASE WHEN ${measurementOutput} > 0 THEN ${totalCostExpr} / ${measurementOutput} ELSE 0 END)
+            ELSE 0 END AS variance
      ${baseFrom}
      ORDER BY pso.id DESC
      LIMIT ? OFFSET ?`,

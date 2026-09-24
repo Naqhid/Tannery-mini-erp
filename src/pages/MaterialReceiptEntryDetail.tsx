@@ -8,8 +8,8 @@ import SearchableSelect from '../components/ui/SearchableSelect';
 import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; }
-interface Supplier { id: number; code: string; name: string; }
-interface Material { id: number; code: string; name: string; uom: string; primary_uom_name?: string; secondary_uom_name?: string; currency?: string; category_name?: string; category?: string; group_name?: string; display_name?: string; }
+interface Supplier { id: number; code: string; name: string; state?: string; state_name?: string; }
+interface Material { id: number; code: string; name: string; uom: string; primary_uom_name?: string; secondary_uom_name?: string; currency?: string; category_name?: string; category?: string; group_name?: string; display_name?: string; group_gst_rate?: number | string; }
 interface Item {
   _key: string;
   material_id: string;
@@ -49,6 +49,7 @@ interface ReceiptData {
   loading_charges: string;
   other_charges: string;
   gst_percent: string;
+  tax_type: string;
   remarks: string;
   status: string;
 }
@@ -59,7 +60,7 @@ const emptyReceipt: ReceiptData = {
   receipt_no: '', receipt_date: new Date().toISOString().split('T')[0], receipt_type: 'Direct Purchase',
   supplier_id: '', purchase_order_no: '', po_date: '', challan_no: '', challan_date: '',
   lr_grn_no: '', lr_grn_date: '', transporter: '', gate_entry_no: '', warehouse_id: '',
-  freight: '', loading_charges: '', other_charges: '', gst_percent: '', remarks: '', status: 'Draft',
+  freight: '', loading_charges: '', other_charges: '', gst_percent: '', tax_type: 'IGST', remarks: '', status: 'Draft',
 };
 
 const RECEIPT_TYPES = [
@@ -128,6 +129,7 @@ export default function MaterialReceiptEntryDetail() {
         loading_charges: String(d.loading_charges || ''),
         other_charges: String(d.other_charges || ''),
         gst_percent: String(d.gst_percent || ''),
+        tax_type: (d as any).tax_type || 'IGST',
       });
       setIsPosted(d.status === 'Posted' || d.status === 'posted');
       setItems((d.items || []).map((it: any) => ({
@@ -155,7 +157,19 @@ export default function MaterialReceiptEntryDetail() {
 
   useEffect(() => { fetchDropdowns(); fetchReceipt(); }, [fetchDropdowns, fetchReceipt]);
 
-  const update = (key: string, value: any) => setReceipt((p) => ({ ...p, [key]: value }));
+  const HOME_STATE = 'tamil nadu';
+  const stateIsIntra = (s?: string) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ') === HOME_STATE;
+
+  const update = (key: string, value: any) => setReceipt((p) => {
+    const next = { ...p, [key]: value };
+    // Selecting a supplier decides intra (CGST+SGST) vs inter (IGST) state.
+    if (key === 'supplier_id') {
+      const sup = suppliers.find((s) => String(s.id) === String(value));
+      const st = sup?.state_name || sup?.state || '';
+      next.tax_type = stateIsIntra(st) ? 'CGST_SGST' : 'IGST';
+    }
+    return next;
+  });
 
   const updateItem = (key: string, field: string, value: any) => {
     setItems((prev) => prev.map((it) => {
@@ -171,6 +185,11 @@ export default function MaterialReceiptEntryDetail() {
           updated.secondary_uom = (mat as any).secondary_uom_name || '';
           updated.currency = (mat as any).currency || 'INR';
           updated.exchange_rate = updated.currency === 'INR' ? '1' : updated.exchange_rate;
+          // Auto-fill GST% from the material's group (editable afterwards).
+          const gstRate = mat.group_gst_rate;
+          if (gstRate != null && gstRate !== '') {
+            setReceipt((r) => (r.gst_percent ? r : { ...r, gst_percent: String(Number(gstRate)) }));
+          }
         }
       }
       // Recalculate derived values
@@ -196,11 +215,12 @@ export default function MaterialReceiptEntryDetail() {
   const otherCharges = parseFloat(receipt.other_charges) || 0;
   const totalOtherCharges = freight + loadingCharges + otherCharges;
   const gstPercent = parseFloat(receipt.gst_percent) || 0;
-  const cgstPercent = gstPercent / 2;
-  const sgstPercent = gstPercent / 2;
-  const cgstAmount = totalAmountInr * cgstPercent / 100;
-  const sgstAmount = totalAmountInr * sgstPercent / 100;
-  const totalGstAmount = cgstAmount + sgstAmount;
+  const isIntra = receipt.tax_type === 'CGST_SGST';
+  const gstTotal = totalAmountInr * gstPercent / 100;
+  const cgstAmount = isIntra ? gstTotal / 2 : 0;
+  const sgstAmount = isIntra ? gstTotal / 2 : 0;
+  const igstAmount = isIntra ? 0 : gstTotal;
+  const totalGstAmount = gstTotal;
   const grandTotal = totalAmountInr + totalGstAmount + totalOtherCharges;
 
   const handleSave = async () => {
@@ -217,8 +237,10 @@ export default function MaterialReceiptEntryDetail() {
         warehouse_id: Number(receipt.warehouse_id),
         freight, loading_charges: loadingCharges, other_charges: otherCharges,
         gst_percent: gstPercent,
+        tax_type: receipt.tax_type,
         cgst_amount: cgstAmount,
         sgst_amount: sgstAmount,
+        igst_amount: igstAmount,
         total_gst_amount: totalGstAmount,
         total_other_charges: totalOtherCharges,
         total_amount: totalAmountInr, grand_total: grandTotal,
@@ -266,8 +288,10 @@ export default function MaterialReceiptEntryDetail() {
         warehouse_id: Number(receipt.warehouse_id),
         freight, loading_charges: loadingCharges, other_charges: otherCharges,
         gst_percent: gstPercent,
+        tax_type: receipt.tax_type,
         cgst_amount: cgstAmount,
         sgst_amount: sgstAmount,
+        igst_amount: igstAmount,
         total_gst_amount: totalGstAmount,
         total_other_charges: totalOtherCharges,
         total_amount: totalAmountInr, grand_total: grandTotal,
@@ -475,17 +499,37 @@ export default function MaterialReceiptEntryDetail() {
             </div>
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
               <span className="text-xs font-medium text-gray-700">GST %</span>
-              <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
-                className="w-24 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
+              <div className="flex items-center gap-2">
+                <select
+                  value={receipt.tax_type}
+                  onChange={(e) => update('tax_type', e.target.value)}
+                  className="px-1.5 py-1.5 text-[11px] border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  title="Intra-state (Tamil Nadu) → CGST+SGST. Inter-state → IGST."
+                >
+                  <option value="CGST_SGST">CGST + SGST</option>
+                  <option value="IGST">IGST</option>
+                </select>
+                <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
+                  className="w-20 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500">CGST ({cgstPercent.toFixed(1)}%)</span>
-              <span className="text-xs font-semibold text-gray-700">{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500">SGST ({sgstPercent.toFixed(1)}%)</span>
-              <span className="text-xs font-semibold text-gray-700">{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-            </div>
+            {receipt.tax_type === 'CGST_SGST' ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">CGST ({(gstPercent / 2).toFixed(2)}%)</span>
+                  <span className="text-xs font-semibold text-gray-700">{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">SGST ({(gstPercent / 2).toFixed(2)}%)</span>
+                  <span className="text-xs font-semibold text-gray-700">{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">IGST ({gstPercent.toFixed(2)}%)</span>
+                <span className="text-xs font-semibold text-gray-700">{igstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-gray-700">Total GST Amount</span>
               <span className="text-sm font-bold text-gray-900">{totalGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>

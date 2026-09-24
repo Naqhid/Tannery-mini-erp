@@ -214,15 +214,17 @@ export async function getStats() {
 export async function getDropdown() {
   const [rows] = await pool.query(
     `SELECT p.id, p.code, p.name, p.leather_type, p.thickness, p.uom,
-      p.leather_type_id, p.uom_id, p.thickness_id, p.finish_type_id, p.color_id,
+      p.leather_type_id, p.uom_id, p.thickness_id, p.finish_type_id, p.color_id, p.group_id,
       lt.name AS leather_type_name, u.name AS uom_name,
-      th.name AS thickness_name, c.name AS color_name, ft.name AS finish_type_name
+      th.name AS thickness_name, c.name AS color_name, ft.name AS finish_type_name,
+      gm.gst_rate AS group_gst_rate
     FROM products p
     LEFT JOIN leather_types lt ON p.leather_type_id = lt.id
     LEFT JOIN uom u ON p.uom_id = u.id
     LEFT JOIN thickness th ON p.thickness_id = th.id
     LEFT JOIN colors c ON p.color_id = c.id
     LEFT JOIN finish_types ft ON p.finish_type_id = ft.id
+    LEFT JOIN group_master gm ON p.group_id = gm.id
     WHERE p.status='Active' ORDER BY p.name ASC LIMIT 500`
   );
   // Build a display name concatenating product name with color and finish

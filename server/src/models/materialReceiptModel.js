@@ -2,6 +2,42 @@ import pool from '../config/db.js';
 import { updateStock, addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
 import { replaceReferenceTransactions } from './materialTransactionModel.js';
 
+// Company home state — intra-state suppliers get CGST+SGST, others get IGST.
+const HOME_STATE = 'Tamil Nadu';
+const normState = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Resolve a supplier's state (text) to decide intra vs inter state GST. */
+async function getSupplierState(conn, supplierId) {
+  if (!supplierId) return null;
+  const [[row]] = await conn.query(
+    `SELECT COALESCE(st.name, s.state) AS state_name
+       FROM suppliers s LEFT JOIN states st ON s.state_id = st.id
+      WHERE s.id = ?`,
+    [supplierId]
+  );
+  return row?.state_name || null;
+}
+
+/**
+ * Compute the GST breakup for a receipt.
+ *   Intra-state (supplier in home state)  → CGST + SGST (half each).
+ *   Inter-state (any other state)         → IGST (full rate, no split).
+ * An explicit data.tax_type overrides the auto decision.
+ */
+function computeReceiptGst(totalAmountInr, gstPercent, supplierState, explicitType) {
+  const total = (Number(totalAmountInr) || 0) * (Number(gstPercent) || 0) / 100;
+  const isIntra = explicitType
+    ? explicitType.toUpperCase() !== 'IGST'
+    : normState(supplierState) === normState(HOME_STATE);
+
+  if (isIntra) {
+    const cgst = Number((total / 2).toFixed(4));
+    const sgst = Number((total - cgst).toFixed(4));
+    return { tax_type: 'CGST_SGST', cgst_amount: cgst, sgst_amount: sgst, igst_amount: 0, total_gst_amount: Number(total.toFixed(4)) };
+  }
+  return { tax_type: 'IGST', cgst_amount: 0, sgst_amount: 0, igst_amount: Number(total.toFixed(4)), total_gst_amount: Number(total.toFixed(4)) };
+}
+
 export async function getAll({ search, status, warehouse_id, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
   const params = [];
@@ -78,11 +114,10 @@ export async function create(data, items = [], createdBy = null) {
     const receipt_no = data.receipt_no || await getNextNo();
     const totalAmountInr = items.reduce((s, i) => s + (parseFloat(i.amount_inr) || 0), 0);
     const gstPercent = parseFloat(data.gst_percent) || 0;
-    const cgstAmount = totalAmountInr * (gstPercent / 2) / 100;
-    const sgstAmount = totalAmountInr * (gstPercent / 2) / 100;
-    const totalGstAmount = cgstAmount + sgstAmount;
+    const supplierState = await getSupplierState(conn, data.supplier_id);
+    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState, data.tax_type);
     const totalOtherCharges = (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
-    const grandTotal = totalAmountInr + totalGstAmount + totalOtherCharges;
+    const grandTotal = totalAmountInr + gst.total_gst_amount + totalOtherCharges;
 
     const status = data.status || 'Draft';
 
@@ -91,17 +126,17 @@ export async function create(data, items = [], createdBy = null) {
         receipt_no, receipt_date, receipt_type, supplier_id, purchase_order_no, po_date,
         challan_no, challan_date, lr_grn_no, lr_grn_date, transporter, gate_entry_no,
         warehouse_id, freight, loading_charges, other_charges,
-        gst_percent, cgst_amount, sgst_amount, total_gst_amount, total_other_charges,
+        gst_percent, cgst_amount, sgst_amount, igst_amount, total_gst_amount, tax_type, total_other_charges,
         total_amount, grand_total,
         remarks, status, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         receipt_no, data.receipt_date, data.receipt_type || 'Direct Purchase',
         data.supplier_id || null, data.purchase_order_no || null, data.po_date || null,
         data.challan_no || null, data.challan_date || null, data.lr_grn_no || null,
         data.lr_grn_date || null, data.transporter || null, data.gate_entry_no || null,
         data.warehouse_id, data.freight || 0, data.loading_charges || 0, data.other_charges || 0,
-        gstPercent, cgstAmount, sgstAmount, totalGstAmount, totalOtherCharges,
+        gstPercent, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.total_gst_amount, gst.tax_type, totalOtherCharges,
         totalAmountInr, grandTotal, data.remarks || null, status, createdBy,
       ]
     );
@@ -204,18 +239,17 @@ export async function update(id, data, items = [], updatedBy = null) {
 
     const totalAmountInr = items.reduce((s, i) => s + (parseFloat(i.amount_inr) || 0), 0);
     const gstPercent = parseFloat(data.gst_percent) || 0;
-    const cgstAmount = totalAmountInr * (gstPercent / 2) / 100;
-    const sgstAmount = totalAmountInr * (gstPercent / 2) / 100;
-    const totalGstAmount = cgstAmount + sgstAmount;
+    const supplierState = await getSupplierState(conn, data.supplier_id);
+    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState, data.tax_type);
     const totalOtherCharges = (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
-    const grandTotal = totalAmountInr + totalGstAmount + totalOtherCharges;
+    const grandTotal = totalAmountInr + gst.total_gst_amount + totalOtherCharges;
 
     await conn.query(
       `UPDATE material_receipts SET
         receipt_date=?, receipt_type=?, supplier_id=?, purchase_order_no=?, po_date=?,
         challan_no=?, challan_date=?, lr_grn_no=?, lr_grn_date=?, transporter=?, gate_entry_no=?,
         warehouse_id=?, freight=?, loading_charges=?, other_charges=?,
-        gst_percent=?, cgst_amount=?, sgst_amount=?, total_gst_amount=?, total_other_charges=?,
+        gst_percent=?, cgst_amount=?, sgst_amount=?, igst_amount=?, total_gst_amount=?, tax_type=?, total_other_charges=?,
         total_amount=?, grand_total=?, remarks=?, status=?, updated_by=? WHERE id=?`,
       [
         data.receipt_date, data.receipt_type || 'Direct Purchase', data.supplier_id || null,
@@ -223,7 +257,7 @@ export async function update(id, data, items = [], updatedBy = null) {
         data.challan_date || null, data.lr_grn_no || null, data.lr_grn_date || null,
         data.transporter || null, data.gate_entry_no || null, data.warehouse_id,
         data.freight || 0, data.loading_charges || 0, data.other_charges || 0,
-        gstPercent, cgstAmount, sgstAmount, totalGstAmount, totalOtherCharges,
+        gstPercent, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.total_gst_amount, gst.tax_type, totalOtherCharges,
         totalAmountInr, grandTotal, data.remarks || null, newStatus, updatedBy, id,
       ]
     );
