@@ -30,6 +30,7 @@ export default function MaterialMaster() {
     { key: 'uom', header: 'UOM', sortable: true },
     { key: 'category', header: 'Category', sortable: true, render: (row: any) => <span className="text-gray-700">{row.category_name || row.category || '—'}</span> },
     { key: 'group_name', header: 'Group', sortable: false, render: (row: any) => <span className="text-gray-700">{row.group_name || '—'}</span> },
+    { key: 'hsn_code', header: 'HSN Code', sortable: true, render: (row: any) => <span className="font-mono text-xs text-gray-700">{row.hsn_code || '—'}</span> },
     { key: 'opening_stock', header: 'Opening Stock Qty', sortable: true, render: (row: any) => <span className="text-gray-800 tabular-nums block text-right">{fmtQty(row.opening_stock)}</span> },
     { key: 'opening_stock_value', header: 'Opening Stock Value', sortable: true, render: (row: any) => <span className="text-gray-800 tabular-nums block text-right">{fmtValue(row.opening_stock_value)}</span> },
     { key: 'type', header: 'Type', sortable: true, render: (row: any) => <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${TYPE_COLORS[row.type] || 'bg-gray-100 text-gray-600'}`}>{row.type}</span> },
