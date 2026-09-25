@@ -9,8 +9,6 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Activity,
   BarChart3,
   Eye,
@@ -36,26 +34,20 @@ const defaultStats: DashboardStat[] = [
   { label: 'Active Recipes', value: '--', change: '+8%', up: true, icon: <TrendingUp size={22} />, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
 ];
 
-const recentOrders = [
-  { id: 'SO-2024-001', customer: 'ABC Leather Pvt Ltd', product: 'Full Grain Cowhide', qty: '500', status: 'Completed', date: '15 Jun 2024' },
-  { id: 'SO-2024-002', customer: 'XYZ Tannery Co', product: 'Semi-Aniline Leather', qty: '300', status: 'In Production', date: '14 Jun 2024' },
-  { id: 'SO-2024-003', customer: 'Global Leather Inc', product: 'Nappa Leather', qty: '200', status: 'Pending', date: '13 Jun 2024' },
-  { id: 'SO-2024-004', customer: 'Premium Hides Ltd', product: 'Pull-Up Leather', qty: '450', status: 'Completed', date: '12 Jun 2024' },
-  { id: 'SO-2024-005', customer: 'Euro Leather Corp', product: 'Suede Leather', qty: '350', status: 'In Production', date: '11 Jun 2024' },
-];
+interface RecentOrder { id: number; order_no: string; customer_name: string; product: string; total_quantity: number; status: string; order_date: string; }
+interface LowStockItem { id: number; item: string; qty: string; threshold: string; status: string; percent: number; }
+interface ProductionRow { batch: string; recipe: string; stage: string; progress: number; }
 
-const lowStock = [
-  { item: 'Chrome Tanning Agent', qty: '25 kg', threshold: '50 kg', status: 'Critical', percent: 50 },
-  { item: 'Vegetable Tanning Extract', qty: '40 kg', threshold: '60 kg', status: 'Low', percent: 67 },
-  { item: 'Aniline Dye - Brown', qty: '15 L', threshold: '30 L', status: 'Critical', percent: 50 },
-  { item: 'Wax Emulsion', qty: '80 L', threshold: '100 L', status: 'Low', percent: 80 },
-];
+const fmtDate = (d?: string) => {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
-const productionSchedule = [
-  { batch: 'B-2024-042', recipe: 'Full Grain Finish', stage: 'Dyeing', progress: 65, eta: '2 days', stageColor: 'bg-purple-100 text-purple-700' },
-  { batch: 'B-2024-043', recipe: 'Semi-Aniline Finish', stage: 'Tanning', progress: 30, eta: '5 days', stageColor: 'bg-amber-100 text-amber-700' },
-  { batch: 'B-2024-044', recipe: 'Nappa Finish', stage: 'Finishing', progress: 90, eta: '1 day', stageColor: 'bg-emerald-100 text-emerald-700' },
-];
+const stageColorFor = (progress: number) =>
+  progress >= 80 ? 'bg-emerald-100 text-emerald-700'
+    : progress >= 50 ? 'bg-blue-100 text-blue-700'
+    : 'bg-amber-100 text-amber-700';
 
 const statusBadge = (status: string) => {
   const styles: Record<string, string> = {
@@ -77,9 +69,12 @@ const statusBadge = (status: string) => {
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStat[]>(defaultStats);
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [lowStock, setLowStock] = useState<LowStockItem[]>([]);
+  const [productionSchedule, setProductionSchedule] = useState<ProductionRow[]>([]);
 
   useEffect(() => {
-    api<{ data: { stats: DashboardStat[] } }>('/dashboard/stats')
+    api<{ data: { stats: DashboardStat[]; recentOrders: RecentOrder[]; lowStock: LowStockItem[]; productionSchedule: ProductionRow[] } }>('/dashboard/stats')
       .then((res) => {
         const s = res.data.stats;
         setStats([
@@ -88,6 +83,9 @@ export default function Dashboard() {
           { label: 'Total Suppliers', value: s[2].value, change: '+3%', up: true, icon: <Factory size={22} />, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
           { label: 'Active Recipes', value: s[3].value, change: '+8%', up: true, icon: <TrendingUp size={22} />, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
         ]);
+        setRecentOrders(res.data.recentOrders || []);
+        setLowStock(res.data.lowStock || []);
+        setProductionSchedule(res.data.productionSchedule || []);
       })
       .catch(() => {});
   }, []);
@@ -154,14 +152,16 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {recentOrders.map((o) => (
+                {recentOrders.length === 0 ? (
+                  <tr><td colSpan={6} className="py-6 text-center text-xs text-gray-400">No recent orders</td></tr>
+                ) : recentOrders.map((o) => (
                   <tr key={o.id} className="hover:bg-gray-50/80 transition-colors cursor-pointer group">
-                    <td className="py-3 px-3 font-semibold text-gray-900 text-xs">{o.id}</td>
-                    <td className="py-3 px-3 text-gray-600 text-xs">{o.customer}</td>
-                    <td className="py-3 px-3 text-gray-600 text-xs hidden md:table-cell">{o.product}</td>
-                    <td className="py-3 px-3 text-gray-700 font-medium text-xs">{o.qty}</td>
+                    <td className="py-3 px-3 font-semibold text-gray-900 text-xs">{o.order_no}</td>
+                    <td className="py-3 px-3 text-gray-600 text-xs">{o.customer_name || '—'}</td>
+                    <td className="py-3 px-3 text-gray-600 text-xs hidden md:table-cell">{o.product || '—'}</td>
+                    <td className="py-3 px-3 text-gray-700 font-medium text-xs">{o.total_quantity}</td>
                     <td className="py-3 px-3">{statusBadge(o.status)}</td>
-                    <td className="py-3 px-3 text-gray-400 text-xs hidden lg:table-cell">{o.date}</td>
+                    <td className="py-3 px-3 text-gray-400 text-xs hidden lg:table-cell">{fmtDate(o.order_date)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -170,32 +170,22 @@ export default function Dashboard() {
 
           {/* Mobile card view */}
           <div className="sm:hidden space-y-3">
-            {recentOrders.map((o) => (
+            {recentOrders.length === 0 ? (
+              <div className="p-4 text-center text-xs text-gray-400">No recent orders</div>
+            ) : recentOrders.map((o) => (
               <div key={o.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-900">{o.id}</span>
+                  <span className="text-xs font-bold text-gray-900">{o.order_no}</span>
                   {statusBadge(o.status)}
                 </div>
-                <div className="text-xs text-gray-600">{o.customer}</div>
+                <div className="text-xs text-gray-600">{o.customer_name || '—'}</div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">{o.product}</span>
-                  <span className="font-medium text-gray-700">Qty: {o.qty}</span>
+                  <span className="text-gray-500">{o.product || '—'}</span>
+                  <span className="font-medium text-gray-700">Qty: {o.total_quantity}</span>
                 </div>
-                <div className="text-[11px] text-gray-400">{o.date}</div>
+                <div className="text-[11px] text-gray-400">{fmtDate(o.order_date)}</div>
               </div>
             ))}
-          </div>
-
-          {/* Pagination */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 pt-4 border-t border-gray-100">
-            <span className="text-xs text-gray-400">Showing 1-5 of 124 orders</span>
-            <div className="flex items-center gap-1">
-              <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"><ChevronLeft size={14} /></button>
-              <button className="w-7 h-7 text-xs rounded-lg bg-blue-600 text-white font-medium shadow-sm shadow-blue-200">1</button>
-              <button className="w-7 h-7 text-xs rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">2</button>
-              <button className="w-7 h-7 text-xs rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">3</button>
-              <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"><ChevronRight size={14} /></button>
-            </div>
           </div>
         </Card>
 
@@ -248,7 +238,9 @@ export default function Dashboard() {
         }
       >
         <div className="space-y-4">
-          {productionSchedule.map((batch) => (
+          {productionSchedule.length === 0 ? (
+            <div className="p-4 text-center text-xs text-gray-400">No active production plans</div>
+          ) : productionSchedule.map((batch) => (
             <div key={batch.batch} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-gray-50/50 border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all duration-200">
               <div className="sm:w-36 shrink-0">
                 <p className="text-sm font-bold text-gray-900">{batch.batch}</p>
@@ -256,7 +248,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${batch.stageColor}`}>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${stageColorFor(batch.progress)}`}>
                     <Activity size={10} />
                     {batch.stage}
                   </span>
@@ -272,12 +264,6 @@ export default function Dashboard() {
                     style={{ width: `${batch.progress}%` }}
                   />
                 </div>
-              </div>
-              <div className="sm:w-24 sm:text-right shrink-0">
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-100">
-                  <Clock size={11} />
-                  ETA: {batch.eta}
-                </span>
               </div>
             </div>
           ))}

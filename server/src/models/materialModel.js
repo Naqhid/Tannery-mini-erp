@@ -24,7 +24,8 @@ export async function getAll({ search, type, category, status, supplier, page = 
 
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
-    `SELECT m.*, s.name AS preferred_supplier_name, g.name AS group_name, pc.name AS category_name
+    `SELECT m.*, s.name AS preferred_supplier_name, g.name AS group_name, pc.name AS category_name,
+       EXISTS(SELECT 1 FROM stock_ledger sl WHERE sl.material_id = m.id) AS has_ledger
      FROM materials m
      LEFT JOIN suppliers s ON m.preferred_supplier_id = s.id
      LEFT JOIN group_master g ON m.group_id = g.id
@@ -266,6 +267,8 @@ export async function update(id, data, updatedBy = null) {
 }
 
 export async function checkReferences(id) {
+  const [[ledgerCount]] = await pool.query('SELECT COUNT(*) AS count FROM stock_ledger WHERE material_id = ?', [id]);
+  if (ledgerCount.count > 0) return { hasReferences: true, table: 'Stock Ledger' };
   const [[bomCount]] = await pool.query('SELECT COUNT(*) AS count FROM bom_items WHERE material_id = ?', [id]);
   if (bomCount.count > 0) return { hasReferences: true, table: 'BOM Items' };
   const [[recipeCount]] = await pool.query('SELECT COUNT(*) AS count FROM recipe_items WHERE material_id = ?', [id]);

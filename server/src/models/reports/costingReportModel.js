@@ -144,48 +144,84 @@ export async function fullOrderCostSheet({ customer, search, page = 1, limit = 1
 }
 
 // ─── Stage Cost Summary ──────────────────────────────────────────────────────
-// Aggregated cost per process stage across all orders (with date filter on plan_date).
+// One row per production order (across all its stages). Shows customer, order no,
+// order qty, output qty, total cost, cost/sqft, selling price and variance.
+// Cost/sqft = total cost / finished (measurement-stage) output.
 export async function stageCostSummary({ from_date, to_date, stage, search, page = 1, limit = 10 }) {
   const params = [];
-  let where = 'pso.deleted_at IS NULL AND pp.deleted_at IS NULL';
+  let where = 'pp.deleted_at IS NULL';
   if (from_date) { where += ' AND pp.plan_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND pp.plan_date <= ?'; params.push(to_date); }
-  if (stage) { where += ' AND pso.process_stage = ?'; params.push(stage); }
-  if (search) { where += ' AND pso.process_stage LIKE ?'; params.push(`%${search}%`); }
+  if (search) {
+    where += ' AND (pp.plan_no LIKE ? OR pp.article LIKE ? OR so.order_no LIKE ? OR so.customer_id IN (SELECT id FROM customers WHERE name LIKE ?))';
+    const t = `%${search}%`; params.push(t, t, t, t);
+  }
   const offset = (page - 1) * limit;
 
+  // Total material cost issued for the whole plan (all stages).
   const matCost = `
     COALESCE((
       SELECT SUM(mii.amount) FROM material_issues mi2
       JOIN material_issue_items mii ON mii.issue_id = mi2.id
       WHERE mi2.production_batch COLLATE utf8mb4_0900_ai_ci = pp.plan_no COLLATE utf8mb4_0900_ai_ci
-        AND COALESCE(mi2.process_stage,'') COLLATE utf8mb4_0900_ai_ci = COALESCE(pso.process_stage,'') COLLATE utf8mb4_0900_ai_ci
     ), 0)`;
-  const genCost = `COALESCE((SELECT SUM(gh.total_amount) FROM general_cost_headers gh WHERE gh.production_plan_id = pso.id), 0)`;
-  const machCost = `COALESCE((SELECT SUM(mh.total_amount) FROM machine_cost_headers mh WHERE mh.production_plan_id = pso.id), 0)`;
+  // General + machine cost across all stage orders of the plan.
+  const genCost = `
+    COALESCE((
+      SELECT SUM(gh.total_amount) FROM general_cost_headers gh
+      JOIN production_status_orders pso2 ON gh.production_plan_id = pso2.id
+      WHERE pso2.production_plan_id = pp.id AND pso2.deleted_at IS NULL
+    ), 0)`;
+  const machCost = `
+    COALESCE((
+      SELECT SUM(mh.total_amount) FROM machine_cost_headers mh
+      JOIN production_status_orders pso3 ON mh.production_plan_id = pso3.id
+      WHERE pso3.production_plan_id = pp.id AND pso3.deleted_at IS NULL
+    ), 0)`;
+
+  // Finished output = Measurement-stage completed qty (sqft) for the plan.
+  const outputQty = `
+    COALESCE((
+      SELECT SUM(pso_m.completed_qty) FROM production_status_orders pso_m
+      WHERE pso_m.production_plan_id = pp.id AND pso_m.deleted_at IS NULL
+        AND pso_m.process_stage COLLATE utf8mb4_0900_ai_ci = 'Measurement'
+    ), 0)`;
+
+  // Selling price from the matching sales order line for the plan article.
+  const sellingPrice = `
+    COALESCE((
+      SELECT AVG(soi.unit_price) FROM sales_order_items soi
+      WHERE soi.sales_order_id = so.id
+        AND soi.item_description COLLATE utf8mb4_0900_ai_ci = pp.article COLLATE utf8mb4_0900_ai_ci
+    ), 0)`;
+
+  const totalCostExpr = `(${matCost} + ${genCost} + ${machCost})`;
+  const costPerSqftExpr = `CASE WHEN ${outputQty} > 0 THEN ${totalCostExpr} / ${outputQty} ELSE 0 END`;
 
   const baseFrom = `
-     FROM production_status_orders pso
-     JOIN production_plans pp ON pso.production_plan_id = pp.id
+     FROM production_plans pp
+     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     LEFT JOIN customers c ON so.customer_id = c.id
      WHERE ${where}`;
 
   const [rows] = await pool.query(
-    `SELECT pso.process_stage AS stage,
-       SUM(${matCost}) AS material_cost,
-       SUM(${genCost}) AS general_cost,
-       SUM(${machCost}) AS machine_cost,
-       SUM(${matCost} + ${genCost} + ${machCost}) AS total_cost,
-       SUM(pso.completed_qty) AS output_qty,
-       CASE WHEN SUM(pso.completed_qty) > 0
-         THEN SUM(${matCost} + ${genCost} + ${machCost}) / SUM(pso.completed_qty) ELSE 0 END AS cost_per_uom
+    `SELECT pp.id AS plan_id, pp.plan_no,
+       COALESCE(so.order_no, pp.plan_no) AS order_no,
+       COALESCE(c.name, '—') AS customer_name,
+       pp.article, pp.color,
+       COALESCE(pp.order_qty, pp.planned_qty, 0) AS order_qty,
+       ${outputQty} AS output_qty,
+       ${totalCostExpr} AS total_cost,
+       ${costPerSqftExpr} AS cost_per_sqft,
+       ${sellingPrice} AS selling_price,
+       (${sellingPrice} - (${costPerSqftExpr})) AS variance
      ${baseFrom}
-     GROUP BY pso.process_stage
-     ORDER BY total_cost DESC
+     ORDER BY pp.id DESC
      LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
   );
   const [countRows] = await pool.query(
-    `SELECT COUNT(*) AS c FROM (SELECT pso.process_stage ${baseFrom} GROUP BY pso.process_stage) x`, params
+    `SELECT COUNT(*) AS c FROM (SELECT pp.id ${baseFrom}) x`, params
   );
   const total = countRows[0]?.c || 0;
   return { rows, total };

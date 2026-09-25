@@ -24,7 +24,6 @@ export default function StockSummaryReport({ embedded }: { embedded?: boolean })
     { key: 'material_code', header: 'Item Code', render: r => <span className="font-mono text-blue-700">{r.material_code}</span> },
     { key: 'material_name', header: 'Item', render: r => <span className="font-medium text-gray-900">{r.material_name}</span> },
     { key: 'group_name', header: 'Item Group' },
-    { key: 'warehouse_name', header: 'Warehouse' },
     { key: 'uom', header: 'UOM' },
     { key: 'current_qty', header: 'Closing Qty', align: 'right', render: r => fmtQty(r.current_qty) },
     { key: 'avg_unit_cost', header: 'Avg Rate', align: 'right', render: r => fmtNum(r.avg_unit_cost) },
@@ -49,7 +48,7 @@ export default function StockSummaryReport({ embedded }: { embedded?: boolean })
       }
       footer={(rows, totals) => totals && (
         <tr>
-          <td className="px-4 py-3 text-sm" colSpan={5}>Total</td>
+          <td className="px-4 py-3 text-sm" colSpan={4}>Total</td>
           <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.total_qty)}</td>
           <td />
           <td className="px-4 py-3 text-sm text-right">{fmtNum(totals.total_value)}</td>

@@ -26,12 +26,14 @@ interface ReportShellProps<T> {
   footer?: (rows: T[], totals: Record<string, number> | null) => ReactNode;
   // When true, hide the page-level title/header + outer padding (used inside tabs).
   embedded?: boolean;
+  // Optional row click handler (e.g. drill-down navigation).
+  onRowClick?: (row: T) => void;
 }
 
 export default function ReportShell<T extends Record<string, unknown>>({
   title, subtitle, endpoint, columns,
   showDate = true, datePreset = 'this_month', fromKey = 'from_date', toKey = 'to_date',
-  extraParams = {}, filterControls, exportFileName, footer, embedded = false,
+  extraParams = {}, filterControls, exportFileName, footer, embedded = false, onRowClick,
 }: ReportShellProps<T>) {
   const [rows, setRows] = useState<T[]>([]);
   const [totals, setTotals] = useState<Record<string, number> | null>(null);
@@ -159,6 +161,7 @@ export default function ReportShell<T extends Record<string, unknown>>({
         onPageChange={setCurrentPage}
         onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
         footer={footer ? footer(rows, totals) : undefined}
+        onRowClick={onRowClick}
       />
     </div>
   );

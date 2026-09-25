@@ -12,7 +12,7 @@ interface Row extends Record<string, unknown> {
   cost_per_pc: number; selling_price: number; cost_per_sqft: number; variance: number;
 }
 
-export default function WipCostSheetReport({ embedded }: { embedded?: boolean }) {
+export default function WipCostSheetReport({ embedded, orderNo }: { embedded?: boolean; orderNo?: string }) {
   const [stage, setStage] = useState('');
   const [opts, setOpts] = useState<{ stages: string[] }>({ stages: [] });
 
@@ -42,14 +42,14 @@ export default function WipCostSheetReport({ embedded }: { embedded?: boolean })
 
   return (
     <ReportShell<Row>
-      title="WIP Cost Sheet"
-      subtitle="Accumulated cost for in-progress (unfinished) plan stages."
+      title="Stage Costing Breakup"
+      subtitle={orderNo ? `Stage-wise cost breakup for order ${orderNo}.` : 'Accumulated cost for in-progress (unfinished) plan stages.'}
       endpoint="/reports/costing/wip-cost-sheet"
       columns={columns}
       showDate={false}
       embedded={embedded}
-      exportFileName="WIP_Cost_Sheet"
-      extraParams={{ stage }}
+      exportFileName="Stage_Costing_Breakup"
+      extraParams={{ stage, ...(orderNo ? { search: orderNo } : {}) }}
       filterControls={
         <FilterSelect label="Stage" value={stage} onChange={setStage} options={opts.stages.map(s => ({ value: s, label: s }))} />
       }

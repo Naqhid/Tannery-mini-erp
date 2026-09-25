@@ -7,7 +7,7 @@ import { fmtNum, fmtQty, fmtDate } from '../../../lib/reportFormat';
 
 interface Row extends Record<string, unknown> {
   id: number; transaction_date: string; transaction_type: string;
-  reference_type: string; reference_no: string;
+  reference_type: string; reference_id: number | null; reference_no: string;
   material_code: string; material_name: string; warehouse_name: string; uom: string;
   batch_no: string; expiry_date: string | null;
   in_qty: number; out_qty: number; rate: number; amount: number; balance_qty: number;
@@ -28,6 +28,7 @@ export default function StockLedgerReport({ embedded }: { embedded?: boolean }) 
     { key: 'transaction_date', header: 'Txn Date', render: r => fmtDate(r.transaction_date) },
     { key: 'transaction_type', header: 'Type', render: r => <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700">{r.transaction_type}</span> },
     { key: 'reference_type', header: 'Ref Type' },
+    { key: 'reference_id', header: 'Ref ID', render: r => r.reference_id ?? '—' },
     { key: 'reference_no', header: 'Ref No', render: r => <span className="font-mono text-blue-700">{r.reference_no || '—'}</span> },
     { key: 'material_code', header: 'Item Code', render: r => <span className="font-mono">{r.material_code || '—'}</span> },
     { key: 'material_name', header: 'Item', render: r => <span className="font-medium text-gray-900">{r.material_name}</span> },
@@ -42,6 +43,7 @@ export default function StockLedgerReport({ embedded }: { embedded?: boolean }) 
     { key: 'balance_qty', header: 'Balance', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.balance_qty)}</span> },
     { key: 'remarks', header: 'Remarks', render: r => r.remarks || '—' },
     { key: 'created_by_name', header: 'Created By', render: r => r.created_by_name || '—' },
+    { key: 'created_at', header: 'Created At', render: r => r.created_at ? fmtDate(r.created_at) : '—' },
   ];
 
   return (
@@ -61,12 +63,12 @@ export default function StockLedgerReport({ embedded }: { embedded?: boolean }) 
       }
       footer={(rows, totals) => totals && (
         <tr>
-          <td className="px-4 py-3 text-sm" colSpan={10}>Total</td>
+          <td className="px-4 py-3 text-sm" colSpan={11}>Total</td>
           <td className="px-4 py-3 text-sm text-right text-emerald-700">{fmtQty(totals.total_in)}</td>
           <td className="px-4 py-3 text-sm text-right text-red-600">{fmtQty(totals.total_out)}</td>
           <td />
           <td className="px-4 py-3 text-sm text-right">{fmtNum(totals.total_amount)}</td>
-          <td colSpan={3} />
+          <td colSpan={4} />
         </tr>
       )}
     />

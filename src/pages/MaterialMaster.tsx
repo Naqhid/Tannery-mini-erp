@@ -148,6 +148,7 @@ export default function MaterialMaster() {
       onRowClick={(row) => navigate(`/chemical-master/${row.id}`)}
       onEdit={(row) => navigate(`/chemical-master/${row.id}`)}
       onDelete={handleDelete}
+      isRowActionDisabled={(row) => !!row.has_ledger}
       deleteTitle="Delete Material"
       deleteMessage="Are you sure? This will remove the material record."
       searchPlaceholder="Search materials..."

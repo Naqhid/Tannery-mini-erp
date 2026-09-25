@@ -28,6 +28,7 @@ interface Props<T> {
   emptyTitle?: string;
   emptyDescription?: string;
   footer?: ReactNode; // e.g. totals row
+  onRowClick?: (row: T) => void;
 }
 
 const alignClass = (a?: string) =>
@@ -37,7 +38,7 @@ export default function ReportTable<T>({
   columns, rows, loading, rowKey,
   page, pageSize, totalRecords, totalPages, onPageChange, onPageSizeChange,
   emptyTitle = 'No data found', emptyDescription = 'No records match your current filters.',
-  footer,
+  footer, onRowClick,
 }: Props<T>) {
   const hasPagination = page != null && totalPages != null && onPageChange != null;
 
@@ -63,7 +64,9 @@ export default function ReportTable<T>({
                 <SkeletonLoader rows={8} cols={Math.max(1, columns.length - 2)} />
               ) : (
                 rows.map((row, idx) => (
-                  <tr key={rowKey(row, idx)} className={`transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                  <tr key={rowKey(row, idx)}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={`transition-colors hover:bg-blue-50/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} ${onRowClick ? 'cursor-pointer' : ''}`}>
                     {columns.map((c) => (
                       <td key={c.key} className={`px-4 py-3 text-sm text-gray-800 ${alignClass(c.align)} ${c.className || ''}`}>
                         {c.render ? c.render(row) : ((row as Record<string, unknown>)[c.key] as ReactNode) ?? '—'}
