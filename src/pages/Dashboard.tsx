@@ -13,6 +13,7 @@ import {
   BarChart3,
   Eye,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import api from '../lib/api';
 
@@ -68,6 +69,7 @@ const statusBadge = (status: string) => {
 };
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStat[]>(defaultStats);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [lowStock, setLowStock] = useState<LowStockItem[]>([]);
@@ -132,7 +134,7 @@ export default function Dashboard() {
           title="Recent Sales Orders"
           subtitle="Last 5 orders placed"
           action={
-            <button className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+            <button onClick={() => navigate('/sales-orders')} className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
               <Eye size={13} />
               View All
             </button>
@@ -155,7 +157,7 @@ export default function Dashboard() {
                 {recentOrders.length === 0 ? (
                   <tr><td colSpan={6} className="py-6 text-center text-xs text-gray-400">No recent orders</td></tr>
                 ) : recentOrders.map((o) => (
-                  <tr key={o.id} className="hover:bg-gray-50/80 transition-colors cursor-pointer group">
+                  <tr key={o.id} onClick={() => navigate(`/sales-orders/${o.id}`)} className="hover:bg-gray-50/80 transition-colors cursor-pointer group">
                     <td className="py-3 px-3 font-semibold text-gray-900 text-xs">{o.order_no}</td>
                     <td className="py-3 px-3 text-gray-600 text-xs">{o.customer_name || '—'}</td>
                     <td className="py-3 px-3 text-gray-600 text-xs hidden md:table-cell">{o.product || '—'}</td>
@@ -173,7 +175,7 @@ export default function Dashboard() {
             {recentOrders.length === 0 ? (
               <div className="p-4 text-center text-xs text-gray-400">No recent orders</div>
             ) : recentOrders.map((o) => (
-              <div key={o.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-2">
+              <div key={o.id} onClick={() => navigate(`/sales-orders/${o.id}`)} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-2 cursor-pointer active:bg-blue-50">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-gray-900">{o.order_no}</span>
                   {statusBadge(o.status)}
@@ -231,7 +233,7 @@ export default function Dashboard() {
         title="Production Schedule"
         subtitle="Active batches in progress"
         action={
-          <button className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors">
+          <button onClick={() => navigate('/production-plan')} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors">
             <BarChart3 size={13} />
             Details
           </button>
