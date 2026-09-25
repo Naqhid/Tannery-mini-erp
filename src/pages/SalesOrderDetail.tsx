@@ -773,30 +773,29 @@ export default function SalesOrderDetail() {
                         <span className="text-sm text-gray-600">Freight</span>
                         <input type="number" value={order.freight || ''} onChange={(e) => updateField('freight', e.target.value === '' ? 0 : Number(e.target.value))} min={0} placeholder="0" className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                       </div>
-                      {/* Tax rate input (percentage only — the label/amount lines below show the actual tax) */}
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-600 flex items-center gap-1">
-                          Tax Rate
-                          <input
-                            type="number"
-                            value={order.tax_percent || ''}
-                            onChange={(e) => updateField('tax_percent', e.target.value === '' ? 0 : Number(e.target.value))}
-                            min={0}
-                            max={100}
-                            step="0.01"
-                            placeholder="0"
-                            className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
-                          />
-                          %
-                        </span>
-                      </div>
                       {order.tax_type === 'CGST_SGST' ? (
                         <>
                           <div className="flex items-center justify-between py-1">
+                            <span className="text-sm text-gray-600 flex items-center gap-1">
+                              GST
+                              <input
+                                type="number"
+                                value={order.tax_percent || ''}
+                                onChange={(e) => updateField('tax_percent', e.target.value === '' ? 0 : Number(e.target.value))}
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                placeholder="0"
+                                className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
+                              />
+                              % (CGST + SGST)
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between py-1 pl-3">
                             <span className="text-sm text-gray-600">CGST ({(Number(order.tax_percent) / 2).toFixed(2)}%)</span>
                             <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.cgst_amount)}</span>
                           </div>
-                          <div className="flex items-center justify-between py-1">
+                          <div className="flex items-center justify-between py-1 pl-3">
                             <span className="text-sm text-gray-600">SGST ({(Number(order.tax_percent) / 2).toFixed(2)}%)</span>
                             <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.sgst_amount)}</span>
                           </div>
@@ -807,7 +806,20 @@ export default function SalesOrderDetail() {
                         </>
                       ) : (
                         <div className="flex items-center justify-between py-1">
-                          <span className="text-sm text-gray-600">IGST ({Number(order.tax_percent).toFixed(2)}%)</span>
+                          <span className="text-sm text-gray-600 flex items-center gap-1">
+                            IGST
+                            <input
+                              type="number"
+                              value={order.tax_percent || ''}
+                              onChange={(e) => updateField('tax_percent', e.target.value === '' ? 0 : Number(e.target.value))}
+                              min={0}
+                              max={100}
+                              step="0.01"
+                              placeholder="0"
+                              className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
+                            />
+                            %
+                          </span>
                           <span className="text-sm font-semibold text-gray-900 w-24 text-right">{formatCurrency(order.igst_amount)}</span>
                         </div>
                       )}

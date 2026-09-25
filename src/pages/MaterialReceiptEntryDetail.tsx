@@ -497,33 +497,34 @@ export default function MaterialReceiptEntryDetail() {
               <span className="text-xs text-gray-600">Total Amount (INR)</span>
               <span className="text-sm font-bold text-teal-700 bg-teal-50 px-3 py-1 rounded-lg">{totalAmountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
-              <span className="text-xs font-medium text-gray-700">GST %</span>
-              <div className="flex items-center gap-2">
-                <span
-                  className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-gray-100 text-gray-600 border border-gray-200"
-                  title="Set automatically from the supplier's state. Intra-state (Tamil Nadu) → CGST+SGST, inter-state → IGST."
-                >
-                  {receipt.tax_type === 'CGST_SGST' ? 'CGST + SGST' : 'IGST'}
-                </span>
-                <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
-                  className="w-20 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
-              </div>
-            </div>
+            <div className="pt-2 border-t border-gray-100" />
             {receipt.tax_type === 'CGST_SGST' ? (
               <>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-gray-600 flex items-center gap-1">
+                    GST
+                    <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
+                      className="w-16 px-2 py-1 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
+                    % (CGST + SGST)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pl-3">
                   <span className="text-xs text-gray-500">CGST ({(gstPercent / 2).toFixed(2)}%)</span>
                   <span className="text-xs font-semibold text-gray-700">{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pl-3">
                   <span className="text-xs text-gray-500">SGST ({(gstPercent / 2).toFixed(2)}%)</span>
                   <span className="text-xs font-semibold text-gray-700">{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">IGST ({gstPercent.toFixed(2)}%)</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  IGST
+                  <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
+                    className="w-16 px-2 py-1 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
+                  %
+                </span>
                 <span className="text-xs font-semibold text-gray-700">{igstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             )}
