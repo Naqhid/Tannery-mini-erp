@@ -18,8 +18,11 @@ export async function getAll({ search, type, category, status, supplier, page = 
   if (status) { where += ' AND m.status = ?'; params.push(status); }
   if (supplier) { where += ' AND s.name LIKE ?'; params.push(`%${supplier}%`); }
 
-  const allowedSortColumns = ['id', 'code', 'name', 'type', 'category', 'status', 'current_stock', 'last_purchase_price', 'standard_cost', 'opening_stock', 'created_at'];
-  const column = allowedSortColumns.includes(sortBy) ? `m.${sortBy}` : 'm.id';
+  const allowedSortColumns = ['id', 'code', 'name', 'type', 'category', 'status', 'current_stock', 'last_purchase_price', 'standard_cost', 'opening_stock', 'opening_stock_value', 'hsn_code', 'created_at'];
+  // group_name comes from the joined group_master table (aliased g).
+  const column = sortBy === 'group_name'
+    ? 'g.name'
+    : (allowedSortColumns.includes(sortBy) ? `m.${sortBy}` : 'm.id');
   const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
   const offset = (page - 1) * limit;
