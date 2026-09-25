@@ -8,14 +8,18 @@
 -- group hsn_code below is only a representative default for the group.
 
 -- =============================================
--- Step 1: Insert the two groups (skip if the name already exists)
+-- Step 1: Insert the two groups (skip if the name already exists).
+-- Codes are generated from the current MAX(GRP-#####) so we never collide
+-- with an existing group code on the target database.
 -- =============================================
+SET @grp_seq = (SELECT COALESCE(MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)), 0) FROM group_master WHERE code LIKE 'GRP-%');
+
 INSERT INTO group_master (code, name, hsn_code, gst_rate, status)
-SELECT 'GRP-00005', 'Wetblue Chemicals', '3202', 18.00, 'Active'
+SELECT CONCAT('GRP-', LPAD(@grp_seq := @grp_seq + 1, 5, '0')), 'Wetblue Chemicals', '3202', 18.00, 'Active'
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM group_master WHERE name = 'Wetblue Chemicals');
 
 INSERT INTO group_master (code, name, hsn_code, gst_rate, status)
-SELECT 'GRP-00006', 'Finishing Chemicals', '3209', 18.00, 'Active'
+SELECT CONCAT('GRP-', LPAD(@grp_seq := @grp_seq + 1, 5, '0')), 'Finishing Chemicals', '3209', 18.00, 'Active'
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM group_master WHERE name = 'Finishing Chemicals');
 
 -- =============================================
