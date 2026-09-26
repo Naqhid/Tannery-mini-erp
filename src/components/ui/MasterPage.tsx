@@ -1014,12 +1014,14 @@ export default function MasterPage({
             <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-lg bg-white hover:bg-blue-50 text-gray-400 hover:text-blue-600 border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page">
               <ChevronLeft size={16} />
             </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let page: number;
-              if (totalPages <= 5) { page = i + 1; }
-              else { page = currentPage - 2 + i; if (page < 1) page = i + 1; if (page > totalPages) page = totalPages - 4 + i; }
-              return page;
-            }).map(page => (
+            {(() => {
+              const windowSize = Math.min(5, totalPages);
+              // Center the window on the current page, then clamp so it stays
+              // within [1, totalPages]. This guarantees consecutive, unique pages.
+              let start = currentPage - Math.floor(windowSize / 2);
+              start = Math.max(1, Math.min(start, totalPages - windowSize + 1));
+              return Array.from({ length: windowSize }, (_, i) => start + i);
+            })().map(page => (
               <button
                 key={page}
                 onClick={() => setCurrentPage(page)}
