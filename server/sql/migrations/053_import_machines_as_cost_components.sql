@@ -18,6 +18,10 @@
 --     when it exists, otherwise the first available category, otherwise NULL.
 --   * Idempotent: groups are matched by name, cost components by name; existing
 --     rows are UPDATED instead of duplicated, so re-running is safe.
+--   * `machines` may use a different collation (utf8mb4_0900_ai_ci) than the
+--     target tables (utf8mb4_unicode_ci). Every cross-table string comparison
+--     is forced to utf8mb4_unicode_ci with COLLATE to avoid "Illegal mix of
+--     collations" errors.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -48,7 +52,8 @@ FROM (
 ) mt
 WHERE NOT EXISTS (
   SELECT 1 FROM group_master g
-  WHERE g.name = mt.machine_type AND g.deleted_at IS NULL
+  WHERE g.name = mt.machine_type COLLATE utf8mb4_unicode_ci
+    AND g.deleted_at IS NULL
 );
 
 -- Make sure any pre-existing machine-type group has a category assigned
@@ -57,7 +62,7 @@ UPDATE group_master g
 JOIN (
   SELECT DISTINCT machine_type FROM machines
   WHERE deleted_at IS NULL AND machine_type IS NOT NULL AND TRIM(machine_type) <> ''
-) mt ON mt.machine_type = g.name
+) mt ON g.name = mt.machine_type COLLATE utf8mb4_unicode_ci
 SET g.category_id = (
   SELECT id FROM product_categories
   WHERE name = 'Cost Component' AND deleted_at IS NULL
@@ -92,11 +97,13 @@ FROM (
   SELECT
     m.name,
     (SELECT g.id FROM group_master g
-       WHERE g.name = m.machine_type AND g.deleted_at IS NULL
+       WHERE g.name = m.machine_type COLLATE utf8mb4_unicode_ci
+         AND g.deleted_at IS NULL
        ORDER BY g.id LIMIT 1)                                AS group_id,
     (SELECT u.id FROM uom u
        WHERE u.deleted_at IS NULL
-         AND (LOWER(u.name) = LOWER(m.uom_type) OR LOWER(u.code) = LOWER(m.uom_type))
+         AND (LOWER(u.name) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci
+              OR LOWER(u.code) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci)
        ORDER BY u.id LIMIT 1)                                AS uom_id,
     COALESCE(m.rate_indian, 0)                               AS cost_per_uom,
     COALESCE(m.status, 'Active')                             AS status,
@@ -105,7 +112,8 @@ FROM (
   WHERE m.deleted_at IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM cost_components cc
-      WHERE cc.name = m.name AND cc.deleted_at IS NULL
+      WHERE cc.name = m.name COLLATE utf8mb4_unicode_ci
+        AND cc.deleted_at IS NULL
     )
 ) src;
 
@@ -116,14 +124,16 @@ FROM (
 -- -----------------------------------------------------------------------------
 UPDATE cost_components cc
 JOIN machines m
-  ON m.name = cc.name AND m.deleted_at IS NULL
+  ON cc.name = m.name COLLATE utf8mb4_unicode_ci AND m.deleted_at IS NULL
 SET
   cc.group_id = (SELECT g.id FROM group_master g
-                   WHERE g.name = m.machine_type AND g.deleted_at IS NULL
+                   WHERE g.name = m.machine_type COLLATE utf8mb4_unicode_ci
+                     AND g.deleted_at IS NULL
                    ORDER BY g.id LIMIT 1),
   cc.uom_id = (SELECT u.id FROM uom u
                  WHERE u.deleted_at IS NULL
-                   AND (LOWER(u.name) = LOWER(m.uom_type) OR LOWER(u.code) = LOWER(m.uom_type))
+                   AND (LOWER(u.name) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci
+                        OR LOWER(u.code) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci)
                  ORDER BY u.id LIMIT 1),
   cc.cost_per_uom = COALESCE(m.rate_indian, 0),
   cc.status = COALESCE(m.status, 'Active'),
