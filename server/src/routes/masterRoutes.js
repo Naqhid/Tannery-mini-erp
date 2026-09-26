@@ -70,9 +70,10 @@ groupMasterRoutes.get('/next-code', ctrl.groupMasterController.nextCode);
 groupMasterRoutes.get('/stats', ctrl.groupMasterController.stats);
 groupMasterRoutes.get('/with-category', validatePagination, async (req, res, next) => {
   try {
-    const { search, status, sortBy, sortOrder } = req.query;
+    const { search, status, sortBy, sortOrder, includeArchived } = req.query;
     const { page, limit } = req;
-    let where = 'g.deleted_at IS NULL';
+    // Archived view: show only soft-deleted rows. Default view: show only active rows.
+    let where = includeArchived === 'true' ? 'g.deleted_at IS NOT NULL' : 'g.deleted_at IS NULL';
     const params = [];
     if (search) {
       where += ' AND (g.name LIKE ? OR g.code LIKE ? OR g.hsn_code LIKE ? OR pc.name LIKE ?)';
