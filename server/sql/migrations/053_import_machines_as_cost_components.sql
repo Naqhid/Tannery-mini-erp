@@ -75,10 +75,12 @@ SET @cc_base := (
   FROM cost_components
   WHERE code REGEXP '^CC-[0-9]+$'
 );
+-- Guard against NULL so arithmetic below always yields an integer.
+SET @cc_base := COALESCE(@cc_base, 0);
 
 INSERT INTO cost_components (code, name, group_id, uom_id, cost_per_uom, description, status, created_at, updated_at)
 SELECT
-  CONCAT('CC-', LPAD(@cc_base + src.rn, 5, '0'))              AS code,
+  CONCAT('CC-', LPAD(CAST(@cc_base + src.rn AS UNSIGNED), 5, '0')) AS code,
   src.name                                                   AS name,
   src.group_id                                               AS group_id,
   src.uom_id                                                 AS uom_id,
