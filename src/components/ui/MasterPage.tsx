@@ -371,6 +371,10 @@ export default function MasterPage({
       const res = await api<{ message?: string }>(`${apiEndpoint}/${id}`, { method: 'DELETE' });
       toast.success(res.message || `${title} archived successfully!`);
       setShowPanel(false);
+      // Return to the active list so the remaining records show immediately
+      // (a soft-deleted row leaves the current view, which can otherwise look empty).
+      setShowArchived(false);
+      setCurrentPage(1);
       fetchData();
       fetchStats();
     } catch (err) {

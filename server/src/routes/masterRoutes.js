@@ -81,7 +81,13 @@ groupMasterRoutes.get('/with-category', validatePagination, async (req, res, nex
       params.push(t, t, t, t);
     }
     if (status) { where += ' AND g.status = ?'; params.push(status); }
-    const col = ['id', 'code', 'name', 'status', 'created_at'].includes(sortBy) ? `g.${sortBy}` : 'g.id';
+    // Whitelist sortable columns. category_name maps to the joined product_categories.name.
+    const sortMap = {
+      id: 'g.id', code: 'g.code', name: 'g.name', status: 'g.status',
+      created_at: 'g.created_at', hsn_code: 'g.hsn_code', gst_rate: 'g.gst_rate',
+      category_name: 'pc.name',
+    };
+    const col = sortMap[sortBy] || 'g.id';
     const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
     const offset = (page - 1) * limit;
     const [rows] = await pool.query(
@@ -104,16 +110,24 @@ groupMasterRoutes.get('/dropdown/by-category/:categoryId', async (req, res, next
     res.json({ data: rows });
   } catch (err) { next(err); }
 });
+// Product Category is mandatory for a Group (enforced server-side, not just in the UI).
+function requireCategory(req, res, next) {
+  const cat = req.body?.category_id;
+  if (cat === undefined || cat === null || cat === '') {
+    return res.status(400).json({ error: 'Product category is required' });
+  }
+  next();
+}
 groupMasterRoutes.post('/check-duplicate', ctrl.groupMasterController.checkDuplicate);
 groupMasterRoutes.post('/bulk-delete', requireWriteAccess, ctrl.groupMasterController.bulkDelete);
 groupMasterRoutes.post('/bulk-status', requireWriteAccess, ctrl.groupMasterController.bulkStatus);
 groupMasterRoutes.post('/bulk-archive', requireWriteAccess, ctrl.groupMasterController.bulkArchive);
-groupMasterRoutes.post('/', requireWriteAccess, ctrl.groupMasterController.create);
+groupMasterRoutes.post('/', requireWriteAccess, requireCategory, ctrl.groupMasterController.create);
 groupMasterRoutes.post('/:id/duplicate', validateId, requireWriteAccess, ctrl.groupMasterController.duplicateRecord);
 groupMasterRoutes.post('/:id/restore', validateId, requireWriteAccess, ctrl.groupMasterController.restore);
 groupMasterRoutes.get('/:id/audit', validateId, ctrl.groupMasterController.audit);
 groupMasterRoutes.get('/:id', validateId, ctrl.groupMasterController.getOne);
-groupMasterRoutes.put('/:id', validateId, requireWriteAccess, ctrl.groupMasterController.update);
+groupMasterRoutes.put('/:id', validateId, requireWriteAccess, requireCategory, ctrl.groupMasterController.update);
 groupMasterRoutes.delete('/:id', validateId, requireWriteAccess, ctrl.groupMasterController.remove);
 groupMasterRoutes.delete('/:id/permanent', validateId, requireWriteAccess, ctrl.groupMasterController.permanentDelete);
 
