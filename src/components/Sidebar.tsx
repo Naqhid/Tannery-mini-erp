@@ -29,6 +29,7 @@ import {
   CheckCircle,
   HardDrive,
   FileSpreadsheet,
+  Coins,
 } from 'lucide-react';
 
 export interface ChildItem {
@@ -69,6 +70,7 @@ export const menuItems: MenuItem[] = [
     icon: <ClipboardList size={20} />,
     children: [
       { label: 'BOM', icon: <GitBranch size={16} />, path: '/bom' },
+      { label: 'Cost Components', icon: <Coins size={16} />, path: '/cost-components' },
       { label: 'Machine Cost', icon: <Factory size={16} />, path: '/machine-cost' },
       { label: 'General Cost', icon: <FileText size={16} />, path: '/general-cost' },
       { label: 'Standard Cost (Actual)', icon: <FileText size={16} />, path: '/standard-costing' },

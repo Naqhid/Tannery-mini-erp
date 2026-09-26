@@ -100,12 +100,20 @@ export default function GeneralCostForm() {
   // Cost cannot be entered without output quantity.
   const outputZero = (Number(formData.output_qty) || 0) <= 0;
 
-  // Fetch cost component options (materials with category = 'Cost Component')
-  useEffect(() => {
-    api<{ data: any[] }>('/materials?limit=500&category=Cost Component')
-      .then(res => setCostComponents((res.data || []).map((m: any) => ({ id: m.id, name: m.name, uom: m.uom || m.primary_uom_name || '', primary_uom_name: m.uom || m.primary_uom_name || '', rate: Number(m.rate || m.last_purchase_price || m.standard_cost || 0), group_name: m.group_name || m.chemical_group || '' }))))
+  // Fetch cost component options from the Cost Component master.
+  const loadCostComponents = useCallback(() => {
+    api<{ data: any[] }>('/cost-components/dropdown')
+      .then(res => setCostComponents((res.data || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        uom: c.uom_name || '',
+        primary_uom_name: c.uom_name || '',
+        rate: Number(c.cost_per_uom || 0),
+        group_name: c.group_name || '',
+      }))))
       .catch(() => {});
   }, []);
+  useEffect(() => { loadCostComponents(); }, [loadCostComponents]);
 
   // Fetch process stages for the Process Stage dropdown
   useEffect(() => {
@@ -500,8 +508,9 @@ export default function GeneralCostForm() {
                           onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
                           placeholder="Search cost category..."
                           disabled={outputZero}
-                          addNewPath="/chemical-master/new"
-                          addNewLabel="Add Material"
+                          addNewPath="/cost-components/new"
+                          addNewLabel="Add Cost Component"
+                          onRefresh={loadCostComponents}
                         />
                       )}
                     </td>
@@ -577,8 +586,9 @@ export default function GeneralCostForm() {
                           onChange={val => updateLine(idx, 'cost_category_id', Number(val))}
                           placeholder="Search cost category..."
                           disabled={outputZero}
-                          addNewPath="/chemical-master/new"
-                          addNewLabel="Add Material"
+                          addNewPath="/cost-components/new"
+                          addNewLabel="Add Cost Component"
+                          onRefresh={loadCostComponents}
                         />
                       )}
                     </div>

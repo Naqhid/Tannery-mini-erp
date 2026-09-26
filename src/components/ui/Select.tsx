@@ -1,6 +1,6 @@
 import { SelectHTMLAttributes, useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, ChevronDown, X, Plus } from 'lucide-react';
+import { Search, ChevronDown, X, Plus, RefreshCw } from 'lucide-react';
 
 interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange' | 'value'> {
   label?: string;
@@ -18,6 +18,8 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onC
   addNewPath?: string;
   /** Label for the add-new action (e.g. "Add Customer"). */
   addNewLabel?: string;
+  /** When set, shows a refresh button that re-fetches the dropdown's options. */
+  onRefresh?: () => void | Promise<void>;
 }
 
 const DROPDOWN_HEIGHT = 240;
@@ -41,10 +43,12 @@ export default function Select({
   searchable = true,
   addNewPath,
   addNewLabel = 'Add New',
+  onRefresh,
   ...rest
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -100,6 +104,17 @@ export default function Select({
 
   const emit = (val: string) => onChange?.({ target: { value: val } });
 
+  const handleRefresh = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onRefresh || refreshing) return;
+    try {
+      setRefreshing(true);
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div className={`w-full ${gridCol === false ? 'col-span-2' : ''}`}>
       {label && (
@@ -141,18 +156,33 @@ export default function Select({
             style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 200), zIndex: 9999, maxHeight: DROPDOWN_HEIGHT }}
             className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
           >
-            {searchable && (
+            {(searchable || onRefresh) && (
               <div className="p-2 border-b border-gray-100">
-                <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Type to search..."
-                    className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:border-blue-400"
-                  />
+                <div className="flex items-center gap-1.5">
+                  {searchable && (
+                    <div className="relative flex-1">
+                      <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Type to search..."
+                        className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:border-blue-400"
+                      />
+                    </div>
+                  )}
+                  {onRefresh && (
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      title="Refresh list"
+                      className={`shrink-0 p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition-colors ${searchable ? '' : 'ml-auto'}`}
+                    >
+                      <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+                    </button>
+                  )}
                 </div>
               </div>
             )}

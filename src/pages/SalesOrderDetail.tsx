@@ -788,7 +788,7 @@ export default function SalesOrderDetail() {
                                 placeholder="0"
                                 className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
                               />
-                              % (CGST + SGST)
+                              %
                             </span>
                           </div>
                           <div className="flex items-center justify-between py-1 pl-3">

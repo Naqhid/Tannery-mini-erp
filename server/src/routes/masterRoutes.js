@@ -157,6 +157,70 @@ export const locationRackRoutes = createMasterRoutes(ctrl.locationRackController
 // Department routes
 export const departmentRoutes = createMasterRoutes(ctrl.departmentController);
 
+// Cost Component routes — custom list/dropdown to include joined group & uom names
+export const costComponentRoutes = Router();
+// A list query that resolves group_name and uom_name for display
+costComponentRoutes.get('/', validatePagination, async (req, res, next) => {
+  try {
+    const { search, status, sortBy, sortOrder, group_id } = req.query;
+    const { page, limit } = req;
+    let where = 'cc.deleted_at IS NULL';
+    const params = [];
+    if (search) {
+      where += ' AND (cc.name LIKE ? OR cc.code LIKE ? OR g.name LIKE ?)';
+      const t = `%${search}%`;
+      params.push(t, t, t);
+    }
+    if (status) { where += ' AND cc.status = ?'; params.push(status); }
+    if (group_id) { where += ' AND cc.group_id = ?'; params.push(group_id); }
+    const col = ['id', 'code', 'name', 'status', 'created_at', 'cost_per_uom'].includes(sortBy) ? `cc.${sortBy}` : 'cc.id';
+    const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const offset = (page - 1) * limit;
+    const [rows] = await pool.query(
+      `SELECT cc.*, g.name AS group_name, u.name AS uom_name
+       FROM cost_components cc
+       LEFT JOIN group_master g ON cc.group_id = g.id
+       LEFT JOIN uom u ON cc.uom_id = u.id
+       WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM cost_components cc LEFT JOIN group_master g ON cc.group_id = g.id WHERE ${where}`, params
+    );
+    res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (err) { next(err); }
+});
+// Dropdown returns id/name plus group_name, uom_name, cost_per_uom for the
+// consuming forms (General Cost / Machine Cost).
+costComponentRoutes.get('/dropdown', async (_req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT cc.id, cc.code, cc.name, cc.group_id, cc.uom_id, cc.cost_per_uom,
+              g.name AS group_name, u.name AS uom_name
+       FROM cost_components cc
+       LEFT JOIN group_master g ON cc.group_id = g.id
+       LEFT JOIN uom u ON cc.uom_id = u.id
+       WHERE cc.status='Active' AND cc.deleted_at IS NULL
+       ORDER BY cc.name ASC`
+    );
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+});
+costComponentRoutes.get('/next-code', ctrl.costComponentController.nextCode);
+costComponentRoutes.get('/stats', ctrl.costComponentController.stats);
+costComponentRoutes.post('/check-duplicate', ctrl.costComponentController.checkDuplicate);
+costComponentRoutes.post('/bulk-delete', requireWriteAccess, ctrl.costComponentController.bulkDelete);
+costComponentRoutes.post('/bulk-status', requireWriteAccess, ctrl.costComponentController.bulkStatus);
+costComponentRoutes.post('/bulk-archive', requireWriteAccess, ctrl.costComponentController.bulkArchive);
+costComponentRoutes.post('/', requireWriteAccess, ctrl.costComponentController.create);
+costComponentRoutes.post('/:id/duplicate', validateId, requireWriteAccess, ctrl.costComponentController.duplicateRecord);
+costComponentRoutes.post('/:id/restore', validateId, requireWriteAccess, ctrl.costComponentController.restore);
+costComponentRoutes.get('/:id/audit', validateId, ctrl.costComponentController.audit);
+costComponentRoutes.get('/:id', validateId, ctrl.costComponentController.getOne);
+costComponentRoutes.put('/:id', validateId, requireWriteAccess, ctrl.costComponentController.update);
+costComponentRoutes.delete('/:id', validateId, requireWriteAccess, ctrl.costComponentController.remove);
+costComponentRoutes.delete('/:id/permanent', validateId, requireWriteAccess, ctrl.costComponentController.permanentDelete);
+
 export default {
   productCategoryRoutes,
   leatherTypeRoutes,
@@ -176,4 +240,5 @@ export default {
   businessUnitRoutes,
   locationRackRoutes,
   departmentRoutes,
+  costComponentRoutes,
 };

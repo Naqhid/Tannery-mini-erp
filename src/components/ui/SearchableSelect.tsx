@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, ChevronDown, X, Plus } from 'lucide-react';
+import { Search, ChevronDown, X, Plus, RefreshCw } from 'lucide-react';
 
 interface Option {
   value: string;
@@ -17,11 +17,14 @@ interface SearchableSelectProps {
   addNewPath?: string;
   /** Label for the add-new action (e.g. "Add Customer"). */
   addNewLabel?: string;
+  /** When set, shows a refresh button that re-fetches the dropdown's options. */
+  onRefresh?: () => void | Promise<void>;
 }
 
-export default function SearchableSelect({ options, value, onChange, placeholder = 'Search...', disabled = false, addNewPath, addNewLabel = 'Add New' }: SearchableSelectProps) {
+export default function SearchableSelect({ options, value, onChange, placeholder = 'Search...', disabled = false, addNewPath, addNewLabel = 'Add New', onRefresh }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number; openAbove: boolean }>({ top: 0, left: 0, width: 0, openAbove: false });
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -117,16 +120,33 @@ export default function SearchableSelect({ options, value, onChange, placeholder
         >
           {/* Search input */}
           <div className="p-2 border-b border-gray-100">
-            <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                ref={inputRef}
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Type to search..."
-                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:border-blue-400"
-              />
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Type to search..."
+                  className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:border-blue-400"
+                />
+              </div>
+              {onRefresh && (
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (refreshing) return;
+                    try { setRefreshing(true); await onRefresh(); } finally { setRefreshing(false); }
+                  }}
+                  disabled={refreshing}
+                  title="Refresh list"
+                  className="shrink-0 p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                >
+                  <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+                </button>
+              )}
             </div>
           </div>
           {/* Add New action — opens the master form in a new tab so the

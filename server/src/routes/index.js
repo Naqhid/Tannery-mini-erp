@@ -36,6 +36,7 @@ import {
   businessUnitRoutes,
   locationRackRoutes,
   departmentRoutes,
+  costComponentRoutes,
 } from './masterRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
 // New module routes
@@ -102,6 +103,9 @@ router.use('/location-racks', locationRackRoutes);
 
 // Department Master routes
 router.use('/departments', departmentRoutes);
+
+// Cost Component Master routes
+router.use('/cost-components', costComponentRoutes);
 
 // Settings routes
 router.use('/roles', roleRoutes);

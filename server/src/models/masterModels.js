@@ -197,3 +197,19 @@ export const departmentModel = createMasterModel(
   ['name', 'code'],
   { uniqueFields: [{ fields: ['name'] }] }
 );
+
+export const costComponentModel = createMasterModel(
+  'cost_components',
+  'CC',
+  ['id', 'code', 'name', 'group_id', 'uom_id', 'cost_per_uom', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code'],
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    extraColumns: {
+      group_id: 'number',
+      uom_id: 'number',
+      cost_per_uom: 'number',
+    },
+    filterableFields: ['group_id', 'uom_id'],
+  }
+);

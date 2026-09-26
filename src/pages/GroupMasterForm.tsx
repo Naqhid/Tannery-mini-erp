@@ -122,7 +122,7 @@ export default function GroupMasterForm() {
             </div>
           </div>
           <Input label="Group Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter group name" />
-          <Select label="Product Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => update('category_id', e.target.value)} error={errors.category_id} />
+          <Select label="Product Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => update('category_id', e.target.value)} error={errors.category_id} addNewPath="/product-category/new" addNewLabel="Add Category" onRefresh={dropdowns['product-categories']?.refetch} />
           <Input label="HSN Code" required value={form.hsn_code} onChange={(e) => update('hsn_code', e.target.value)} error={errors.hsn_code} placeholder="Enter HSN code" />
           <Input label="GST Rate (%)" required value={form.gst_rate} onChange={(e) => update('gst_rate', e.target.value)} error={errors.gst_rate} placeholder="e.g. 18" />
         </div>

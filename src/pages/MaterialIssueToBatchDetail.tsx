@@ -100,10 +100,14 @@ export default function MaterialIssueToBatchDetail() {
   const fetchPlans = useCallback(async () => {
     try {
       const res = await api<{ data: any[] }>('/production-plans?limit=500&sortBy=id&sortOrder=desc');
-      setPlanOptions((res.data || []).map((p: any) => ({
-        id: p.id, plan_no: p.plan_no, article: p.article || '', color: p.color || '',
-        planned_qty: Number(p.planned_qty) || 0, product_id: p.product_id || null, uom: p.uom || '',
-      })));
+      // Only show plans that still need material issued (Pending / Planned /
+      // In Progress). Completed plans are excluded from the Plan No dropdown.
+      setPlanOptions((res.data || [])
+        .filter((p: any) => String(p.status || '').trim().toLowerCase() !== 'completed')
+        .map((p: any) => ({
+          id: p.id, plan_no: p.plan_no, article: p.article || '', color: p.color || '',
+          planned_qty: Number(p.planned_qty) || 0, product_id: p.product_id || null, uom: p.uom || '',
+        })));
     } catch { setPlanOptions([]); }
   }, []);
 
