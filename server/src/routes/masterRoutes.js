@@ -209,6 +209,8 @@ costComponentRoutes.get('/', validatePagination, async (req, res, next) => {
 // consuming forms (General Cost / Machine Cost).
 costComponentRoutes.get('/dropdown', async (_req, res, next) => {
   try {
+    // Exclude machine-derived cost components (groups "Wet End Machines" and
+    // "Finishing Machines") — those belong to Machine Cost, not General Cost.
     const [rows] = await pool.query(
       `SELECT cc.id, cc.code, cc.name, cc.group_id, cc.uom_id, cc.cost_per_uom,
               g.name AS group_name, u.name AS uom_name
@@ -216,6 +218,7 @@ costComponentRoutes.get('/dropdown', async (_req, res, next) => {
        LEFT JOIN group_master g ON cc.group_id = g.id
        LEFT JOIN uom u ON cc.uom_id = u.id
        WHERE cc.status='Active' AND cc.deleted_at IS NULL
+         AND (g.name IS NULL OR LOWER(g.name) NOT IN ('wet end machines', 'finishing machines'))
        ORDER BY cc.name ASC`
     );
     res.json({ data: rows });
