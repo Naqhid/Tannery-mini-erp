@@ -52,6 +52,10 @@ interface MasterPageProps {
   icon: React.ReactNode;
   iconColor: string;
   apiEndpoint: string;
+  /** Optional endpoint used only for the list/table fetch. Defaults to apiEndpoint.
+   *  Use this when the list needs a specialized route (e.g. joined data) while
+   *  CRUD operations (create/update/delete/stats) still target apiEndpoint. */
+  listEndpoint?: string;
   columns: Column[];
   formFields: FormField[];
   emptyData?: Record<string, any>;
@@ -77,6 +81,7 @@ export default function MasterPage({
   icon,
   iconColor,
   apiEndpoint,
+  listEndpoint,
   columns,
   formFields,
   emptyData = {},
@@ -157,7 +162,7 @@ export default function MasterPage({
       for (const [k, v] of Object.entries(activeFilters)) {
         if (v) params.set(k, v);
       }
-      const res = await api<{ data: any[]; total: number; page: number; totalPages: number }>(`${apiEndpoint}?${params.toString()}`);
+      const res = await api<{ data: any[]; total: number; page: number; totalPages: number }>(`${listEndpoint || apiEndpoint}?${params.toString()}`);
       setData(res.data || []);
       setTotalRecords(res.total || 0);
       setTotalPages(res.totalPages || 0);
@@ -168,7 +173,7 @@ export default function MasterPage({
     } finally {
       setLoading(false);
     }
-  }, [apiEndpoint, debouncedSearch, currentPage, pageSize, sortBy, sortOrder, showArchived, JSON.stringify(activeFilters)]);
+  }, [apiEndpoint, listEndpoint, debouncedSearch, currentPage, pageSize, sortBy, sortOrder, showArchived, JSON.stringify(activeFilters)]);
 
   const fetchStats = useCallback(async () => {
     try {
