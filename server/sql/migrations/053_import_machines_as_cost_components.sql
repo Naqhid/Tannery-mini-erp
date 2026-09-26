@@ -72,6 +72,43 @@ WHERE g.deleted_at IS NULL
   AND g.category_id IS NULL;
 
 -- -----------------------------------------------------------------------------
+-- 1b) Ensure every machines.uom_type exists in the uom master so the Cost
+--     Component UOM column can be populated. Missing UOMs are created here.
+--     (The machine screens store a free-text uom_type like "Per Pcs"; the uom
+--     master keys on name, so we create by name and generate a UOM code.)
+-- -----------------------------------------------------------------------------
+SET @uom_base := (
+  SELECT COALESCE(MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)), 0)
+  FROM uom
+  WHERE code REGEXP '^UOM-[0-9]+$'
+);
+SET @uom_base := COALESCE(@uom_base, 0);
+
+INSERT INTO uom (code, name, description, status, created_at, updated_at)
+SELECT
+  CONCAT('UOM-', LPAD(CAST(@uom_base + ut.rn AS UNSIGNED), 4, '0')) AS code,
+  ut.uom_type                                                AS name,
+  'Auto-created from machine UOM (migration 053)'            AS description,
+  'Active'                                                   AS status,
+  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM (
+  SELECT
+    TRIM(uom_type) AS uom_type,
+    ROW_NUMBER() OVER (ORDER BY TRIM(uom_type)) AS rn
+  FROM machines
+  WHERE deleted_at IS NULL
+    AND uom_type IS NOT NULL
+    AND TRIM(uom_type) <> ''
+  GROUP BY TRIM(uom_type)
+) ut
+WHERE NOT EXISTS (
+  SELECT 1 FROM uom u
+  WHERE (u.name = ut.uom_type COLLATE utf8mb4_unicode_ci
+         OR u.code = ut.uom_type COLLATE utf8mb4_unicode_ci)
+    AND u.deleted_at IS NULL
+);
+
+-- -----------------------------------------------------------------------------
 -- 2) Insert a Cost Component for each machine that isn't already present
 --    (matched by name). New CC codes continue after the current maximum.
 -- -----------------------------------------------------------------------------

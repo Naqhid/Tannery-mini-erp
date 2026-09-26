@@ -7,7 +7,11 @@ export default function CostComponents() {
     { key: 'group_name', header: 'Group' },
     { key: 'name', header: 'Cost Component' },
     { key: 'uom_name', header: 'UOM' },
-    { key: 'cost_per_uom', header: 'Cost / UOM' },
+    {
+      key: 'cost_per_uom',
+      header: 'Cost / UOM',
+      render: (row: any) => Number(row.cost_per_uom ?? 0).toFixed(2),
+    },
     { key: 'status', header: 'Status' },
   ];
 
