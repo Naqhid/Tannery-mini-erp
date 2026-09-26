@@ -1,0 +1,11 @@
+mysql: [Warning] Using a password on the command line interface can be insecure.
+id	code	name	description
+1	SQFT	Square Feet	Area measurement in square feet
+2	SQM	Square Meter	Area measurement in square meters
+3	KG	Kilogram	Weight measurement in kilograms
+4	LTR	Liter	Liquid volume in liters
+5	MTR	Meter	Linear measurement in meters
+6	PIECE	Piece	Individual unit count
+7	DOZEN	Dozen	Pack of 12 units
+9	UOM-0001	Per Hour	Auto-created from machine UOM (migration 053)
+10	UOM-0002	Per Pcs	Auto-created from machine UOM (migration 053)

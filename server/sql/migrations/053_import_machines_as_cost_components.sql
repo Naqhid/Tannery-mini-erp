@@ -106,20 +106,20 @@ FROM (
            LOWER(u.name) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci
            OR LOWER(u.code) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci
            -- match after stripping a leading "per "
-           OR LOWER(u.name) = LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) COLLATE utf8mb4_unicode_ci
-           OR LOWER(u.code) = LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) COLLATE utf8mb4_unicode_ci
+           OR LOWER(u.name) = LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', '')))
+           OR LOWER(u.code) = LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', '')))
            -- common synonyms -> Piece
            OR (LOWER(u.name) = 'piece'
-               AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('pcs', 'pc', 'pcs.', 'pieces', 'piece') COLLATE utf8mb4_unicode_ci)
+               AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('pcs', 'pc', 'pcs.', 'pieces', 'piece'))
            -- Kg -> Kilogram
            OR (LOWER(u.name) = 'kilogram'
-               AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('kg', 'kgs', 'kilo', 'kilogram') COLLATE utf8mb4_unicode_ci)
+               AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('kg', 'kgs', 'kilo', 'kilogram'))
            -- Sqft -> Square Feet
            OR (LOWER(u.name) = 'square feet'
-               AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('sqft', 'sq ft', 'sft', 'square feet') COLLATE utf8mb4_unicode_ci)
+               AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('sqft', 'sq ft', 'sft', 'square feet'))
            -- Sqm -> Square Meter
            OR (LOWER(u.name) = 'square meter'
-               AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('sqm', 'sq m', 'square meter', 'square metre') COLLATE utf8mb4_unicode_ci)
+               AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('sqm', 'sq m', 'square meter', 'square metre'))
          )
        ORDER BY u.id LIMIT 1)                                AS uom_id,
     COALESCE(m.rate_indian, 0)                               AS cost_per_uom,
@@ -151,16 +151,16 @@ SET
                    AND (
                      LOWER(u.name) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci
                      OR LOWER(u.code) = LOWER(m.uom_type) COLLATE utf8mb4_unicode_ci
-                     OR LOWER(u.name) = LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) COLLATE utf8mb4_unicode_ci
-                     OR LOWER(u.code) = LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) COLLATE utf8mb4_unicode_ci
+                     OR LOWER(u.name) = LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', '')))
+                     OR LOWER(u.code) = LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', '')))
                      OR (LOWER(u.name) = 'piece'
-                         AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('pcs', 'pc', 'pcs.', 'pieces', 'piece') COLLATE utf8mb4_unicode_ci)
+                         AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('pcs', 'pc', 'pcs.', 'pieces', 'piece'))
                      OR (LOWER(u.name) = 'kilogram'
-                         AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('kg', 'kgs', 'kilo', 'kilogram') COLLATE utf8mb4_unicode_ci)
+                         AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('kg', 'kgs', 'kilo', 'kilogram'))
                      OR (LOWER(u.name) = 'square feet'
-                         AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('sqft', 'sq ft', 'sft', 'square feet') COLLATE utf8mb4_unicode_ci)
+                         AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('sqft', 'sq ft', 'sft', 'square feet'))
                      OR (LOWER(u.name) = 'square meter'
-                         AND LOWER(TRIM(REPLACE(m.uom_type, 'Per ', ''))) IN ('sqm', 'sq m', 'square meter', 'square metre') COLLATE utf8mb4_unicode_ci)
+                         AND LOWER(TRIM(REPLACE(m.uom_type COLLATE utf8mb4_unicode_ci, 'Per ', ''))) IN ('sqm', 'sq m', 'square meter', 'square metre'))
                    )
                  ORDER BY u.id LIMIT 1),
   cc.cost_per_uom = COALESCE(m.rate_indian, 0),
