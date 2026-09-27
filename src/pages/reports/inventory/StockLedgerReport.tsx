@@ -52,6 +52,7 @@ export default function StockLedgerReport({ embedded }: { embedded?: boolean }) 
       subtitle="Complete raw stock ledger — every inward/outward entry with reference, batch, rate and running balance."
       endpoint="/reports/inventory/stock-ledger"
       columns={columns}
+      datePreset="all"
       embedded={embedded}
       exportFileName="Stock_Ledger"
       extraParams={{ warehouse_id: warehouse, transaction_type: txnType }}

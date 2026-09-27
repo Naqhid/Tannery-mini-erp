@@ -69,6 +69,7 @@ const RECEIPT_TYPES = [
   { value: 'Transfer', label: 'Transfer' },
   { value: 'Sample', label: 'Sample' },
   { value: 'Return', label: 'Return' },
+  { value: 'Physical Stock', label: 'Physical Stock' },
 ];
 
 let _kc = 0;

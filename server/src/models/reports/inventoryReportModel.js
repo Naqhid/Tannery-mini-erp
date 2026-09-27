@@ -322,3 +322,121 @@ export async function getInventoryFilters() {
     transaction_types: txnTypes.map(t => t.name),
   };
 }
+
+// ─── Inventory Consistency Check (READ-ONLY DIAGNOSTIC) ──────────────────────
+// Compares the current on-hand quantity across the three stock tables:
+//   1. warehouse_stock.current_qty          (the live balance table)
+//   2. latest material_transactions.balance_qty per (warehouse, item)
+//   3. running SUM(in_qty - out_qty) from stock_ledger per (warehouse, material)
+// and flags any (warehouse, material) where they disagree.
+//
+// This does NOT modify any data. It only reports discrepancies so an operator
+// can investigate. No automatic repair is performed.
+export async function inventoryConsistencyCheck({ tolerance = 0.001 } = {}) {
+  // 1) warehouse_stock balances
+  const [wsRows] = await pool.query(
+    `SELECT ws.warehouse_id, ws.material_id, ws.current_qty
+     FROM warehouse_stock ws`
+  );
+
+  // 2) latest material_transactions balance per (warehouse, item)
+  const [mtRows] = await pool.query(
+    `SELECT t.warehouse_id, t.item_id AS material_id, t.balance_qty
+     FROM material_transactions t
+     JOIN (
+       SELECT warehouse_id, item_id, MAX(transaction_date) AS max_date
+       FROM material_transactions
+       GROUP BY warehouse_id, item_id
+     ) latest
+       ON latest.warehouse_id = t.warehouse_id
+      AND latest.item_id = t.item_id
+      AND latest.max_date = t.transaction_date
+     JOIN (
+       SELECT warehouse_id, item_id, transaction_date, MAX(transaction_id) AS max_id
+       FROM material_transactions
+       GROUP BY warehouse_id, item_id, transaction_date
+     ) latest_id
+       ON latest_id.warehouse_id = t.warehouse_id
+      AND latest_id.item_id = t.item_id
+      AND latest_id.transaction_date = t.transaction_date
+      AND latest_id.max_id = t.transaction_id`
+  );
+
+  // 3) stock_ledger running balance per (warehouse, material)
+  const [slRows] = await pool.query(
+    `SELECT warehouse_id, material_id,
+            COALESCE(SUM(in_qty),0) - COALESCE(SUM(out_qty),0) AS ledger_qty
+     FROM stock_ledger
+     WHERE warehouse_id IS NOT NULL AND material_id IS NOT NULL
+     GROUP BY warehouse_id, material_id`
+  );
+
+  // Build lookup maps keyed by "warehouse:material"
+  const key = (w, m) => `${w}:${m}`;
+  const wsMap = new Map(wsRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.current_qty) || 0]));
+  const mtMap = new Map(mtRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.balance_qty) || 0]));
+  const slMap = new Map(slRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.ledger_qty) || 0]));
+
+  // Union of all keys present in any table
+  const allKeys = new Set([...wsMap.keys(), ...mtMap.keys(), ...slMap.keys()]);
+
+  const discrepancies = [];
+  for (const k of allKeys) {
+    const [warehouse_id, material_id] = k.split(':').map(Number);
+    const wsQty = wsMap.has(k) ? wsMap.get(k) : null;
+    const mtQty = mtMap.has(k) ? mtMap.get(k) : null;
+    const slQty = slMap.has(k) ? slMap.get(k) : null;
+
+    const types = [];
+    const diff = (a, b) => a != null && b != null && Math.abs(a - b) > tolerance;
+    if (diff(wsQty, mtQty)) types.push('warehouse_stock != material_transactions');
+    if (diff(wsQty, slQty)) types.push('warehouse_stock != stock_ledger');
+    if (diff(mtQty, slQty)) types.push('material_transactions != stock_ledger');
+    // Presence mismatches (row missing from one table but not another)
+    const present = [wsQty, mtQty, slQty].filter(v => v != null).length;
+    if (present > 0 && present < 3) types.push('missing_in_one_or_more_tables');
+
+    if (types.length > 0) {
+      discrepancies.push({ warehouse_id, material_id, wsQty, mtQty, slQty, types });
+    }
+  }
+
+  if (discrepancies.length === 0) {
+    return { checked: allKeys.size, discrepancies: [] };
+  }
+
+  // Enrich with material + warehouse names for the flagged rows only
+  const matIds = [...new Set(discrepancies.map(d => d.material_id))];
+  const whIds = [...new Set(discrepancies.map(d => d.warehouse_id))];
+  const [mats] = matIds.length
+    ? await pool.query(`SELECT id, code, name FROM materials WHERE id IN (?)`, [matIds])
+    : [[]];
+  const [whs] = whIds.length
+    ? await pool.query(`SELECT id, name FROM warehouses WHERE id IN (?)`, [whIds])
+    : [[]];
+  const matMap = new Map(mats.map(m => [m.id, m]));
+  const whMap = new Map(whs.map(w => [w.id, w]));
+
+  const rows = discrepancies.map(d => {
+    const m = matMap.get(d.material_id) || {};
+    const w = whMap.get(d.warehouse_id) || {};
+    return {
+      material_id: d.material_id,
+      material_code: m.code || null,
+      material_name: m.name || null,
+      warehouse_id: d.warehouse_id,
+      warehouse_name: w.name || null,
+      warehouse_stock_qty: d.wsQty,
+      material_transaction_qty: d.mtQty,
+      stock_ledger_qty: d.slQty,
+      difference: {
+        ws_vs_mt: d.wsQty != null && d.mtQty != null ? Number((d.wsQty - d.mtQty).toFixed(3)) : null,
+        ws_vs_sl: d.wsQty != null && d.slQty != null ? Number((d.wsQty - d.slQty).toFixed(3)) : null,
+        mt_vs_sl: d.mtQty != null && d.slQty != null ? Number((d.mtQty - d.slQty).toFixed(3)) : null,
+      },
+      discrepancy_type: d.types.join('; '),
+    };
+  });
+
+  return { checked: allKeys.size, discrepancies: rows };
+}

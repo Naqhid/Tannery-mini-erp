@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validatePagination } from '../middleware/validators.js';
+import { requireRole } from '../middleware/auth.js';
 import * as inv from '../controllers/reports/inventoryReportController.js';
 import * as prod from '../controllers/reports/productionReportController.js';
 import * as sales from '../controllers/reports/salesReportController.js';
@@ -15,6 +16,8 @@ router.get('/inventory/receipt-register', validatePagination, inv.receiptRegiste
 router.get('/inventory/issue-register', validatePagination, inv.issueRegister);
 router.get('/inventory/stock-movement', validatePagination, inv.stockMovement);
 router.get('/inventory/stock-ledger', validatePagination, inv.stockLedger);
+// Admin-only, read-only diagnostic — flags cross-table stock discrepancies.
+router.get('/inventory/consistency-check', requireRole('admin'), inv.consistencyCheck);
 
 // ─── Production Reports (Plan + Actual) ──────────────────────────────────────
 router.get('/production/filters', prod.filters);

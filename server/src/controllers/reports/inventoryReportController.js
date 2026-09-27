@@ -62,3 +62,19 @@ export async function filters(req, res, next) {
     res.json({ data: await model.getInventoryFilters() });
   } catch (err) { next(err); }
 }
+
+// READ-ONLY diagnostic: flags materials whose quantity disagrees across the
+// three stock tables (warehouse_stock, material_transactions, stock_ledger).
+// Does NOT modify or repair any data.
+export async function consistencyCheck(req, res, next) {
+  try {
+    const tolerance = req.query.tolerance ? Number(req.query.tolerance) : 0.001;
+    const result = await model.inventoryConsistencyCheck({ tolerance });
+    res.json({
+      data: result.discrepancies,
+      checked: result.checked,
+      discrepancy_count: result.discrepancies.length,
+      note: 'Read-only diagnostic. No data was modified. Investigate flagged rows manually.',
+    });
+  } catch (err) { next(err); }
+}

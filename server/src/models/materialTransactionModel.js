@@ -193,17 +193,11 @@ export async function replaceReferenceTransactions(conn, referenceType, referenc
 export async function getIssueItemInfo({ warehouseId, itemId, date }) {
   const conn = await pool.getConnection();
   try {
-    let latest = await getLatestForItem(conn, { warehouseId, itemId, date });
-    // Fallback: if no transaction found for specific warehouse, search across all warehouses
-    if (!latest) {
-      const [rows] = await conn.query(
-        `SELECT * FROM material_transactions
-         WHERE item_id=? AND DATE(transaction_date) <= DATE(?)
-         ORDER BY transaction_date DESC, transaction_id DESC LIMIT 1`,
-        [itemId, date]
-      );
-      latest = rows[0] || null;
-    }
+    // Availability is STRICTLY scoped to the selected warehouse. We only look at
+    // this warehouse's latest transaction balance — never other warehouses, and
+    // never the material-master opening stock (which is not warehouse-specific).
+    // This guarantees Warehouse A can never consume Warehouse B's stock.
+    const latest = await getLatestForItem(conn, { warehouseId, itemId, date });
 
     if (latest) {
       return {
@@ -213,16 +207,17 @@ export async function getIssueItemInfo({ warehouseId, itemId, date }) {
       };
     }
 
-    // FIRST-EVER transaction for this item — use Material Master rate
+    // No transaction in THIS warehouse → availability is 0 for this warehouse.
+    // We still surface the material-master rate for unit-cost/pricing purposes
+    // only (it does NOT contribute to availability).
     const [[material]] = await conn.query(
-      `SELECT opening_stock, rate, last_purchase_price FROM materials WHERE id=?`,
+      `SELECT rate, last_purchase_price FROM materials WHERE id=?`,
       [itemId]
     );
     const masterRate = material ? (n(material.rate) || n(material.last_purchase_price)) : 0;
-    const openingStock = material ? n(material.opening_stock) : 0;
 
     return {
-      available_qty: openingStock,
+      available_qty: 0,
       avg_rate: masterRate,
       balance_date: null,
     };

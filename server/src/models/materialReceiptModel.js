@@ -336,21 +336,34 @@ export async function remove(id) {
   try {
     await conn.beginTransaction();
 
+    // A Draft receipt never affected stock (create/update only touch stock when
+    // status === 'Posted'). So a Draft delete must NOT reverse stock, ledger or
+    // transactions — otherwise it would subtract phantom stock. Only a Posted
+    // receipt needs its stock effects reversed.
+    const [[current]] = await conn.query('SELECT status FROM material_receipts WHERE id=?', [id]);
+    const wasPosted = current && current.status === 'Posted';
+
     const [items] = await conn.query(
       'SELECT material_id, uom, received_qty, warehouse_id FROM material_receipt_items mri JOIN material_receipts mr ON mri.receipt_id = mr.id WHERE mri.receipt_id=?',
       [id]
     );
-    for (const item of items) {
-      await updateStock(conn, item.warehouse_id, item.material_id, item.uom, -parseFloat(item.received_qty), 0);
+
+    if (wasPosted) {
+      for (const item of items) {
+        await updateStock(conn, item.warehouse_id, item.material_id, item.uom, -parseFloat(item.received_qty), 0);
+      }
+      await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
+      await replaceReferenceTransactions(conn, 'material_receipt', id, []);
     }
-    await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
-    await replaceReferenceTransactions(conn, 'material_receipt', id, []);
+
     await conn.query('DELETE FROM material_receipt_items WHERE receipt_id=?', [id]);
     const [result] = await conn.query('DELETE FROM material_receipts WHERE id=?', [id]);
 
-    // Rebuild valuation for the affected materials after removing ledger rows.
-    for (const item of items) {
-      await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+    // Rebuild valuation only for Posted receipts (Draft never touched stock).
+    if (wasPosted) {
+      for (const item of items) {
+        await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+      }
     }
 
     await conn.commit();

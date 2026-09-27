@@ -285,21 +285,36 @@ export async function remove(id) {
   try {
     await conn.beginTransaction();
 
+    // A Draft issue never affected stock (create/update only touch stock when
+    // status === 'Posted'). So a Draft delete must NOT reverse stock, ledger or
+    // transactions — otherwise it would add phantom stock. Only a Posted issue
+    // needs its stock effects reversed.
+    const [[current]] = await conn.query('SELECT status FROM material_issues WHERE id=?', [id]);
+    const wasPosted = current && current.status === 'Posted';
+
     const [items] = await conn.query(
       'SELECT material_id, uom, issue_qty, warehouse_id FROM material_issue_items mii JOIN material_issues mi ON mii.issue_id = mi.id WHERE mii.issue_id=?',
       [id]
     );
-    for (const item of items) {
-      await updateStock(conn, item.warehouse_id, item.material_id, item.uom, parseFloat(item.issue_qty), 0);
+
+    if (wasPosted) {
+      // Reverse the stock the posted issue consumed, then remove its ledger and
+      // transaction effects and rebuild valuation.
+      for (const item of items) {
+        await updateStock(conn, item.warehouse_id, item.material_id, item.uom, parseFloat(item.issue_qty), 0);
+      }
+      await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_issue', id]);
+      await replaceReferenceTransactions(conn, 'material_issue', id, []);
     }
-    await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_issue', id]);
-    await replaceReferenceTransactions(conn, 'material_issue', id, []);
+
     await conn.query('DELETE FROM material_issue_items WHERE issue_id=?', [id]);
     const [result] = await conn.query('DELETE FROM material_issues WHERE id=?', [id]);
 
-    // Rebuild valuation for the affected materials after removing ledger rows.
-    for (const item of items) {
-      await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+    // Rebuild valuation only for Posted issues (Draft never touched stock).
+    if (wasPosted) {
+      for (const item of items) {
+        await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+      }
     }
 
     await conn.commit();
