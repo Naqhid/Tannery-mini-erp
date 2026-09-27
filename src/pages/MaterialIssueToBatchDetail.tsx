@@ -74,6 +74,9 @@ export default function MaterialIssueToBatchDetail() {
 
   const [issue, setIssue] = useState<IssueData>(emptyIssue);
   const [items, setItems] = useState<Item[]>([{ ...emptyItem, _key: genKey() }]);
+  // True when the selected product has a BOM (required qty is BOM-driven and
+  // must not be manually edited). False when there's no BOM.
+  const [hasBOM, setHasBOM] = useState(false);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stockList, setStockList] = useState<StockItem[]>([]);
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
@@ -159,14 +162,17 @@ export default function MaterialIssueToBatchDetail() {
         other_charges: String(d.other_charges || ''),
       });
       setIsPosted(d.status === 'Posted' || d.status === 'posted');
-      setItems((d.items || []).map((it: any) => ({
+      const loadedItems = (d.items || []).map((it: any) => ({
         _key: genKey(), material_id: String(it.material_id),
         material_code: it.material_code || '', material_name: it.material_name || '',
         group_name: it.group_name || '',
         uom: it.uom || '', required_qty: String(it.required_qty || ''),
         issue_qty: String(it.issue_qty), unit_cost: String(it.unit_cost),
         amount: parseFloat(it.amount) || 0, remarks: it.remarks || '',
-      })));
+      }));
+      setItems(loadedItems);
+      // If any loaded item carries a required qty, the product had a BOM.
+      setHasBOM(loadedItems.some((it: Item) => (parseFloat(it.required_qty) || 0) > 0));
       fetchStock(String(d.warehouse_id));
       // Reload the plan's stages so the Stage dropdown / planned qty work on edit.
       if (d.production_batch) {
@@ -332,6 +338,7 @@ export default function MaterialIssueToBatchDetail() {
     try {
       const res = await api<{ data: any[] }>(`/material-issues/bom-items/${productId}`);
       if (res.data && res.data.length > 0) {
+        setHasBOM(true);
         const bqty = parseFloat(batchQty) || 0;
         const bomItems: Item[] = res.data.map((item: any) => {
           const bomNormQty = parseFloat(item.qty) || 0;
@@ -353,10 +360,12 @@ export default function MaterialIssueToBatchDetail() {
         });
         setItems(bomItems);
       } else {
+        setHasBOM(false);
         setItems([{ ...emptyItem, _key: genKey() }]);
       }
     } catch {
       // BOM items not found
+      setHasBOM(false);
       setItems([{ ...emptyItem, _key: genKey() }]);
     }
   };
@@ -643,7 +652,9 @@ export default function MaterialIssueToBatchDetail() {
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.uom || '-'}</td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.required_qty} onChange={(e) => updateItem(item._key, 'required_qty', e.target.value)}
-                      className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-right" placeholder="0.00" />
+                      disabled={!hasBOM}
+                      title={!hasBOM ? 'Required Qty is available only when the product has a BOM' : ''}
+                      className={`w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-right ${!hasBOM ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`} placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" value={item.issue_qty} onChange={(e) => updateItem(item._key, 'issue_qty', e.target.value)}

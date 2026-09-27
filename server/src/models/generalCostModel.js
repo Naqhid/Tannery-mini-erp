@@ -238,9 +238,9 @@ export async function create(data, userId = null) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       await conn.query(
-        `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, amount, cost_per_piece, remarks, sort_order)
-         VALUES (?,?,?,?,?,?,?)`,
-        [headerId, item.cost_category, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [headerId, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
       );
     }
 
@@ -290,9 +290,9 @@ export async function update(id, data, userId = null) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       await conn.query(
-        `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, amount, cost_per_piece, remarks, sort_order)
-         VALUES (?,?,?,?,?,?,?)`,
-        [id, item.cost_category, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [id, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
       );
     }
 
