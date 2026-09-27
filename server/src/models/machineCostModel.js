@@ -146,9 +146,9 @@ export async function create(data, userId = null) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       await conn.query(
-        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, group_id, group_name, uom, amount, cost_per_piece, remarks, sort_order)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
-        [headerId, item.machine_name, item.group_id || null, item.group_name || null, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, group_id, group_name, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [headerId, item.machine_name, item.group_id || null, item.group_name || null, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
       );
     }
 
@@ -186,9 +186,9 @@ export async function update(id, data, userId = null) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       await conn.query(
-        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, group_id, group_name, uom, amount, cost_per_piece, remarks, sort_order)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
-        [id, item.machine_name, item.group_id || null, item.group_name || null, item.uom || 'Sq.Ft.', item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        `INSERT INTO machine_cost_items (machine_cost_id, machine_name, group_id, group_name, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [id, item.machine_name, item.group_id || null, item.group_name || null, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
       );
     }
 

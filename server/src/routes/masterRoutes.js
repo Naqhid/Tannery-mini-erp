@@ -224,6 +224,24 @@ costComponentRoutes.get('/dropdown', async (_req, res, next) => {
     res.json({ data: rows });
   } catch (err) { next(err); }
 });
+// Machine dropdown: ONLY machine-derived cost components (groups "Wet End
+// Machines" and "Finishing Machines") — used by Machine Cost. This is the
+// inverse of /dropdown which excludes those groups.
+costComponentRoutes.get('/dropdown/machines', async (_req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT cc.id, cc.code, cc.name, cc.group_id, cc.uom_id, cc.cost_per_uom,
+              g.name AS group_name, u.name AS uom_name
+       FROM cost_components cc
+       LEFT JOIN group_master g ON cc.group_id = g.id
+       LEFT JOIN uom u ON cc.uom_id = u.id
+       WHERE cc.status='Active' AND cc.deleted_at IS NULL
+         AND LOWER(g.name) IN ('wet end machines', 'finishing machines')
+       ORDER BY cc.name ASC`
+    );
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+});
 costComponentRoutes.get('/next-code', ctrl.costComponentController.nextCode);
 costComponentRoutes.get('/stats', ctrl.costComponentController.stats);
 costComponentRoutes.post('/check-duplicate', ctrl.costComponentController.checkDuplicate);
