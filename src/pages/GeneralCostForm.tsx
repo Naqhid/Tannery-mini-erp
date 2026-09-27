@@ -268,8 +268,14 @@ export default function GeneralCostForm() {
       if (comp) {
         items[index].cost_category = comp.name;
         items[index].group_name = comp.group_name || '';
-        items[index].uom = comp.primary_uom_name || comp.uom || 'Sq.Ft.';
+        const uom = comp.primary_uom_name || comp.uom || 'Sq.Ft.';
+        items[index].uom = uom;
         items[index].cost_per_uom = comp.rate || 0;
+        // If UOM is "Piece", pre-fill Total Quantity with Output Qty (still editable).
+        // For any other UOM, leave Total Quantity untouched.
+        if (uom.trim().toLowerCase() === 'piece') {
+          items[index].total_qty = Number(formData.output_qty) || 0;
+        }
       }
     }
 

@@ -180,6 +180,11 @@ export default function MachineCostForm() {
         items[index].group_name = machine.group_name || '';
         items[index].uom = machine.uom || '';
         items[index].cost_per_uom = machine.rate || 0;
+        // If UOM is "Piece", pre-fill Total Quantity with Output Qty (still editable).
+        // For any other UOM, leave Total Quantity untouched.
+        if ((machine.uom || '').trim().toLowerCase() === 'piece') {
+          items[index].total_qty = Number(formData.output_qty) || 0;
+        }
       }
     }
 
