@@ -1,4 +1,120 @@
 import pool from '../config/db.js';
+import { updateStock, addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
+import { recalculateMaterialTransactions } from './materialTransactionModel.js';
+
+/**
+ * Seed (or re-seed) a material's opening stock CONSISTENTLY across all three
+ * stock tables: warehouse_stock, stock_ledger and material_transactions.
+ *
+ * Root-cause fix: previously the material master wrote only a lone
+ * material_transactions 'OPENING' row, so warehouse_stock/stock_ledger were out
+ * of sync — and a later rebuildAndReprice (which recomputes warehouse_stock from
+ * stock_ledger) would wipe the opening balance, causing drift between tables.
+ *
+ * Behaviour:
+ *   - Always first REVERSES any prior material-master opening for this item
+ *     (across all three tables), so edits never stack/drift.
+ *   - Then, if openingQty > 0 and the default warehouse resolves, writes a fresh
+ *     'Opening' ledger row + stock update + transaction, and rebuilds valuation.
+ *   - Opening is scoped to the material's default warehouse only.
+ */
+async function seedOpeningStock({ materialId, code, openingQty, avgRate, defaultWarehouse }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) Reverse any previous material-master opening for this item, in every
+    //    warehouse it may have touched, then remove the ledger/transaction rows.
+    const [prevLedger] = await conn.query(
+      `SELECT DISTINCT warehouse_id, material_id, uom
+         FROM stock_ledger
+        WHERE reference_type = 'material_master' AND material_id = ?`,
+      [materialId]
+    );
+    const prevWarehouses = new Set();
+    for (const p of prevLedger) {
+      prevWarehouses.add(p.warehouse_id);
+      // Subtract what the old opening added.
+      const [[row]] = await conn.query(
+        `SELECT in_qty FROM stock_ledger
+          WHERE reference_type='material_master' AND material_id=? AND warehouse_id=?
+          ORDER BY id DESC LIMIT 1`,
+        [materialId, p.warehouse_id]
+      );
+      const prevQty = row ? Number(row.in_qty) || 0 : 0;
+      if (prevQty) {
+        await updateStock(conn, p.warehouse_id, materialId, p.uom, -prevQty, 0);
+      }
+    }
+    await conn.query(
+      `DELETE FROM stock_ledger WHERE reference_type='material_master' AND material_id=?`,
+      [materialId]
+    );
+    await conn.query(
+      `DELETE FROM material_transactions WHERE reference_type='material_master' AND item_id=?`,
+      [materialId]
+    );
+
+    // Recompute both engines for every previously-affected warehouse so their
+    // balances settle correctly after the reversal (e.g. when the default
+    // warehouse changed, the old warehouse must drop back to its true balance).
+    for (const w of prevWarehouses) {
+      await rebuildAndReprice(conn, w, materialId);
+      await recalculateMaterialTransactions(conn, w, materialId);
+    }
+
+    // 2) Seed the new opening (if any) into the resolved default warehouse.
+    const warehouseId = await resolveWarehouseId(defaultWarehouse);
+    if (openingQty > 0 && warehouseId) {
+      const openingValue = openingQty * avgRate;
+      // a) ledger row
+      await addLedgerEntry(conn, {
+        transaction_date: new Date().toISOString().split('T')[0],
+        transaction_type: 'Opening',
+        reference_type: 'material_master',
+        reference_id: materialId,
+        reference_no: code,
+        warehouse_id: warehouseId,
+        material_id: materialId,
+        uom: null,
+        in_qty: openingQty,
+        out_qty: 0,
+        unit_cost: avgRate,
+        amount: openingValue,
+        balance_qty: openingQty,
+        remarks: 'Opening stock (material master)',
+        created_by: null,
+      });
+      // b) warehouse_stock
+      await updateStock(conn, warehouseId, materialId, null, openingQty, avgRate);
+      // c) material_transactions row
+      await conn.query(
+        `INSERT INTO material_transactions
+          (transaction_date, transaction_type, reference_no, warehouse_id, item_id,
+           opening_stock, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
+         VALUES (NOW(), 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
+        [code, warehouseId, materialId, 0, openingQty, openingValue, openingQty, avgRate, openingValue]
+      );
+      // d) date-ordered rebuild of BOTH engines so balances stay consistent:
+      //    System A (stock_ledger + warehouse_stock) and System B
+      //    (material_transactions, which the issue availability check reads).
+      await rebuildAndReprice(conn, warehouseId, materialId);
+      await recalculateMaterialTransactions(conn, warehouseId, materialId);
+    } else if (warehouseId) {
+      // Opening removed (qty 0): still recompute both engines for this pair so
+      // any residual balances are corrected after the reversal above.
+      await rebuildAndReprice(conn, warehouseId, materialId);
+      await recalculateMaterialTransactions(conn, warehouseId, materialId);
+    }
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
 
 export async function getAll({ search, type, category, status, supplier, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
@@ -148,30 +264,17 @@ export async function create(data, createdBy = null) {
     ]
   );
 
-  // Insert opening stock transaction if opening_stock > 0
+  // Seed opening stock consistently across warehouse_stock, stock_ledger and
+  // material_transactions (scoped to the default warehouse).
   const openingQty = parseFloat(data.opening_stock) || 0;
   const avgRate = parseFloat(data.standard_cost) || 0;
-  if (openingQty > 0) {
-    const openingValue = openingQty * avgRate;
-    const warehouseId = await resolveWarehouseId(data.default_warehouse);
-    await pool.query(
-      `INSERT INTO material_transactions 
-        (transaction_date, transaction_type, reference_no, warehouse_id, item_id, 
-         opening_stock, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
-       VALUES (NOW(), 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
-      [
-        code,
-        warehouseId,
-        result.insertId,
-        openingQty,
-        openingQty,
-        openingValue,
-        openingQty,
-        avgRate,
-        openingValue,
-      ]
-    );
-  }
+  await seedOpeningStock({
+    materialId: result.insertId,
+    code,
+    openingQty,
+    avgRate,
+    defaultWarehouse: data.default_warehouse,
+  });
 
   return { id: result.insertId, code };
 }
@@ -232,39 +335,20 @@ export async function update(id, data, updatedBy = null) {
     ]
   );
 
-  // Upsert opening stock transaction
+  // Re-seed opening stock consistently across all three stock tables. This
+  // reverses the previous material-master opening first, then applies the new
+  // one — so editing opening stock / default warehouse never drifts.
   const openingQty = parseFloat(data.opening_stock) || 0;
   const avgRate = parseFloat(data.standard_cost) || 0;
-  // Remove old opening transaction for this material
-  await pool.query(
-    `DELETE FROM material_transactions WHERE item_id = ? AND transaction_type = 'OPENING'`,
-    [id]
-  );
-  // Insert new one if opening_stock > 0
-  if (openingQty > 0) {
-    const openingValue = openingQty * avgRate;
-    const warehouseId = await resolveWarehouseId(data.default_warehouse);
-    // Get material code
-    const [[mat]] = await pool.query('SELECT code FROM materials WHERE id = ?', [id]);
-    const refNo = mat ? mat.code : `MAT-${String(id).padStart(5, '0')}`;
-    await pool.query(
-      `INSERT INTO material_transactions 
-        (transaction_date, transaction_type, reference_no, warehouse_id, item_id, 
-         opening_stock, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
-       VALUES (NOW(), 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
-      [
-        refNo,
-        warehouseId,
-        id,
-        openingQty,
-        openingQty,
-        openingValue,
-        openingQty,
-        avgRate,
-        openingValue,
-      ]
-    );
-  }
+  const [[mat]] = await pool.query('SELECT code FROM materials WHERE id = ?', [id]);
+  const refNo = mat ? mat.code : `MAT-${String(id).padStart(5, '0')}`;
+  await seedOpeningStock({
+    materialId: id,
+    code: refNo,
+    openingQty,
+    avgRate,
+    defaultWarehouse: data.default_warehouse,
+  });
 
   return result.affectedRows > 0;
 }

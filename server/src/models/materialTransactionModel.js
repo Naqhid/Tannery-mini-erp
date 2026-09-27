@@ -42,44 +42,22 @@ async function resolveOpening(conn, { warehouseId, itemId, transactionDate }) {
   );
 
   if (prev.length > 0) {
-    // CASE B or C: carry forward previous balance for THIS warehouse
+    // CASE B or C: carry forward previous balance for THIS warehouse.
+    // NOTE: the material master already seeds a warehouse-scoped 'OPENING'
+    // transaction (reference_type='material_master') into the material's
+    // default_warehouse whenever opening_stock > 0. That row is picked up here
+    // as the prior balance, so opening stock is handled without any extra
+    // master-field fallback (which previously caused double-counting/drift).
     return {
       opening_stock: n(prev[0].balance_qty),
       opening_value: n(prev[0].balance_value),
     };
   }
 
-  // No prior transaction in THIS warehouse. Seed the opening from the material
-  // master's opening_stock — but ONLY when the material's default_warehouse
-  // matches this warehouse. This keeps opening stock warehouse-scoped and
-  // consistent with getIssueItemInfo's availability fallback, so the balance
-  // computed at post time matches what the availability check showed.
-  const [[material]] = await conn.query(
-    `SELECT opening_stock, opening_stock_value, current_stock, default_warehouse, rate, last_purchase_price
-     FROM materials WHERE id=?`,
-    [itemId]
-  );
-  if (material && material.default_warehouse) {
-    const [[wh]] = await conn.query(
-      `SELECT name, code FROM warehouses WHERE id=?`,
-      [warehouseId]
-    );
-    if (wh) {
-      const dw = String(material.default_warehouse).trim().toLowerCase();
-      const matchesName = wh.name && dw === String(wh.name).trim().toLowerCase();
-      const matchesCode = wh.code && dw === String(wh.code).trim().toLowerCase();
-      if (matchesName || matchesCode) {
-        const openingQty = n(material.opening_stock) || n(material.current_stock);
-        const rate = n(material.rate) || n(material.last_purchase_price);
-        return {
-          opening_stock: openingQty,
-          opening_value: n(material.opening_stock_value) || openingQty * rate,
-        };
-      }
-    }
-  }
-
-  // Otherwise this warehouse starts empty for this item.
+  // No prior transaction in THIS warehouse for this item — starts empty here.
+  // We deliberately do NOT re-seed from materials.opening_stock: that is already
+  // represented by the material_master OPENING transaction in the default
+  // warehouse. Re-seeding here would double count across warehouses/edits.
   return { opening_stock: 0, opening_value: 0 };
 }
 
@@ -199,11 +177,12 @@ export async function replaceReferenceTransactions(conn, referenceType, referenc
 export async function getIssueItemInfo({ warehouseId, itemId, date }) {
   const conn = await pool.getConnection();
   try {
-    // Availability is STRICTLY scoped to the selected warehouse. We first use
-    // this warehouse's latest transaction balance — never another warehouse's.
-    // If there is no transaction yet, we fall back to the material master's
-    // opening_stock, but only when that material's default_warehouse is this
-    // warehouse (see below). Warehouse A can never consume Warehouse B's stock.
+    // Availability is STRICTLY scoped to the selected warehouse. We use this
+    // warehouse's latest transaction balance only — never another warehouse's.
+    // Opening stock is already represented as a warehouse-scoped 'OPENING'
+    // transaction (written by the material master into the default warehouse),
+    // so it is naturally picked up here for the correct warehouse. This
+    // guarantees Warehouse A can never consume Warehouse B's stock.
     const latest = await getLatestForItem(conn, { warehouseId, itemId, date });
 
     if (latest) {
@@ -214,37 +193,17 @@ export async function getIssueItemInfo({ warehouseId, itemId, date }) {
       };
     }
 
-    // No transaction in THIS warehouse yet. Fall back to the material master's
-    // opening_stock, but ONLY when the material's default_warehouse matches the
-    // warehouse being issued from. This keeps availability warehouse-scoped:
-    // opening stock is treated as belonging to the material's default warehouse
-    // only, so Warehouse A still can never use Warehouse B's opening stock.
+    // No transaction in THIS warehouse → availability is 0 for this warehouse.
+    // We still surface the material-master rate for unit-cost/pricing purposes
+    // only (it does NOT contribute to availability).
     const [[material]] = await conn.query(
-      `SELECT opening_stock, default_warehouse, rate, last_purchase_price FROM materials WHERE id=?`,
+      `SELECT rate, last_purchase_price FROM materials WHERE id=?`,
       [itemId]
     );
     const masterRate = material ? (n(material.rate) || n(material.last_purchase_price)) : 0;
 
-    let openingForThisWarehouse = 0;
-    if (material && material.default_warehouse) {
-      // Resolve the selected warehouse's name/code to compare with default_warehouse
-      // (which is stored as a text name/code on the material master).
-      const [[wh]] = await conn.query(
-        `SELECT name, code FROM warehouses WHERE id=?`,
-        [warehouseId]
-      );
-      if (wh) {
-        const dw = String(material.default_warehouse).trim().toLowerCase();
-        const matchesName = wh.name && dw === String(wh.name).trim().toLowerCase();
-        const matchesCode = wh.code && dw === String(wh.code).trim().toLowerCase();
-        if (matchesName || matchesCode) {
-          openingForThisWarehouse = n(material.opening_stock);
-        }
-      }
-    }
-
     return {
-      available_qty: openingForThisWarehouse,
+      available_qty: 0,
       avg_rate: masterRate,
       balance_date: null,
     };
