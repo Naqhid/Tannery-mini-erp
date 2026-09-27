@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { recalculateMaterialTransactions } from './materialTransactionModel.js';
 
 /**
  * Updates warehouse_stock within a transaction.
@@ -246,8 +247,12 @@ export async function rebuildAllStock() {
         WHERE warehouse_id IS NOT NULL AND material_id IS NOT NULL`
     );
     for (const p of pairs) {
+      // System A: warehouse_stock + issue repricing (from stock_ledger).
       await rebuildStockValuation(conn, p.warehouse_id, p.material_id);
       await repriceIssuesForItem(conn, p.warehouse_id, p.material_id);
+      // System B: material_transactions running balances (the availability
+      // engine). Recomputing here keeps all three stock tables consistent.
+      await recalculateMaterialTransactions(conn, p.warehouse_id, p.material_id);
     }
     await conn.commit();
     return { pairs: pairs.length };
