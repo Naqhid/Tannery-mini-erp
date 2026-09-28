@@ -211,10 +211,12 @@ export async function getIssueItemInfo({ warehouseId, itemId, date }) {
       };
     }
 
-    // No transaction in THIS warehouse. Fall back to the material master's
-    // opening stock, but ONLY when the selected warehouse is this material's
-    // configured default warehouse. This keeps availability warehouse-scoped:
-    // opening stock only counts in the warehouse it belongs to.
+    // No transaction in THIS warehouse. The material master never writes to the
+    // stock tables, but for issue availability we FALL BACK to reading the
+    // master's opening stock — only when the selected warehouse is this
+    // material's configured default warehouse. This keeps availability
+    // warehouse-scoped (opening stock only counts in the warehouse it belongs
+    // to) without the master ever touching stock_ledger / warehouse_stock.
     const [[material]] = await conn.query(
       `SELECT rate, last_purchase_price, standard_cost,
               opening_stock, default_warehouse
@@ -237,8 +239,7 @@ export async function getIssueItemInfo({ warehouseId, itemId, date }) {
     }
 
     // Not the default warehouse (or no opening stock) → availability is 0 here.
-    // We still surface the material-master rate for unit-cost/pricing purposes
-    // only (it does NOT contribute to availability).
+    // Rate is still surfaced for unit-cost/pricing purposes only.
     return {
       available_qty: 0,
       avg_rate: masterRate,
