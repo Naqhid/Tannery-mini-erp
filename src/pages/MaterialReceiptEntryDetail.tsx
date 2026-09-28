@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Plus, Trash2, Truck, RotateCcw, Info, Minus, Send } from 'lucide-react';
@@ -74,6 +74,7 @@ const RECEIPT_TYPES = [
 
 let _kc = 0;
 const genKey = () => `row_${++_kc}_${Date.now()}`;
+const NEW_RECEIPT_DRAFT_KEY = 'material-receipt-new-draft-v1';
 
 export default function MaterialReceiptEntryDetail() {
   const { id } = useParams<{ id: string }>();
@@ -91,6 +92,9 @@ export default function MaterialReceiptEntryDetail() {
   const [posting, setPosting] = useState(false);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [searchItem, setSearchItem] = useState('');
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftStatus, setDraftStatus] = useState('');
+  const automaticSaveInFlight = useRef(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
@@ -158,6 +162,50 @@ export default function MaterialReceiptEntryDetail() {
 
   useEffect(() => { fetchDropdowns(); fetchReceipt(); }, [fetchDropdowns, fetchReceipt]);
 
+  useEffect(() => {
+    if (!isNew) { setDraftReady(true); return; }
+    try {
+      const raw = localStorage.getItem(NEW_RECEIPT_DRAFT_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved?.receipt && Array.isArray(saved?.items)) {
+          const { receipt_no: _savedReceiptNo, ...savedReceipt } = saved.receipt as ReceiptData;
+          setReceipt((prev) => ({ ...prev, ...savedReceipt }));
+          setItems(saved.items.length
+            ? saved.items.map((item: Item) => ({ ...emptyItem, ...item, _key: genKey() }))
+            : [{ ...emptyItem, _key: genKey() }]);
+          setDraftStatus('Unsaved draft restored');
+        }
+      }
+    } catch {
+      localStorage.removeItem(NEW_RECEIPT_DRAFT_KEY);
+    } finally {
+      setDraftReady(true);
+    }
+  }, [isNew]);
+
+  useEffect(() => {
+    if (!isNew || !draftReady) return;
+    const hasWork = items.length > 1 || items.some((item) => item.material_id || item.primary_uom_qty || item.rate_inr || item.amount_inr)
+      || Boolean(receipt.warehouse_id || receipt.supplier_id || receipt.receipt_type || receipt.challan_no || receipt.remarks);
+    if (!hasWork) {
+      localStorage.removeItem(NEW_RECEIPT_DRAFT_KEY);
+      setDraftStatus('');
+      return;
+    }
+    try {
+      localStorage.setItem(NEW_RECEIPT_DRAFT_KEY, JSON.stringify({ receipt, items, saved_at: new Date().toISOString() }));
+      setDraftStatus(`Auto-saved locally at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`);
+    } catch {
+      setDraftStatus('Could not save browser draft');
+    }
+  }, [isNew, draftReady, receipt, items]);
+
+  const clearLocalDraft = () => {
+    localStorage.removeItem(NEW_RECEIPT_DRAFT_KEY);
+    setDraftStatus('');
+  };
+
   const HOME_STATE = 'tamil nadu';
   const stateIsIntra = (s?: string) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ') === HOME_STATE;
 
@@ -224,7 +272,7 @@ export default function MaterialReceiptEntryDetail() {
   const addItem = () => setItems((p) => [...p, { ...emptyItem, _key: genKey() }]);
   const removeItem = (key: string) => setItems((p) => p.length > 1 ? p.filter((it) => it._key !== key) : p);
 
-  const handleClear = () => { setReceipt(emptyReceipt); setItems([{ ...emptyItem, _key: genKey() }]); };
+  const handleClear = () => { clearLocalDraft(); setReceipt(emptyReceipt); setItems([{ ...emptyItem, _key: genKey() }]); };
 
   const totalItems = items.filter((i) => i.material_id).length;
   const totalAmountInr = items.reduce((s, i) => s + (i.amount_inr || 0), 0);
@@ -240,6 +288,70 @@ export default function MaterialReceiptEntryDetail() {
   const igstAmount = isIntra ? 0 : gstTotal;
   const totalGstAmount = gstTotal;
   const grandTotal = totalAmountInr + totalGstAmount + totalOtherCharges;
+
+  useEffect(() => {
+    const validItems = items.filter((item) => item.material_id && (parseFloat(item.primary_uom_qty) || 0) > 0);
+    if (loading || saving || isPosted || !receipt.warehouse_id || !receipt.receipt_date || !validItems.length) return;
+
+    const timer = window.setTimeout(async () => {
+      if (automaticSaveInFlight.current) return;
+      automaticSaveInFlight.current = true;
+      setDraftStatus('Saving draft to server…');
+      const payload = {
+        ...receipt,
+        status: 'Draft',
+        supplier_id: receipt.supplier_id ? Number(receipt.supplier_id) : null,
+        warehouse_id: Number(receipt.warehouse_id),
+        freight: parseFloat(receipt.freight) || 0,
+        loading_charges: loadingCharges,
+        other_charges: otherCharges,
+        gst_percent: gstPercent,
+        tax_type: receipt.tax_type,
+        cgst_amount: cgstAmount,
+        sgst_amount: sgstAmount,
+        igst_amount: igstAmount,
+        total_gst_amount: totalGstAmount,
+        total_other_charges: totalOtherCharges,
+        total_amount: totalAmountInr,
+        grand_total: grandTotal,
+        items: validItems.map((i) => ({
+          material_id: Number(i.material_id),
+          uom: i.uom,
+          primary_uom: i.primary_uom,
+          secondary_uom: i.secondary_uom,
+          order_qty: parseFloat(i.order_qty) || 0,
+          primary_uom_qty: parseFloat(i.primary_uom_qty) || 0,
+          secondary_uom_qty: parseFloat(i.secondary_uom_qty) || 0,
+          currency: i.currency,
+          exchange_rate: parseFloat(i.exchange_rate) || 1,
+          rate_fc: parseFloat(i.rate_fc) || 0,
+          rate_inr: i.rate_inr,
+          amount_fc: i.amount_fc,
+          amount_inr: i.amount_inr,
+          batch_no: null,
+          expiry_date: i.expiry_date || null,
+        })),
+      };
+
+      try {
+        if (isNew) {
+          const res = await api<{ data: { id: number; receipt_no: string }; message: string }>('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
+          clearLocalDraft();
+          setDraftStatus('Draft saved to server');
+          navigate(`/material-receipt/${res.data.id}`, { replace: true });
+        } else if (id) {
+          await api(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          setDraftStatus(`Draft saved to server at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`);
+        }
+      } catch {
+        setDraftStatus('Could not save server draft — browser draft is safe');
+      } finally {
+        automaticSaveInFlight.current = false;
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [id, isNew, receipt, items, loading, saving, isPosted, freight, loadingCharges, otherCharges, gstPercent, cgstAmount, sgstAmount, igstAmount, totalGstAmount, totalOtherCharges, totalAmountInr, grandTotal, navigate]);
 
   const handleSave = async () => {
     if (!receipt.warehouse_id) { toast.error('Warehouse is required'); return; }
@@ -283,6 +395,7 @@ export default function MaterialReceiptEntryDetail() {
       if (isNew) {
         const res = await api<{ data: { id: number; receipt_no: string }; message: string }>('/material-receipts', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Receipt saved as Draft!');
+        clearLocalDraft();
         navigate(`/material-receipt/${res.data.id}`);
       } else {
         const res = await api<{ message: string }>(`/material-receipts/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -408,6 +521,11 @@ export default function MaterialReceiptEntryDetail() {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/30">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2>
+            {draftStatus && (
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${draftStatus.startsWith('Could not') ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'}`}>
+                {draftStatus}
+              </span>
+            )}
             <div className="relative">
               <input
                 type="text"
