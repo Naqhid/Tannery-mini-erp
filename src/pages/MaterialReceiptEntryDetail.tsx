@@ -239,19 +239,16 @@ export default function MaterialReceiptEntryDetail() {
           } else if (!updated.exchange_rate) {
             updated.exchange_rate = '1';
           }
-          // Auto-fill GST% from the material's group (editable afterwards).
           const gstRate = mat.group_gst_rate;
           if (gstRate != null && gstRate !== '') {
             setReceipt((r) => (r.gst_percent ? r : { ...r, gst_percent: String(Number(gstRate)) }));
           }
         }
       }
-      // Recalculate derived values
+
       const isINR = (updated.currency || 'INR') === 'INR';
       const primaryQty = parseFloat(updated.primary_uom_qty) || 0;
       if (isINR) {
-        // For INR: exchange rate / rate(FC) / amount(FC) are not applicable.
-        // Rate(INR) is entered directly and Amount(INR) = Rate(INR) * Primary Qty.
         updated.exchange_rate = '';
         updated.rate_fc = '';
         updated.amount_fc = 0;
@@ -267,6 +264,27 @@ export default function MaterialReceiptEntryDetail() {
       }
       return updated;
     }));
+
+    if (field === 'material_id' && value) {
+      api<{ data: { unit_cost: number } }>(`/materials/${value}/cost`)
+        .then((res) => {
+          const cost = Number(res.data?.unit_cost) || 0;
+          setItems((prev) => prev.map((it) => {
+            if (it._key !== key) return it;
+            const qty = parseFloat(it.primary_uom_qty) || 0;
+            const nextItem = { ...it, rate_inr: cost, amount_inr: parseFloat((cost * qty).toFixed(4)) };
+            if (nextItem.currency === 'INR') {
+              nextItem.exchange_rate = '';
+              nextItem.rate_fc = '';
+              nextItem.amount_fc = 0;
+            }
+            return nextItem;
+          }));
+        })
+        .catch(() => {
+          // Ignore cost lookup failures; the user can still enter a value manually.
+        });
+    }
   };
 
   const addItem = () => setItems((p) => [...p, { ...emptyItem, _key: genKey() }]);
