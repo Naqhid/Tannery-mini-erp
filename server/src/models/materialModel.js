@@ -236,7 +236,7 @@ export async function getDropdown() {
   const [rows] = await pool.query(
     `SELECT m.id, m.code, m.name, m.uom, m.type, m.category, m.group_id,
        m.primary_uom_id, m.secondary_uom_id, m.currency,
-       m.standard_cost, m.last_purchase_price, m.preferred_supplier_id,
+      m.rate, m.standard_cost, m.last_purchase_price, m.preferred_supplier_id,
        pu.name AS primary_uom_name, su.name AS secondary_uom_name,
        pc.name AS category_name, g.name AS group_name, g.gst_rate AS group_gst_rate
      FROM materials m

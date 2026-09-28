@@ -9,7 +9,7 @@ import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; }
 interface Supplier { id: number; code: string; name: string; state?: string; state_name?: string; }
-interface Material { id: number; code: string; name: string; uom: string; primary_uom_name?: string; secondary_uom_name?: string; currency?: string; category_name?: string; category?: string; group_name?: string; display_name?: string; group_gst_rate?: number | string; }
+interface Material { id: number; code: string; name: string; uom: string; primary_uom_name?: string; secondary_uom_name?: string; currency?: string; rate?: number | string; last_purchase_price?: number | string; standard_cost?: number | string; category_name?: string; category?: string; group_name?: string; display_name?: string; group_gst_rate?: number | string; }
 interface Item {
   _key: string;
   material_id: string;
@@ -231,19 +231,35 @@ export default function MaterialReceiptEntryDetail() {
           updated.uom = mat.uom;
           updated.material_code = mat.code;
           updated.material_name = mat.name;
-          updated.primary_uom = (mat as any).primary_uom_name || mat.uom || '';
-          updated.secondary_uom = (mat as any).secondary_uom_name || '';
-          updated.currency = (mat as any).currency || 'INR';
+          updated.primary_uom = mat.primary_uom_name || mat.uom || '';
+          updated.secondary_uom = mat.secondary_uom_name || '';
+          updated.currency = mat.currency || 'INR';
+          const masterRate = Number(mat.rate) || Number(mat.last_purchase_price) || Number(mat.standard_cost) || 0;
+          updated.rate_inr = masterRate;
+          updated.rate_fc = '';
           if (updated.currency === 'INR') {
             updated.exchange_rate = '';
-            updated.rate_fc = '';
           } else if (!updated.exchange_rate) {
             updated.exchange_rate = '1';
+          }
+          if (updated.currency !== 'INR') {
+            const exchangeRate = parseFloat(updated.exchange_rate) || 1;
+            updated.rate_fc = (masterRate / exchangeRate).toFixed(4);
           }
           const gstRate = mat.group_gst_rate;
           if (gstRate != null && gstRate !== '') {
             setReceipt((r) => (r.gst_percent ? r : { ...r, gst_percent: String(Number(gstRate)) }));
           }
+        } else {
+          updated.material_code = '';
+          updated.material_name = '';
+          updated.uom = '';
+          updated.primary_uom = '';
+          updated.secondary_uom = '';
+          updated.rate_inr = 0;
+          updated.rate_fc = '';
+          updated.amount_fc = 0;
+          updated.amount_inr = 0;
         }
       }
 
@@ -266,29 +282,12 @@ export default function MaterialReceiptEntryDetail() {
       return updated;
     }));
 
-    if (field === 'material_id' && value) {
-      api<{ data: { unit_cost: number } }>(`/materials/${value}/cost`)
-        .then((res) => {
-          const cost = Number(res.data?.unit_cost) || 0;
-          setItems((prev) => prev.map((it) => {
-            if (it._key !== key) return it;
-            const qty = parseFloat(it.primary_uom_qty) || 0;
-            const nextItem = { ...it, rate_inr: cost, amount_inr: parseFloat((cost * qty).toFixed(4)) };
-            if (nextItem.currency === 'INR') {
-              nextItem.exchange_rate = '';
-              nextItem.rate_fc = '';
-              nextItem.amount_fc = 0;
-            }
-            return nextItem;
-          }));
-        })
-        .catch(() => {
-          // Ignore cost lookup failures; the user can still enter a value manually.
-        });
+    if (field === 'material_id') {
+      focusGridField(key, 'primary_uom_qty');
     }
   };
 
-  const focusGridField = (key: string, field: 'item' | 'primary_uom_qty' | 'rate_inr') => {
+  const focusGridField = (key: string, field: 'item' | 'primary_uom_qty' | 'rate_fc' | 'rate_inr') => {
     requestAnimationFrame(() => {
       const selector = `[data-grid-field="${key}-${field}"]`;
       document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
@@ -305,11 +304,12 @@ export default function MaterialReceiptEntryDetail() {
 
   const handleClear = () => { clearLocalDraft(); setReceipt(emptyReceipt); setItems([{ ...emptyItem, _key: genKey() }]); };
 
-  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, key: string, field: 'primary_uom_qty' | 'rate_inr') => {
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, key: string, field: 'primary_uom_qty' | 'rate_fc' | 'rate_inr') => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
     if (field === 'primary_uom_qty') {
-      focusGridField(key, 'rate_inr');
+      const item = items.find((row) => row._key === key);
+      focusGridField(key, item?.currency === 'INR' ? 'rate_inr' : 'rate_fc');
     } else {
       addItem(true);
     }
@@ -650,8 +650,9 @@ export default function MaterialReceiptEntryDetail() {
                       className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[70px] text-right ${item.currency === 'INR' ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder={item.currency === 'INR' ? '' : '1.00'} />
                   </td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.currency === 'INR' ? '' : item.rate_fc}
+                    <input data-grid-field={`${item._key}-rate_fc`} type="number" value={item.currency === 'INR' ? '' : item.rate_fc}
                       onChange={(e) => updateItem(item._key, 'rate_fc', e.target.value)}
+                      onKeyDown={(e) => handleGridKeyDown(e, item._key, 'rate_fc')}
                       readOnly={item.currency === 'INR'} disabled={item.currency === 'INR'}
                       className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right ${item.currency === 'INR' ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder={item.currency === 'INR' ? '' : '0.00'} />
                   </td>

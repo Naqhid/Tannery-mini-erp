@@ -63,7 +63,7 @@ export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
     `INSERT INTO suppliers (code, name, contact_person, phone, email, alt_phone, city, state, country, address, pincode, website, category, supply_type, gstin, pan, payment_terms, bank_name, bank_account, ifsc_code, notes, status, country_id, state_id, city_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
      data.city, data.state, data.country || null, data.address, data.pincode, data.website,
      data.category, data.supply_type, data.gstin, data.pan, data.payment_terms,
