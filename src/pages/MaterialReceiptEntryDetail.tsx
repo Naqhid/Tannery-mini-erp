@@ -94,6 +94,7 @@ export default function MaterialReceiptEntryDetail() {
   const [searchItem, setSearchItem] = useState('');
   const [draftReady, setDraftReady] = useState(false);
   const [draftStatus, setDraftStatus] = useState('');
+  const [focusedNewRow, setFocusedNewRow] = useState<string | null>(null);
   const automaticSaveInFlight = useRef(false);
 
   const fetchDropdowns = useCallback(async () => {
@@ -287,10 +288,38 @@ export default function MaterialReceiptEntryDetail() {
     }
   };
 
-  const addItem = () => setItems((p) => [...p, { ...emptyItem, _key: genKey() }]);
+  const focusGridField = (key: string, field: 'item' | 'primary_uom_qty' | 'rate_inr') => {
+    requestAnimationFrame(() => {
+      const selector = `[data-grid-field="${key}-${field}"]`;
+      document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+      document.querySelector<HTMLElement>(selector)?.closest('tr')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  const addItem = (focusNewRow = false) => {
+    const newItem = { ...emptyItem, _key: genKey() };
+    setItems((p) => [...p, newItem]);
+    if (focusNewRow) setFocusedNewRow(newItem._key);
+  };
   const removeItem = (key: string) => setItems((p) => p.length > 1 ? p.filter((it) => it._key !== key) : p);
 
   const handleClear = () => { clearLocalDraft(); setReceipt(emptyReceipt); setItems([{ ...emptyItem, _key: genKey() }]); };
+
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, key: string, field: 'primary_uom_qty' | 'rate_inr') => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (field === 'primary_uom_qty') {
+      focusGridField(key, 'rate_inr');
+    } else {
+      addItem(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!focusedNewRow) return;
+    focusGridField(focusedNewRow, 'item');
+    setFocusedNewRow(null);
+  }, [focusedNewRow, items]);
 
   const totalItems = items.filter((i) => i.material_id).length;
   const totalAmountInr = items.reduce((s, i) => s + (i.amount_inr || 0), 0);
@@ -556,7 +585,7 @@ export default function MaterialReceiptEntryDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
+            <button onClick={() => addItem(true)} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Plus size={14} /> Add Row
             </button>
             <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
@@ -597,12 +626,14 @@ export default function MaterialReceiptEntryDetail() {
                       placeholder="Search item..."
                       addNewPath="/chemical-master/new"
                       addNewLabel="Add Material"
+                      autoFocus={focusedNewRow === item._key}
+                      dataGridField={`${item._key}-item`}
                     />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.primary_uom || '-'}</td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.secondary_uom || 'NA'}</td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.primary_uom_qty} onChange={(e) => updateItem(item._key, 'primary_uom_qty', e.target.value)}
+                    <input data-grid-field={`${item._key}-primary_uom_qty`} type="number" value={item.primary_uom_qty} onChange={(e) => updateItem(item._key, 'primary_uom_qty', e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, item._key, 'primary_uom_qty')}
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
@@ -626,8 +657,8 @@ export default function MaterialReceiptEntryDetail() {
                   </td>
                   <td className="py-2.5 px-3">
                     {item.currency === 'INR' ? (
-                      <input type="number" value={item.rate_inr || ''}
-                        onChange={(e) => updateItem(item._key, 'rate_inr', e.target.value)}
+                      <input data-grid-field={`${item._key}-rate_inr`} type="number" value={item.rate_inr || ''}
+                        onChange={(e) => updateItem(item._key, 'rate_inr', e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, item._key, 'rate_inr')}
                         className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                     ) : (
                       <span className="block text-xs font-bold text-gray-700 text-right">{(item.rate_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
