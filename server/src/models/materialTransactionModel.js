@@ -3,6 +3,24 @@ import pool from '../config/db.js';
 const n = (v) => Number(v) || 0;
 
 /**
+ * Resolve a material's `default_warehouse` value (which may be a numeric id or a
+ * warehouse name) into a warehouse id. Returns 0 when it cannot be resolved.
+ */
+async function resolveWarehouseId(conn, warehouseRef) {
+  if (!warehouseRef) return 0;
+  const numericId = parseInt(warehouseRef, 10);
+  if (numericId) {
+    const [[wh]] = await conn.query('SELECT id FROM warehouses WHERE id = ? LIMIT 1', [numericId]);
+    if (wh) return wh.id;
+  }
+  const [[wh1]] = await conn.query('SELECT id FROM warehouses WHERE name = ? LIMIT 1', [warehouseRef]);
+  if (wh1) return wh1.id;
+  const [[wh2]] = await conn.query('SELECT id FROM warehouses WHERE name LIKE ? LIMIT 1', [`%${warehouseRef}%`]);
+  if (wh2) return wh2.id;
+  return 0;
+}
+
+/**
  * Get the latest transaction for an item at/before a given date (same warehouse).
  */
 export async function getLatestForItem(conn, { warehouseId, itemId, date }) {
@@ -193,19 +211,125 @@ export async function getIssueItemInfo({ warehouseId, itemId, date }) {
       };
     }
 
-    // No transaction in THIS warehouse → availability is 0 for this warehouse.
-    // We still surface the material-master rate for unit-cost/pricing purposes
-    // only (it does NOT contribute to availability).
+    // No transaction in THIS warehouse. Fall back to the material master's
+    // opening stock, but ONLY when the selected warehouse is this material's
+    // configured default warehouse. This keeps availability warehouse-scoped:
+    // opening stock only counts in the warehouse it belongs to.
     const [[material]] = await conn.query(
-      `SELECT rate, last_purchase_price FROM materials WHERE id=?`,
+      `SELECT rate, last_purchase_price, standard_cost,
+              opening_stock, default_warehouse
+         FROM materials WHERE id=?`,
       [itemId]
     );
-    const masterRate = material ? (n(material.rate) || n(material.last_purchase_price)) : 0;
+    const masterRate = material
+      ? (n(material.rate) || n(material.last_purchase_price) || n(material.standard_cost))
+      : 0;
 
+    if (material && n(material.opening_stock) > 0 && material.default_warehouse) {
+      const defaultWarehouseId = await resolveWarehouseId(conn, material.default_warehouse);
+      if (defaultWarehouseId && Number(defaultWarehouseId) === Number(warehouseId)) {
+        return {
+          available_qty: n(material.opening_stock),
+          avg_rate: masterRate,
+          balance_date: null,
+        };
+      }
+    }
+
+    // Not the default warehouse (or no opening stock) → availability is 0 here.
+    // We still surface the material-master rate for unit-cost/pricing purposes
+    // only (it does NOT contribute to availability).
     return {
       available_qty: 0,
       avg_rate: masterRate,
       balance_date: null,
     };
   } finally { conn.release(); }
+}
+
+/**
+ * Ensure that a material's master opening stock is materialized as a real
+ * OPENING transaction (+ stock_ledger + warehouse_stock) for the given
+ * warehouse, when no stock record yet exists there.
+ *
+ * This is used right before an issue is posted so that consuming the
+ * "master opening stock" fallback leaves a consistent ledger chain instead of
+ * a phantom negative balance. It only acts when:
+ *   - there is NO existing material_transactions row for (warehouse, item), and
+ *   - the material has opening_stock > 0, and
+ *   - the given warehouse is the material's configured default warehouse.
+ *
+ * Runs on the passed-in connection so it joins the caller's transaction.
+ * Returns true when it seeded opening stock, false otherwise.
+ */
+export async function ensureOpeningStockSeeded(conn, { warehouseId, itemId, date }) {
+  // If any transaction already exists for this pair, nothing to seed.
+  const [[existing]] = await conn.query(
+    `SELECT transaction_id FROM material_transactions
+      WHERE warehouse_id=? AND item_id=? LIMIT 1`,
+    [warehouseId, itemId]
+  );
+  if (existing) return false;
+
+  const [[material]] = await conn.query(
+    `SELECT code, rate, last_purchase_price, standard_cost,
+            opening_stock, default_warehouse
+       FROM materials WHERE id=?`,
+    [itemId]
+  );
+  if (!material) return false;
+
+  const openingQty = n(material.opening_stock);
+  if (openingQty <= 0 || !material.default_warehouse) return false;
+
+  const defaultWarehouseId = await resolveWarehouseId(conn, material.default_warehouse);
+  if (!defaultWarehouseId || Number(defaultWarehouseId) !== Number(warehouseId)) return false;
+
+  const avgRate = n(material.rate) || n(material.last_purchase_price) || n(material.standard_cost);
+  const openingValue = openingQty * avgRate;
+  const txnDate = date || new Date().toISOString().split('T')[0];
+
+  // a) stock_ledger row
+  await conn.query(
+    `INSERT INTO stock_ledger (
+      transaction_date, transaction_type, reference_type, reference_id, reference_no,
+      warehouse_id, material_id, uom, batch_no, expiry_date,
+      in_qty, out_qty, unit_cost, amount, balance_qty, remarks, created_by
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      txnDate, 'Opening', 'material_master', itemId, material.code || null,
+      warehouseId, itemId, null, null, null,
+      openingQty, 0, avgRate, openingValue, openingQty,
+      'Opening stock (material master)', null,
+    ]
+  );
+
+  // b) warehouse_stock
+  const [[ws]] = await conn.query(
+    `SELECT id, current_qty FROM warehouse_stock WHERE warehouse_id=? AND material_id=? FOR UPDATE`,
+    [warehouseId, itemId]
+  );
+  if (ws) {
+    await conn.query(
+      `UPDATE warehouse_stock SET current_qty=current_qty+?, avg_unit_cost=? WHERE id=?`,
+      [openingQty, avgRate, ws.id]
+    );
+  } else {
+    await conn.query(
+      `INSERT INTO warehouse_stock (warehouse_id, material_id, uom, current_qty, avg_unit_cost)
+       VALUES (?,?,?,?,?)`,
+      [warehouseId, itemId, null, openingQty, avgRate]
+    );
+  }
+
+  // c) material_transactions row (this is what the availability check reads)
+  await conn.query(
+    `INSERT INTO material_transactions
+      (transaction_date, transaction_type, reference_no, warehouse_id, item_id,
+       opening_stock, receipt_qty, receipt_value, balance_qty, avg_rate, balance_value, reference_type)
+     VALUES (?, 'OPENING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'material_master')`,
+    [txnDate, material.code || null, warehouseId, itemId, 0, openingQty, openingValue, openingQty, avgRate, openingValue]
+  );
+
+  return true;
 }

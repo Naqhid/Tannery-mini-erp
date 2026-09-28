@@ -1,6 +1,6 @@
 import pool from '../config/db.js';
 import { updateStock, addLedgerEntry, allowsNegativeStock, rebuildAndReprice } from './stockLedgerModel.js';
-import { getIssueItemInfo, replaceReferenceTransactions } from './materialTransactionModel.js';
+import { getIssueItemInfo, replaceReferenceTransactions, ensureOpeningStockSeeded } from './materialTransactionModel.js';
 
 export async function getAll({ search, status, warehouse_id, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
@@ -74,6 +74,10 @@ export async function create(data, items = [], createdBy = null) {
     // Only validate stock and compute server-side costs if posting
     if (status === 'Posted') {
       for (const item of items) {
+        // Materialize master opening stock into a real transaction/ledger row
+        // when this warehouse has no stock record yet (and it's the material's
+        // default warehouse). Keeps the ledger consistent after issuing.
+        await ensureOpeningStockSeeded(conn, { warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
         const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
         const requested = parseFloat(item.issue_qty) || 0;
         if (requested > info.available_qty + 0.000001) {
@@ -202,6 +206,7 @@ export async function update(id, data, items = [], updatedBy = null) {
     // If posting, validate stock and compute costs
     if (newStatus === 'Posted') {
       for (const item of items) {
+        await ensureOpeningStockSeeded(conn, { warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
         const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
         const requested = parseFloat(item.issue_qty) || 0;
         if (requested > info.available_qty + 0.000001) {
