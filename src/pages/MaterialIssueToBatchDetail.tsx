@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Plus, Trash2, Factory, RotateCcw, Info, Minus, Send } from 'lucide-react';
@@ -66,6 +66,7 @@ const emptyIssue: IssueData = {
 
 let _kc = 0;
 const genKey = () => `row_${++_kc}_${Date.now()}`;
+const NEW_ISSUE_DRAFT_KEY = 'material-issue-new-draft-v1';
 
 export default function MaterialIssueToBatchDetail() {
   const { id } = useParams<{ id: string }>();
@@ -94,6 +95,9 @@ export default function MaterialIssueToBatchDetail() {
   const [posting, setPosting] = useState(false);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [focusedNewRow, setFocusedNewRow] = useState<string | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftStatus, setDraftStatus] = useState('');
+  const automaticSaveInFlight = useRef(false);
 
   const fetchWarehouses = useCallback(async () => {
     try { const res = await api<{ data: Warehouse[] }>('/warehouses/dropdown'); setWarehouses(res.data || []); }
@@ -187,6 +191,51 @@ export default function MaterialIssueToBatchDetail() {
 
   useEffect(() => { fetchWarehouses(); fetchPlans(); fetchStages(); fetchDepartments(); fetchMaterials(); fetchIssue(); }, [fetchWarehouses, fetchPlans, fetchStages, fetchDepartments, fetchMaterials, fetchIssue]);
   useEffect(() => { if (issue.warehouse_id) fetchStock(issue.warehouse_id); }, [issue.warehouse_id, fetchStock]);
+
+  // A new issue may be entered before every mandatory header field is known,
+  // so persist it locally as a draft rather than creating an incomplete server
+  // record. This draft has no stock impact and survives a browser refresh.
+  useEffect(() => {
+    if (!isNew) { setDraftReady(true); return; }
+    try {
+      const raw = localStorage.getItem(NEW_ISSUE_DRAFT_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved?.issue && Array.isArray(saved?.items)) {
+          // The server always supplies the current issue number; a restored
+          // browser draft must never bring back an obsolete number.
+          const { issue_no: _savedIssueNo, ...savedIssue } = saved.issue as IssueData;
+          setIssue((prev) => ({ ...prev, ...savedIssue }));
+          setItems(saved.items.length
+            ? saved.items.map((item: Item) => ({ ...emptyItem, ...item, _key: genKey() }))
+            : [{ ...emptyItem, _key: genKey() }]);
+          setDraftStatus('Unsaved draft restored');
+        }
+      }
+    } catch {
+      // A malformed/old browser draft should never stop a user starting an issue.
+      localStorage.removeItem(NEW_ISSUE_DRAFT_KEY);
+    } finally {
+      setDraftReady(true);
+    }
+  }, [isNew]);
+
+  useEffect(() => {
+    if (!isNew || !draftReady) return;
+    const hasWork = items.length > 1 || items.some((item) => item.material_id || item.issue_qty || item.unit_cost)
+      || Boolean(issue.warehouse_id || issue.article || issue.department || issue.remarks);
+    if (!hasWork) {
+      localStorage.removeItem(NEW_ISSUE_DRAFT_KEY);
+      setDraftStatus('');
+      return;
+    }
+    try {
+      localStorage.setItem(NEW_ISSUE_DRAFT_KEY, JSON.stringify({ issue, items, saved_at: new Date().toISOString() }));
+      setDraftStatus(`Auto-saved locally at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`);
+    } catch {
+      setDraftStatus('Could not save browser draft');
+    }
+  }, [isNew, draftReady, issue, items]);
 
   // When the warehouse changes, refresh available stock + rate for every already
   // selected item so the "Insufficient Stock" check uses real balances.
@@ -447,7 +496,11 @@ export default function MaterialIssueToBatchDetail() {
     if (focusNewRow) setFocusedNewRow(newItem._key);
   };
   const removeItem = (key: string) => setItems((p) => p.length > 1 ? p.filter((it) => it._key !== key) : p);
-  const handleClear = () => { setIssue(emptyIssue); setItems([{ ...emptyItem, _key: genKey() }]); };
+  const clearLocalDraft = () => {
+    localStorage.removeItem(NEW_ISSUE_DRAFT_KEY);
+    setDraftStatus('');
+  };
+  const handleClear = () => { clearLocalDraft(); setIssue(emptyIssue); setItems([{ ...emptyItem, _key: genKey() }]); };
 
   const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, key: string, field: 'issue_qty' | 'unit_cost') => {
     if (event.key !== 'Enter') return;
@@ -484,6 +537,46 @@ export default function MaterialIssueToBatchDetail() {
   const totalOtherCharges = loadingUnloading + otherCharges;
   const grandTotal = totalCost + totalOtherCharges;
 
+  // Once the minimum server requirements are present, turn the browser draft
+  // into a real database Draft. Subsequent edits are saved to that same Draft.
+  // Posting remains a separate explicit action and is the only stock movement.
+  useEffect(() => {
+    const validItems = items.filter((item) => item.material_id && item.issue_qty);
+    if (loading || saving || isPosted || !issue.warehouse_id || !issue.issue_date || !validItems.length) return;
+
+    const timer = window.setTimeout(async () => {
+      if (automaticSaveInFlight.current) return;
+      automaticSaveInFlight.current = true;
+      setDraftStatus('Saving draft to server…');
+      const payload = {
+        ...issue, status: 'Draft', warehouse_id: Number(issue.warehouse_id), batch_qty: parseFloat(issue.batch_qty) || 0,
+        loading_unloading: loadingUnloading, other_charges: otherCharges,
+        total_material_cost: totalCost, grand_total: grandTotal,
+        items: validItems.map((item) => ({
+          material_id: Number(item.material_id), uom: item.uom,
+          required_qty: parseFloat(item.required_qty) || 0, issue_qty: parseFloat(item.issue_qty) || 0,
+          unit_cost: parseFloat(item.unit_cost) || 0, amount: item.amount, remarks: item.remarks || null,
+        })),
+      };
+      try {
+        if (isNew) {
+          const res = await api<{ data: { id: number }; message: string }>('/material-issues', { method: 'POST', body: JSON.stringify(payload) });
+          clearLocalDraft();
+          setDraftStatus('Draft saved to server');
+          navigate(`/material-issue/${res.data.id}`, { replace: true });
+        } else if (id) {
+          await api(`/material-issues/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          setDraftStatus(`Draft saved to server at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`);
+        }
+      } catch {
+        setDraftStatus('Could not save server draft — browser draft is safe');
+      } finally {
+        automaticSaveInFlight.current = false;
+      }
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [id, isNew, issue, items, loading, saving, isPosted, loadingUnloading, otherCharges, totalCost, grandTotal, navigate]);
+
   const handleSave = async () => {
     if (!issue.warehouse_id) { toast.error('Warehouse is required'); return; }
     if (!issue.issue_date) { toast.error('Issue date is required'); return; }
@@ -510,6 +603,7 @@ export default function MaterialIssueToBatchDetail() {
       if (isNew) {
         const res = await api<{ data: { id: number; issue_no: string }; message: string }>('/material-issues', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Material issue saved as Draft!');
+        clearLocalDraft();
         navigate(`/material-issue/${res.data.id}`);
       } else {
         const res = await api(`/material-issues/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -537,6 +631,7 @@ export default function MaterialIssueToBatchDetail() {
       };
       await api(`/material-issues/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
       toast.success('Material issue posted successfully!');
+      clearLocalDraft();
       setIsPosted(true);
       setShowPostConfirm(false);
     } catch (err) { toast.error('Failed to post: ' + (err as Error).message); }
@@ -641,6 +736,7 @@ export default function MaterialIssueToBatchDetail() {
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2><button type="button" onClick={importPreviousIssue} className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">Import from Previous Issue</button>
             <span className="hidden lg:inline text-[11px] text-gray-500">Enter moves forward · Enter on cost adds a row · Ctrl + Enter adds a row</span>
+            {draftStatus && <span className={`hidden xl:inline text-[11px] font-medium ${draftStatus.startsWith('Could not') ? 'text-rose-600' : 'text-emerald-600'}`}>{draftStatus}</span>}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => addItem(true)} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
