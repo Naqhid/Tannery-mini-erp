@@ -40,6 +40,7 @@ export default function MachineCostForm() {
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [machines, setMachines] = useState<MachineOption[]>([]);
+  const [focusedNewLine, setFocusedNewLine] = useState<number | null>(null);
   const isPosted = formData.status === 'Posted';
   // Cost cannot be entered without output quantity.
   const outputZero = (Number(formData.output_qty) || 0) <= 0;
@@ -156,7 +157,18 @@ export default function MachineCostForm() {
     setFormData(prev => ({ ...prev, items, total_amount: totalAmount, total_cost_per_piece: totalCostPerPiece }));
   }, [formData.output_qty]);
 
-  const addLine = () => recalculate([...formData.items, { machine_name: '', machine_id: 0, group_id: null, group_name: '', uom: '', total_qty: 0, cost_per_uom: 0, amount: 0, cost_per_piece: 0, remarks: '' }]);
+  const focusGridField = (index: number, field: 'machine' | 'quantity' | 'remarks') => {
+    requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(`[data-grid-field="machine-cost-${index}-${field}"]`);
+      target?.focus({ preventScroll: true });
+      target?.closest('tr')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  const addLine = (focusNewLine = false) => {
+    recalculate([...formData.items, { machine_name: '', machine_id: 0, group_id: null, group_name: '', uom: '', total_qty: 0, cost_per_uom: 0, amount: 0, cost_per_piece: 0, remarks: '' }]);
+    if (focusNewLine) setFocusedNewLine(formData.items.length);
+  };
   const removeLine = (index: number) => recalculate(formData.items.filter((_, i) => i !== index));
 
   // Recompute a row's amount and cost/piece from total_qty, cost_per_uom and output.
@@ -194,7 +206,31 @@ export default function MachineCostForm() {
     }
 
     recalculate(items);
+    if (field === 'machine_id' && value) focusGridField(index, 'quantity');
   };
+
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number, field: 'quantity' | 'remarks') => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (field === 'quantity') focusGridField(index, 'remarks');
+    else addLine(true);
+  };
+
+  useEffect(() => {
+    if (focusedNewLine === null) return;
+    focusGridField(focusedNewLine, 'machine');
+    setFocusedNewLine(null);
+  }, [focusedNewLine, formData.items]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (isPosted || outputZero || !canWrite || !(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
+      event.preventDefault();
+      addLine(true);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [isPosted, outputZero, canWrite, formData.items]);
 
   const handleSave = async () => {
     if (!formData.production_plan_id) { toast.error('No production plan linked'); return; }
@@ -271,9 +307,9 @@ export default function MachineCostForm() {
 
       {/* Machine Cost Table */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/50">
-          <h2 className="text-sm md:text-base font-bold text-gray-900">Machine Cost (Per Pc)</h2>
-          {!isPosted && canWrite && <button onClick={addLine} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={14} /> Add Line</button>}
+        <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/95 backdrop-blur">
+          <div><h2 className="text-sm md:text-base font-bold text-gray-900">Machine Cost (Per Pc)</h2><p className="hidden lg:block text-[11px] text-gray-500 mt-0.5">Enter moves forward · Enter on remarks adds a line · Ctrl + Enter adds a line</p></div>
+          {!isPosted && canWrite && <button onClick={() => addLine(true)} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={14} /> Add Line</button>}
         </div>
         {!isPosted && outputZero && (
           <div className="px-4 md:px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-xs font-medium text-amber-700">
@@ -282,7 +318,7 @@ export default function MachineCostForm() {
         )}
 
         {/* Desktop Table */}
-        <div className="hidden md:block overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto" onFocusCapture={(event) => event.target.closest('tr')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
           <table className="w-full">
             <thead><tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase w-10">#</th>
@@ -300,16 +336,16 @@ export default function MachineCostForm() {
               {formData.items.length === 0 ? (
                 <tr><td colSpan={isPosted ? 9 : 10} className="px-4 py-12 text-center"><div className="text-gray-400"><Plus size={32} className="mx-auto mb-2 opacity-40" /><p className="text-sm font-medium">No machines added</p><p className="text-xs mt-0.5">Click "+ Add Line" to start.</p></div></td></tr>
               ) : formData.items.map((item, idx) => (
-                <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30`}>
+                <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30 focus-within:bg-blue-50/60`}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-400">{idx + 1}</td>
                   <td className="px-4 py-3"><span className="text-sm text-gray-700">{item.group_name || '—'}</span></td>
-                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-medium text-gray-900">{item.machine_name}</span> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} addNewPath="/cost-components/new" addNewLabel="Add Cost Component" onRefresh={loadMachines} />}</td>
+                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-medium text-gray-900">{item.machine_name}</span> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} addNewPath="/cost-components/new" addNewLabel="Add Cost Component" onRefresh={loadMachines} autoFocus={focusedNewLine === idx} dataGridField={`machine-cost-${idx}-machine`} />}</td>
                   <td className="px-4 py-3"><span className="text-sm text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100 inline-block">{item.uom || '—'}</span></td>
-                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{item.total_qty || 0}</span> : <input type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} placeholder="0.00" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />}</td>
+                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{item.total_qty || 0}</span> : <input data-grid-field={`machine-cost-${idx}-quantity`} type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} onKeyDown={e => handleGridKeyDown(e, idx, 'quantity')} placeholder="0.00" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />}</td>
                   <td className="px-4 py-3"><span className="text-sm font-medium text-gray-700 block text-right tabular-nums">{formatCurrency(item.cost_per_uom)}</span></td>
                   <td className="px-4 py-3"><span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span></td>
                   <td className="px-4 py-3"><span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.cost_per_piece)}</span></td>
-                  <td className="px-4 py-3">{isPosted ? <span className="text-sm text-gray-600">{item.remarks || '—'}</span> : <input type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} placeholder="Optional" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" />}</td>
+                  <td className="px-4 py-3">{isPosted ? <span className="text-sm text-gray-600">{item.remarks || '—'}</span> : <input data-grid-field={`machine-cost-${idx}-remarks`} type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} onKeyDown={e => handleGridKeyDown(e, idx, 'remarks')} placeholder="Optional" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" />}</td>
                   {!isPosted && canWrite && <td className="px-4 py-3 text-center"><button onClick={() => removeLine(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button></td>}
                 </tr>
               ))}
@@ -387,4 +423,3 @@ export default function MachineCostForm() {
     </div>
   );
 }
-

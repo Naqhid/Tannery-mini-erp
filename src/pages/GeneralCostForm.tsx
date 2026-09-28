@@ -98,6 +98,7 @@ export default function GeneralCostForm() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [costComponents, setCostComponents] = useState<CostComponentOption[]>([]);
   const [processStages, setProcessStages] = useState<{ id: number; name: string }[]>([]);
+  const [focusedNewLine, setFocusedNewLine] = useState<number | null>(null);
   const isPosted = formData.status === 'Posted';
   // Cost cannot be entered without output quantity.
   const outputZero = (Number(formData.output_qty) || 0) <= 0;
@@ -241,9 +242,18 @@ export default function GeneralCostForm() {
     }));
   }, []);
 
-  const addLine = () => {
+  const focusGridField = (index: number, field: 'category' | 'quantity' | 'remarks') => {
+    requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(`[data-grid-field="general-cost-${index}-${field}"]`);
+      target?.focus({ preventScroll: true });
+      target?.closest('tr')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  const addLine = (focusNewLine = false) => {
     const newItem: CostItem = { cost_category: '', cost_category_id: 0, group_name: '', uom: 'Sq.Ft.', total_qty: 0, cost_per_uom: 0, amount: 0, cost_per_piece: 0, remarks: '' };
     recalculate([...formData.items, newItem]);
+    if (focusNewLine) setFocusedNewLine(formData.items.length);
   };
 
   const removeLine = (index: number) => {
@@ -286,7 +296,31 @@ export default function GeneralCostForm() {
     }
 
     recalculate(items);
+    if (field === 'cost_category_id' && value) focusGridField(index, 'quantity');
   };
+
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number, field: 'quantity' | 'remarks') => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (field === 'quantity') focusGridField(index, 'remarks');
+    else addLine(true);
+  };
+
+  useEffect(() => {
+    if (focusedNewLine === null) return;
+    focusGridField(focusedNewLine, 'category');
+    setFocusedNewLine(null);
+  }, [focusedNewLine, formData.items]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (isPosted || outputZero || !canWrite || !(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
+      event.preventDefault();
+      addLine(true);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [isPosted, outputZero, canWrite, formData.items]);
 
   const handleSave = async () => {
     if (!formData.production_plan_id) {
@@ -491,10 +525,10 @@ export default function GeneralCostForm() {
 
       {/* Cost Components */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/50">
-          <h2 className="text-sm md:text-base font-bold text-gray-900">Cost Components (Per Pc)</h2>
+        <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/95 backdrop-blur">
+          <div><h2 className="text-sm md:text-base font-bold text-gray-900">Cost Components (Per Pc)</h2><p className="hidden lg:block text-[11px] text-gray-500 mt-0.5">Enter moves forward · Enter on remarks adds a line · Ctrl + Enter adds a line</p></div>
           {!isPosted && canWrite && (
-            <button onClick={addLine} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={() => addLine(true)} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
               <Plus size={14} /> Add Line
             </button>
           )}
@@ -506,7 +540,7 @@ export default function GeneralCostForm() {
         )}
 
         {/* Desktop Table (hidden on mobile) */}
-        <div className="hidden md:block overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto" onFocusCapture={(event) => event.target.closest('tr')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -535,7 +569,7 @@ export default function GeneralCostForm() {
                 </tr>
               ) : (
                 formData.items.map((item, idx) => (
-                  <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30`}>
+                  <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30 focus-within:bg-blue-50/60`}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-400">{idx + 1}</td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-700">{item.group_name || '—'}</span>
@@ -553,6 +587,8 @@ export default function GeneralCostForm() {
                           addNewPath="/cost-components/new"
                           addNewLabel="Add Cost Component"
                           onRefresh={loadCostComponents}
+                          autoFocus={focusedNewLine === idx}
+                          dataGridField={`general-cost-${idx}-category`}
                         />
                       )}
                     </td>
@@ -561,7 +597,7 @@ export default function GeneralCostForm() {
                     </td>
                     <td className="px-4 py-3">
                       {isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{item.total_qty || 0}</span> : (
-                        <input type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} placeholder="0.00"
+                        <input data-grid-field={`general-cost-${idx}-quantity`} type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} onKeyDown={e => handleGridKeyDown(e, idx, 'quantity')} placeholder="0.00"
                           className="w-24 px-2 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
                       )}
                     </td>
@@ -576,7 +612,7 @@ export default function GeneralCostForm() {
                     </td>
                     <td className="px-4 py-3">
                       {isPosted ? <span className="text-sm text-gray-600">{item.remarks || '—'}</span> : (
-                        <input type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} placeholder="Optional"
+                        <input data-grid-field={`general-cost-${idx}-remarks`} type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} onKeyDown={e => handleGridKeyDown(e, idx, 'remarks')} placeholder="Optional"
                           className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white" />
                       )}
                     </td>
