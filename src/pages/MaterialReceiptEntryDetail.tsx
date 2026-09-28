@@ -145,9 +145,9 @@ export default function MaterialReceiptEntryDetail() {
         primary_uom_qty: String(it.primary_uom_qty || ''),
         secondary_uom_qty: String(it.secondary_uom_qty || ''),
         currency: it.currency || 'INR',
-        exchange_rate: String(it.exchange_rate || '1'),
-        rate_fc: String(it.rate_fc || it.rate || ''),
-        rate_inr: parseFloat(it.rate_inr) || 0,
+        exchange_rate: (it.currency || 'INR') === 'INR' ? '' : String(it.exchange_rate || '1'),
+        rate_fc: (it.currency || 'INR') === 'INR' ? '' : String(it.rate_fc || it.rate || ''),
+        rate_inr: parseFloat(it.rate_inr) || parseFloat(it.rate) || 0,
         amount_fc: parseFloat(it.amount_fc) || 0,
         amount_inr: parseFloat(it.amount_inr) || parseFloat(it.amount) || 0,
         expiry_date: it.expiry_date?.split('T')[0] || '',
@@ -185,7 +185,12 @@ export default function MaterialReceiptEntryDetail() {
           updated.primary_uom = (mat as any).primary_uom_name || mat.uom || '';
           updated.secondary_uom = (mat as any).secondary_uom_name || '';
           updated.currency = (mat as any).currency || 'INR';
-          updated.exchange_rate = updated.currency === 'INR' ? '1' : updated.exchange_rate;
+          if (updated.currency === 'INR') {
+            updated.exchange_rate = '';
+            updated.rate_fc = '';
+          } else if (!updated.exchange_rate) {
+            updated.exchange_rate = '1';
+          }
           // Auto-fill GST% from the material's group (editable afterwards).
           const gstRate = mat.group_gst_rate;
           if (gstRate != null && gstRate !== '') {
@@ -194,12 +199,24 @@ export default function MaterialReceiptEntryDetail() {
         }
       }
       // Recalculate derived values
-      const rateFc = parseFloat(updated.rate_fc) || 0;
-      const exchangeRate = parseFloat(updated.exchange_rate) || 1;
+      const isINR = (updated.currency || 'INR') === 'INR';
       const primaryQty = parseFloat(updated.primary_uom_qty) || 0;
-      updated.rate_inr = parseFloat((rateFc * exchangeRate).toFixed(4));
-      updated.amount_fc = parseFloat((primaryQty * rateFc).toFixed(4));
-      updated.amount_inr = parseFloat((updated.amount_fc * exchangeRate).toFixed(4));
+      if (isINR) {
+        // For INR: exchange rate / rate(FC) / amount(FC) are not applicable.
+        // Rate(INR) is entered directly and Amount(INR) = Rate(INR) * Primary Qty.
+        updated.exchange_rate = '';
+        updated.rate_fc = '';
+        updated.amount_fc = 0;
+        const rateInr = parseFloat(String(updated.rate_inr)) || 0;
+        updated.rate_inr = rateInr;
+        updated.amount_inr = parseFloat((rateInr * primaryQty).toFixed(4));
+      } else {
+        const rateFc = parseFloat(updated.rate_fc) || 0;
+        const exchangeRate = parseFloat(updated.exchange_rate) || 1;
+        updated.rate_inr = parseFloat((rateFc * exchangeRate).toFixed(4));
+        updated.amount_fc = parseFloat((primaryQty * rateFc).toFixed(4));
+        updated.amount_inr = parseFloat((updated.rate_inr * primaryQty).toFixed(4));
+      }
       return updated;
     }));
   };
@@ -460,17 +477,27 @@ export default function MaterialReceiptEntryDetail() {
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700 font-medium">{item.currency || 'INR'}</td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.exchange_rate}
+                    <input type="number" value={item.currency === 'INR' ? '' : item.exchange_rate}
                       onChange={(e) => updateItem(item._key, 'exchange_rate', e.target.value)}
-                      readOnly={item.currency === 'INR'}
-                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[70px] text-right ${item.currency === 'INR' ? 'bg-gray-100' : ''}`} placeholder="1.00" />
+                      readOnly={item.currency === 'INR'} disabled={item.currency === 'INR'}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[70px] text-right ${item.currency === 'INR' ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder={item.currency === 'INR' ? '' : '1.00'} />
                   </td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.rate_fc} onChange={(e) => updateItem(item._key, 'rate_fc', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
+                    <input type="number" value={item.currency === 'INR' ? '' : item.rate_fc}
+                      onChange={(e) => updateItem(item._key, 'rate_fc', e.target.value)}
+                      readOnly={item.currency === 'INR'} disabled={item.currency === 'INR'}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right ${item.currency === 'INR' ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder={item.currency === 'INR' ? '' : '0.00'} />
                   </td>
-                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.rate_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount_fc || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2.5 px-3">
+                    {item.currency === 'INR' ? (
+                      <input type="number" value={item.rate_inr || ''}
+                        onChange={(e) => updateItem(item._key, 'rate_inr', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
+                    ) : (
+                      <span className="block text-xs font-bold text-gray-700 text-right">{(item.rate_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{item.currency === 'INR' ? '' : (item.amount_fc || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3 text-xs font-bold text-teal-700 text-right">{(item.amount_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
