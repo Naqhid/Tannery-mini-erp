@@ -93,7 +93,7 @@ export default function MaterialIssueToBatchDetail() {
   const [isPosted, setIsPosted] = useState(false);
   const [posting, setPosting] = useState(false);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
-  const [searchItem, setSearchItem] = useState('');
+  const [focusedNewRow, setFocusedNewRow] = useState<string | null>(null);
 
   const fetchWarehouses = useCallback(async () => {
     try { const res = await api<{ data: Warehouse[] }>('/warehouses/dropdown'); setWarehouses(res.data || []); }
@@ -370,6 +370,14 @@ export default function MaterialIssueToBatchDetail() {
     }
   };
 
+  const focusGridField = (key: string, field: 'item' | 'issue_qty' | 'unit_cost') => {
+    requestAnimationFrame(() => {
+      const selector = `[data-grid-field="${key}-${field}"]`;
+      document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+      document.querySelector<HTMLElement>(selector)?.closest('tr')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
   const handleMaterialChange = async (key: string, materialId: string) => {
     const material = materials.find((m) => String(m.id) === materialId);
     setItems((prev) => prev.map((it) => it._key !== key ? it : ({
@@ -381,7 +389,10 @@ export default function MaterialIssueToBatchDetail() {
       uom: material?.primary_uom_name || material?.primary_uom || material?.uom || '',
       unit_cost: '', amount: 0, available_qty: 0, stock_error: '',
     })));
-    if (!materialId || !issue.warehouse_id) return;
+    if (!materialId || !issue.warehouse_id) {
+      if (materialId) focusGridField(key, 'issue_qty');
+      return;
+    }
     try {
       const info = await api<{ data: { available_qty: number; avg_rate: number } }>(`/material-issues/item-info/${materialId}?warehouse_id=${issue.warehouse_id}&date=${issue.issue_date}`);
       setItems((prev) => prev.map((it) => it._key !== key ? it : ({
@@ -392,6 +403,7 @@ export default function MaterialIssueToBatchDetail() {
         stock_error: '',
       })));
     } catch { toast.error('Unable to fetch current average rate'); }
+    finally { focusGridField(key, 'issue_qty'); }
   };
 
   const importPreviousIssue = async () => {
@@ -429,9 +441,39 @@ export default function MaterialIssueToBatchDetail() {
     }));
   };
 
-  const addItem = () => setItems((p) => [...p, { ...emptyItem, _key: genKey() }]);
+  const addItem = (focusNewRow = false) => {
+    const newItem = { ...emptyItem, _key: genKey() };
+    setItems((p) => [...p, newItem]);
+    if (focusNewRow) setFocusedNewRow(newItem._key);
+  };
   const removeItem = (key: string) => setItems((p) => p.length > 1 ? p.filter((it) => it._key !== key) : p);
   const handleClear = () => { setIssue(emptyIssue); setItems([{ ...emptyItem, _key: genKey() }]); };
+
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, key: string, field: 'issue_qty' | 'unit_cost') => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (field === 'issue_qty') {
+      focusGridField(key, 'unit_cost');
+    } else {
+      addItem(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!focusedNewRow) return;
+    focusGridField(focusedNewRow, 'item');
+    setFocusedNewRow(null);
+  }, [focusedNewRow, items]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (isPosted || !(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
+      event.preventDefault();
+      addItem(true);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [isPosted]);
 
   const totalItems = items.filter((i) => i.material_id).length;
   const totalRequiredQty = items.reduce((s, i) => s + (parseFloat(i.required_qty) || 0), 0);
@@ -595,21 +637,13 @@ export default function MaterialIssueToBatchDetail() {
 
       {/* Section 2: Item Details */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/30">
+        <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/95 backdrop-blur">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide">2. Item Details</h2><button type="button" onClick={importPreviousIssue} className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">Import from Previous Issue</button>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Add Item</span>
-              <div className="relative">
-                <input type="text" value={searchItem} onChange={(e) => setSearchItem(e.target.value)}
-                  placeholder="Search item by code / name"
-                  className="w-64 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pl-8" />
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              </div>
-            </div>
+            <span className="hidden lg:inline text-[11px] text-gray-500">Enter moves forward · Enter on cost adds a row · Ctrl + Enter adds a row</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={addItem} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
+            <button onClick={() => addItem(true)} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
               <Plus size={14} /> Add Row
             </button>
             <button onClick={() => { const last = items[items.length - 1]; if (last && items.length > 1) removeItem(last._key); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all">
@@ -617,7 +651,7 @@ export default function MaterialIssueToBatchDetail() {
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" onFocusCapture={(event) => event.target.closest('tr')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}>
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
@@ -635,16 +669,18 @@ export default function MaterialIssueToBatchDetail() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {items.map((item, idx) => (
-                <tr key={item._key} className="hover:bg-blue-50/30 transition-all">
+                <tr key={item._key} className="hover:bg-blue-50/30 focus-within:bg-blue-50/60 transition-all">
                   <td className="py-2.5 px-3 text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-2.5 px-3 min-w-[320px]">
                     <SearchableSelect
-                      options={materials.map((m) => ({ value: String(m.id), label: m.name }))}
+                      options={materials.map((m) => ({ value: String(m.id), label: m.name, searchText: m.code }))}
                       value={item.material_id}
                       onChange={(val) => handleMaterialChange(item._key, val)}
                       placeholder="Search item..."
                       addNewPath="/chemical-master/new"
                       addNewLabel="Add Material"
+                      autoFocus={focusedNewRow === item._key}
+                      dataGridField={`${item._key}-item`}
                     />
                   </td>
                   <td className="py-2.5 px-3 text-xs text-gray-700">{item.material_code || '-'}</td>
@@ -657,14 +693,14 @@ export default function MaterialIssueToBatchDetail() {
                       className={`w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-right ${!hasBOM ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`} placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.issue_qty} onChange={(e) => updateItem(item._key, 'issue_qty', e.target.value)}
+                    <input data-grid-field={`${item._key}-issue_qty`} type="number" value={item.issue_qty} onChange={(e) => updateItem(item._key, 'issue_qty', e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, item._key, 'issue_qty')}
                       className={`w-16 px-2 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 text-right ${item.stock_error ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500 bg-red-50' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`} placeholder="0.00" />
                     {item.stock_error && (
                       <div className="mt-1 text-[10px] text-red-600 font-medium leading-tight whitespace-pre-line">{item.stock_error}</div>
                     )}
                   </td>
                   <td className="py-2.5 px-3">
-                    <input type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)}
+                    <input data-grid-field={`${item._key}-unit_cost`} type="number" value={item.unit_cost} onChange={(e) => updateItem(item._key, 'unit_cost', e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, item._key, 'unit_cost')}
                       className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-right" placeholder="0.00" />
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>

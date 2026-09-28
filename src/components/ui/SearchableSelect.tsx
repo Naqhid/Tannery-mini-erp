@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, ChevronDown, X, Plus, RefreshCw } from 'lucide-react';
 
 interface Option {
   value: string;
   label: string;
+  searchText?: string;
 }
 
 interface SearchableSelectProps {
@@ -19,9 +20,13 @@ interface SearchableSelectProps {
   addNewLabel?: string;
   /** When set, shows a refresh button that re-fetches the dropdown's options. */
   onRefresh?: () => void | Promise<void>;
+  /** Focus the closed select after it is mounted (useful for fast row entry). */
+  autoFocus?: boolean;
+  /** Optional identifier used by parent grids to move focus programmatically. */
+  dataGridField?: string;
 }
 
-export default function SearchableSelect({ options, value, onChange, placeholder = 'Search...', disabled = false, addNewPath, addNewLabel = 'Add New', onRefresh }: SearchableSelectProps) {
+const SearchableSelect = forwardRef<HTMLButtonElement, SearchableSelectProps>(function SearchableSelect({ options, value, onChange, placeholder = 'Search...', disabled = false, addNewPath, addNewLabel = 'Add New', onRefresh, autoFocus = false, dataGridField }, forwardedRef) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -29,11 +34,12 @@ export default function SearchableSelect({ options, value, onChange, placeholder
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const selectedOption = options.find(o => o.value === value);
 
   const filtered = search.trim()
-    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+    ? options.filter(o => `${o.label} ${o.searchText || ''}`.toLowerCase().includes(search.toLowerCase()))
     : options;
 
   const DROPDOWN_HEIGHT = 240; // max-h-60 = 240px
@@ -81,11 +87,43 @@ export default function SearchableSelect({ options, value, onChange, placeholder
     }
   }, [open, updatePosition]);
 
+  useEffect(() => {
+    if (autoFocus && !disabled) {
+      requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }, [autoFocus, disabled]);
+
+  const setTriggerRef = (node: HTMLButtonElement | null) => {
+    triggerRef.current = node;
+    if (typeof forwardedRef === 'function') forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  };
+
+  const selectFirstMatch = () => {
+    if (filtered.length === 1) {
+      onChange(filtered[0].value);
+      setOpen(false);
+      setSearch('');
+    }
+  };
+
   return (
     <div ref={containerRef} className="relative">
       {/* Display / trigger */}
-      <div
+      <button
+        ref={setTriggerRef}
+        data-grid-field={dataGridField}
+        type="button"
+        disabled={disabled}
         onClick={() => { if (!disabled) { setOpen(!open); setSearch(''); } }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSearch('');
+            setOpen(true);
+          }
+        }}
         className={`w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white flex items-center justify-between cursor-pointer hover:border-blue-300 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${open ? 'ring-2 ring-blue-500/20 border-blue-500' : ''}`}
       >
         <span className={`truncate ${selectedOption ? 'text-gray-900' : 'text-gray-400'}`}>
@@ -102,7 +140,7 @@ export default function SearchableSelect({ options, value, onChange, placeholder
           )}
           <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
-      </div>
+      </button>
 
       {/* Dropdown rendered via portal to avoid nested scroll issues */}
       {open && createPortal(
@@ -128,6 +166,10 @@ export default function SearchableSelect({ options, value, onChange, placeholder
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); selectFirstMatch(); }
+                    if (e.key === 'Escape') { e.preventDefault(); setOpen(false); triggerRef.current?.focus(); }
+                  }}
                   placeholder="Type to search..."
                   className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:border-blue-400"
                 />
@@ -186,4 +228,8 @@ export default function SearchableSelect({ options, value, onChange, placeholder
       )}
     </div>
   );
-}
+});
+
+SearchableSelect.displayName = 'SearchableSelect';
+
+export default SearchableSelect;
