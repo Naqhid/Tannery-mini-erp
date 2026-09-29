@@ -80,6 +80,9 @@ export async function getNextCode() {
 
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
+  const openingStock = Number(data.opening_stock) || 0;
+  const rate = Number(data.rate) || 0;
+  const openingStockValue = Number((openingStock * rate).toFixed(2));
 
   // Always resolve UOM name from primary_uom_id
   let uomText = data.uom || '';
@@ -93,11 +96,11 @@ export async function create(data, createdBy = null) {
       code, name, type, uom, primary_uom_id, secondary_uom_id, currency,
       category, chemical_group, group_id, appearance, color,
       ph_value, flash_point, hsn_code, cas_number, shelf_life, storage_condition,
-      hazardous, default_warehouse, opening_stock, opening_stock_uom, current_stock,
-      reorder_level, maximum_level, standard_cost, last_purchase_price,
+      hazardous, default_warehouse, opening_stock, opening_stock_value, opening_stock_uom, current_stock,
+      reorder_level, maximum_level, standard_cost, last_purchase_price, rate,
       preferred_supplier_id, lead_time, description, application, remarks,
       attachment_path, status, created_by
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       code,
       data.name,
@@ -119,13 +122,15 @@ export async function create(data, createdBy = null) {
       data.storage_condition || null,
       data.hazardous ? 1 : 0,
       data.default_warehouse || null,
-      data.opening_stock || 0,
-      data.opening_stock_uom || null,
-      data.opening_stock || 0,
+      openingStock,
+      openingStockValue,
+      data.opening_stock_uom || uomText || null,
+      openingStock,
       data.reorder_level || 0,
       data.maximum_level || 0,
       data.standard_cost || 0,
       data.last_purchase_price || 0,
+      rate,
       data.preferred_supplier_id || null,
       data.lead_time || null,
       data.description || null,
@@ -147,6 +152,10 @@ export async function create(data, createdBy = null) {
 }
 
 export async function update(id, data, updatedBy = null) {
+  const openingStock = Number(data.opening_stock) || 0;
+  const rate = data.rate == null ? null : Number(data.rate) || 0;
+  const openingRate = rate ?? (Number(data.last_purchase_price) || 0);
+  const openingStockValue = Number((openingStock * openingRate).toFixed(2));
   // Always resolve UOM name from primary_uom_id
   let uomText = data.uom || '';
   if (data.primary_uom_id) {
@@ -159,8 +168,8 @@ export async function update(id, data, updatedBy = null) {
       name=?, type=?, uom=?, primary_uom_id=?, secondary_uom_id=?, currency=?,
       category=?, chemical_group=?, group_id=?, appearance=?, color=?,
       ph_value=?, flash_point=?, hsn_code=?, cas_number=?, shelf_life=?, storage_condition=?,
-      hazardous=?, default_warehouse=?, opening_stock=?, opening_stock_uom=?,
-      reorder_level=?, maximum_level=?, standard_cost=?, last_purchase_price=?,
+      hazardous=?, default_warehouse=?, opening_stock=?, opening_stock_value=?, opening_stock_uom=?,
+      reorder_level=?, maximum_level=?, standard_cost=?, last_purchase_price=?, rate=COALESCE(?, rate),
       preferred_supplier_id=?, lead_time=?, description=?, application=?, remarks=?,
       attachment_path=?, status=?, updated_by=?
      WHERE id=?`,
@@ -184,12 +193,14 @@ export async function update(id, data, updatedBy = null) {
       data.storage_condition || null,
       data.hazardous ? 1 : 0,
       data.default_warehouse || null,
-      data.opening_stock || 0,
-      data.opening_stock_uom || null,
+      openingStock,
+      openingStockValue,
+      data.opening_stock_uom || uomText || null,
       data.reorder_level || 0,
       data.maximum_level || 0,
       data.standard_cost || 0,
       data.last_purchase_price || 0,
+      rate,
       data.preferred_supplier_id || null,
       data.lead_time || null,
       data.description || null,

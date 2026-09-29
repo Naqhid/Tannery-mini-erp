@@ -34,6 +34,7 @@ interface MaterialData {
   default_warehouse: string;
   opening_stock: string;
   opening_stock_uom: string;
+  rate: string;
   standard_cost: string;
   current_stock: string;
   reorder_level: string;
@@ -52,7 +53,7 @@ const empty: MaterialData = {
   primary_uom_id: '', secondary_uom_id: '', currency: 'INR', chemical_group: '',
   color: '', ph_value: '', flash_point: '', hsn_code: '', hsn_code_display: '', cas_number: '',
   shelf_life: '', storage_condition: '', hazardous: false, default_warehouse: '',
-  opening_stock: '0', opening_stock_uom: '', standard_cost: '0',
+  opening_stock: '0', opening_stock_uom: '', rate: '0', standard_cost: '0',
   current_stock: '0.00', reorder_level: '0.00', maximum_level: '0.00',
   preferred_supplier_id: '', lead_time: '',
   description: '', application: '', remarks: '', attachment_path: '', status: 'Active',
@@ -115,6 +116,7 @@ export default function MaterialMasterForm() {
         hazardous: !!(res.data as any).hazardous,
         opening_stock: String((res.data as any).opening_stock ?? '0'),
         opening_stock_uom: String((res.data as any).opening_stock_uom ?? ''),
+        rate: String((res.data as any).rate ?? '0'),
         standard_cost: String((res.data as any).standard_cost ?? '0'),
         current_stock: String((res.data as any).current_stock ?? '0.00'),
         reorder_level: String((res.data as any).reorder_level ?? '0.00'),
@@ -307,6 +309,14 @@ export default function MaterialMasterForm() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">3. Inventory</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map(w => ({ value: w.name, label: w.name }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
+          <div>
+            <Input label={`Rate (${form.currency || 'INR'})`} type="number" value={form.rate} onChange={(e) => update('rate', e.target.value)} placeholder="0.00" />
+            <p className="mt-1 text-[10px] text-gray-500">Rate per primary UOM; used to prefill Material Receipt.</p>
+          </div>
+          <div>
+            <Input label={`Opening Stock Qty${form.uom ? ` (${form.uom})` : ''}`} type="number" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} placeholder="0.000" />
+            <p className="mt-1 text-[10px] text-gray-500">Opening quantity in the primary UOM.</p>
+          </div>
           <Input label="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
           <Input label="Maximum Level" type="number" value={form.maximum_level} onChange={(e) => update('maximum_level', e.target.value)} placeholder="0.00" />
           <Select label="Preferred Supplier" options={supplierOptions} value={form.preferred_supplier_id} onChange={(e) => update('preferred_supplier_id', e.target.value)} addNewPath="/supplier-master/new" addNewLabel="Add Supplier" />
