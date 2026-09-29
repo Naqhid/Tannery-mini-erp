@@ -13,6 +13,7 @@ import warehouseRoutes from './warehouseRoutes.js';
 import stockOpeningRoutes from './stockOpeningRoutes.js';
 import materialReceiptRoutes from './materialReceiptRoutes.js';
 import stockTransferRoutes from './stockTransferRoutes.js';
+import outboundDeliveryRoutes from './outboundDeliveryRoutes.js';
 import materialIssueRoutes from './materialIssueRoutes.js';
 import stockMaintenanceRoutes from './stockMaintenanceRoutes.js';
 import productionPlanRoutes from './productionPlanRoutes.js';
@@ -75,6 +76,7 @@ router.use('/warehouses', warehouseRoutes);
 router.use('/stock-opening', stockOpeningRoutes);
 router.use('/material-receipts', materialReceiptRoutes);
 router.use('/stock-transfers', stockTransferRoutes);
+router.use('/outbound-deliveries', outboundDeliveryRoutes);
 router.use('/material-issues', materialIssueRoutes);
 router.use('/stock-maintenance', stockMaintenanceRoutes);
 

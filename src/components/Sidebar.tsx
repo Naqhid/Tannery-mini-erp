@@ -16,7 +16,6 @@ import {
   Box,
   FlaskConical,
   Truck,
-  PenTool,
   Layers,
   GitBranch,
   ListChecks,
@@ -25,7 +24,6 @@ import {
   Warehouse,
   ArrowLeftRight,
   Receipt,
-  Plus,
   CheckCircle,
   HardDrive,
   FileSpreadsheet,
@@ -98,6 +96,7 @@ export const menuItems: MenuItem[] = [
       { label: 'Material Receipt Entry', icon: <Truck size={16} />, path: '/material-receipt' },
       { label: 'Material Issue to Production', icon: <Factory size={16} />, path: '/material-issue' },
       { label: 'Stock Transfer Entry', icon: <ArrowLeftRight size={16} />, path: '/stock-transfer' },
+      { label: 'Return to Master', icon: <Package size={16} />, path: '/outbound-delivery' },
       { label: 'Monthly Batch Process', icon: <ClipboardList size={16} />, path: '/monthly-batch-process' },
       { label: 'Inventory Reports', icon: <FileBarChart size={16} />, path: '/reports/inventory' },
       { label: 'Physical Stock Entry', icon: <ClipboardList size={16} />, path: '/physical-stock-entry' },
@@ -129,7 +128,7 @@ export const menuItems: MenuItem[] = [
 export default function Sidebar({ mobileOpen, setMobileOpen, collapsed, setCollapsed }: { mobileOpen: boolean; setMobileOpen: (open: boolean) => void; collapsed: boolean; setCollapsed: (collapsed: boolean) => void }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout } = useAuth();
   const navRef = useRef<HTMLElement>(null);
 
   // Determine which parent groups should be expanded based on current path

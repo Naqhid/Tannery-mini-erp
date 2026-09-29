@@ -317,7 +317,7 @@ export default function MaterialMasterForm() {
             <Input label={`Opening Stock Qty${form.uom ? ` (${form.uom})` : ''}`} type="number" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} placeholder="0.000" />
             <p className="mt-1 text-[10px] text-gray-500">Opening quantity in the primary UOM.</p>
           </div>
-          <Input label="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
+          <Input label={`Minimum Stock${form.uom ? ` (${form.uom})` : ''}`} type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
           <Input label="Maximum Level" type="number" value={form.maximum_level} onChange={(e) => update('maximum_level', e.target.value)} placeholder="0.00" />
           <Select label="Preferred Supplier" options={supplierOptions} value={form.preferred_supplier_id} onChange={(e) => update('preferred_supplier_id', e.target.value)} addNewPath="/supplier-master/new" addNewLabel="Add Supplier" />
           <Input label="Lead Time (Days)" type="number" value={form.lead_time} onChange={(e) => update('lead_time', e.target.value)} placeholder="Enter lead time" />

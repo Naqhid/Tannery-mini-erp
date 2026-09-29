@@ -65,6 +65,8 @@ import MaterialReceiptEntry from './pages/MaterialReceiptEntry';
 import MaterialReceiptEntryDetail from './pages/MaterialReceiptEntryDetail';
 import StockTransferEntry from './pages/StockTransferEntry';
 import StockTransferEntryDetail from './pages/StockTransferEntryDetail';
+import OutboundDelivery from './pages/OutboundDelivery';
+import OutboundDeliveryDetail from './pages/OutboundDeliveryDetail';
 import MaterialIssueToBatch from './pages/MaterialIssueToBatch';
 import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
 // Production Plan Pages
@@ -231,6 +233,9 @@ function App() {
             <Route path="stock-transfer" element={<StockTransferEntry />} />
             <Route path="stock-transfer/new" element={<StockTransferEntryDetail />} />
             <Route path="stock-transfer/:id" element={<StockTransferEntryDetail />} />
+            <Route path="outbound-delivery" element={<OutboundDelivery />} />
+            <Route path="outbound-delivery/new" element={<OutboundDeliveryDetail />} />
+            <Route path="outbound-delivery/:id" element={<OutboundDeliveryDetail />} />
             <Route path="material-issue" element={<MaterialIssueToBatch />} />
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
