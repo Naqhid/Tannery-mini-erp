@@ -427,7 +427,7 @@ async function buildDetailFromSeed(seed) {
          WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
          GROUP BY pso.process_stage COLLATE utf8mb4_unicode_ci
         UNION
-        SELECT ps.name COLLATE utf8mb4_unicode_ci AS stage_name, ps.seq AS min_seq
+        SELECT ps.name COLLATE utf8mb4_unicode_ci AS stage_name, MIN(ps.seq) AS min_seq
           FROM process_stages ps
          WHERE ps.status = 'Active'
          GROUP BY ps.name COLLATE utf8mb4_unicode_ci
