@@ -40,6 +40,7 @@ export default function MachineCostForm() {
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [machines, setMachines] = useState<MachineOption[]>([]);
+  const [processStages, setProcessStages] = useState<{ id: number; name: string }[]>([]);
   const [focusedNewLine, setFocusedNewLine] = useState<number | null>(null);
   const isPosted = formData.status === 'Posted';
   // Cost cannot be entered without output quantity.
@@ -61,6 +62,13 @@ export default function MachineCostForm() {
   }, []);
 
   useEffect(() => { loadMachines(); }, [loadMachines]);
+
+  // Fetch process stages for the Process Stage dropdown
+  useEffect(() => {
+    api<{ data: { id: number; name: string }[] }>('/process-stages/dropdown')
+      .then(res => setProcessStages(res.data || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -301,7 +309,7 @@ export default function MachineCostForm() {
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Planned Qty</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.planned_qty)}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Output Qty</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.output_qty || 0)}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Balance Qty</label><p className={`text-sm md:text-base font-bold tabular-nums ${formData.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{new Intl.NumberFormat('en-IN').format(Math.max(0, formData.planned_qty - formData.output_qty))}</p></div>
-          <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>{isPosted ? <p className="text-xs md:text-sm font-medium text-gray-900">{formData.process_stage}</p> : <select value={formData.process_stage} onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))} className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"><option value="All">All</option><option value="Wet End">Wet End</option><option value="Crust">Crust</option><option value="Finishing">Finishing</option><option value="Packing">Packing</option></select>}</div>
+          <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>{isPosted ? <p className="text-xs md:text-sm font-medium text-gray-900">{formData.process_stage}</p> : <select value={formData.process_stage} onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))} className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"><option value="All">All</option>{formData.process_stage && formData.process_stage !== 'All' && !processStages.some(s => s.name === formData.process_stage) && <option value={formData.process_stage}>{formData.process_stage}</option>}{processStages.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select>}</div>
         </div>
       </div>
 

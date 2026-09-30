@@ -25,6 +25,7 @@ interface Item {
   exchange_rate: string;
   rate_fc: string;
   rate_inr: number;
+  discount_percent: number;
   amount_fc: number;
   amount_inr: number;
   expiry_date: string;
@@ -54,7 +55,7 @@ interface ReceiptData {
   status: string;
 }
 
-const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', primary_uom: '', secondary_uom: '', order_qty: '', primary_uom_qty: '', secondary_uom_qty: '', currency: 'INR', exchange_rate: '1', rate_fc: '', rate_inr: 0, amount_fc: 0, amount_inr: 0, expiry_date: '' };
+const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', primary_uom: '', secondary_uom: '', order_qty: '', primary_uom_qty: '', secondary_uom_qty: '', currency: 'INR', exchange_rate: '1', rate_fc: '', rate_inr: 0, discount_percent: 0, amount_fc: 0, amount_inr: 0, expiry_date: '' };
 
 const emptyReceipt: ReceiptData = {
   receipt_no: '', receipt_date: new Date().toISOString().split('T')[0], receipt_type: 'Direct Purchase',
@@ -153,6 +154,7 @@ export default function MaterialReceiptEntryDetail() {
         exchange_rate: (it.currency || 'INR') === 'INR' ? '' : String(it.exchange_rate || '1'),
         rate_fc: (it.currency || 'INR') === 'INR' ? '' : String(it.rate_fc || it.rate || ''),
         rate_inr: parseFloat(it.rate_inr) || parseFloat(it.rate) || 0,
+        discount_percent: parseFloat(it.discount_percent) || 0,
         amount_fc: parseFloat(it.amount_fc) || 0,
         amount_inr: parseFloat(it.amount_inr) || parseFloat(it.amount) || 0,
         expiry_date: it.expiry_date?.split('T')[0] || '',
@@ -270,14 +272,18 @@ export default function MaterialReceiptEntryDetail() {
         updated.rate_fc = '';
         updated.amount_fc = 0;
         const rateInr = parseFloat(String(updated.rate_inr)) || 0;
+        const discountPercent = parseFloat(String(updated.discount_percent)) || 0;
+        const discountedRate = rateInr * (1 - discountPercent / 100);
         updated.rate_inr = rateInr;
-        updated.amount_inr = parseFloat((rateInr * primaryQty).toFixed(4));
+        updated.amount_inr = parseFloat((discountedRate * primaryQty).toFixed(4));
       } else {
         const rateFc = parseFloat(updated.rate_fc) || 0;
         const exchangeRate = parseFloat(updated.exchange_rate) || 1;
+        const discountPercent = parseFloat(String(updated.discount_percent)) || 0;
+        const discountedRateFc = rateFc * (1 - discountPercent / 100);
         updated.rate_inr = parseFloat((rateFc * exchangeRate).toFixed(4));
-        updated.amount_fc = parseFloat((primaryQty * rateFc).toFixed(4));
-        updated.amount_inr = parseFloat((updated.rate_inr * primaryQty).toFixed(4));
+        updated.amount_fc = parseFloat((primaryQty * discountedRateFc).toFixed(4));
+        updated.amount_inr = parseFloat((updated.rate_inr * primaryQty * (1 - discountPercent / 100)).toFixed(4));
       }
       return updated;
     }));
@@ -287,7 +293,7 @@ export default function MaterialReceiptEntryDetail() {
     }
   };
 
-  const focusGridField = (key: string, field: 'item' | 'primary_uom_qty' | 'rate_fc' | 'rate_inr') => {
+  const focusGridField = (key: string, field: 'item' | 'primary_uom_qty' | 'rate_fc' | 'rate_inr' | 'discount_percent') => {
     requestAnimationFrame(() => {
       const selector = `[data-grid-field="${key}-${field}"]`;
       document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
@@ -304,12 +310,14 @@ export default function MaterialReceiptEntryDetail() {
 
   const handleClear = () => { clearLocalDraft(); setReceipt(emptyReceipt); setItems([{ ...emptyItem, _key: genKey() }]); };
 
-  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, key: string, field: 'primary_uom_qty' | 'rate_fc' | 'rate_inr') => {
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, key: string, field: 'primary_uom_qty' | 'rate_fc' | 'rate_inr' | 'discount_percent') => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
     if (field === 'primary_uom_qty') {
       const item = items.find((row) => row._key === key);
       focusGridField(key, item?.currency === 'INR' ? 'rate_inr' : 'rate_fc');
+    } else if (field === 'rate_inr' || field === 'rate_fc') {
+      focusGridField(key, 'discount_percent');
     } else {
       addItem(true);
     }
@@ -373,6 +381,7 @@ export default function MaterialReceiptEntryDetail() {
           exchange_rate: parseFloat(i.exchange_rate) || 1,
           rate_fc: parseFloat(i.rate_fc) || 0,
           rate_inr: i.rate_inr,
+          discount_percent: i.discount_percent,
           amount_fc: i.amount_fc,
           amount_inr: i.amount_inr,
           batch_no: null,
@@ -433,6 +442,7 @@ export default function MaterialReceiptEntryDetail() {
           exchange_rate: parseFloat(i.exchange_rate) || 1,
           rate_fc: parseFloat(i.rate_fc) || 0,
           rate_inr: i.rate_inr,
+          discount_percent: i.discount_percent,
           amount_fc: i.amount_fc,
           amount_inr: i.amount_inr,
           batch_no: null,
@@ -485,6 +495,7 @@ export default function MaterialReceiptEntryDetail() {
           exchange_rate: parseFloat(i.exchange_rate) || 1,
           rate_fc: parseFloat(i.rate_fc) || 0,
           rate_inr: i.rate_inr,
+          discount_percent: i.discount_percent,
           amount_fc: i.amount_fc,
           amount_inr: i.amount_inr,
           batch_no: null,
@@ -608,6 +619,7 @@ export default function MaterialReceiptEntryDetail() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Exchange Rate</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Rate(FC)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Rate(INR)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Discount %</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount(FC)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount(INR)</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
@@ -663,6 +675,15 @@ export default function MaterialReceiptEntryDetail() {
                         className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[80px] text-right" placeholder="0.00" />
                     ) : (
                       <span className="block text-xs font-bold text-gray-700 text-right">{(item.rate_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    {isPosted ? (
+                      <span className="block text-xs font-bold text-gray-700 text-right">{(item.discount_percent || 0).toFixed(2)}%</span>
+                    ) : (
+                      <input data-grid-field={`${item._key}-discount_percent`} type="number" step="0.01" value={item.discount_percent || ''}
+                        onChange={(e) => updateItem(item._key, 'discount_percent', e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, item._key, 'discount_percent')}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[70px] text-right" placeholder="0" />
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{item.currency === 'INR' ? '' : (item.amount_fc || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
