@@ -48,6 +48,8 @@ export default function ReportShell<T extends Record<string, unknown>>({
   const [pageSize, setPageSize] = useState(10);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [sortBy, setSortBy] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const extraKey = JSON.stringify(extraParams);
 
@@ -63,6 +65,10 @@ export default function ReportShell<T extends Record<string, unknown>>({
       Object.entries(extraParams).forEach(([k, v]) => { if (v) params.set(k, v); });
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
+      if (sortBy) {
+        params.set('sortBy', sortBy);
+        params.set('sortOrder', sortOrder);
+      }
       const sep = endpoint.includes('?') ? '&' : '?';
       const res = await api<{ data: T[]; total: number; totalPages: number; totals: Record<string, number> | null }>(`${endpoint}${sep}${params.toString()}`);
       setRows(res.data || []);
@@ -75,11 +81,20 @@ export default function ReportShell<T extends Record<string, unknown>>({
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, showDate, range.from, range.to, fromKey, toKey, extraKey, currentPage, pageSize, endpoint]);
+  }, [debouncedSearch, showDate, range.from, range.to, fromKey, toKey, extraKey, currentPage, pageSize, endpoint, sortBy, sortOrder]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setCurrentPage(1); }, [debouncedSearch, range.from, range.to, extraKey]);
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+  };
 
   const handleExport = async () => {
     // Fetch up to 5000 records for export (unpaginated view).
@@ -162,6 +177,9 @@ export default function ReportShell<T extends Record<string, unknown>>({
         onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }}
         footer={footer ? footer(rows, totals) : undefined}
         onRowClick={onRowClick}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={handleSort}
       />
     </div>
   );

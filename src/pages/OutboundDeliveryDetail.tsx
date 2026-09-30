@@ -70,9 +70,12 @@ export default function OutboundDeliveryDetail() {
   const loadDelivery = useCallback(async () => {
     if (isNew) {
       try {
-        const response = await api<{ data: { outbound_no: string } }>('/outbound-deliveries/next-no');
-        setForm((previous) => ({ ...previous, outbound_no: response.data.outbound_no }));
-      } catch { /* leave the number blank for server generation */ }
+        const [outboundNoResponse, challanNoResponse] = await Promise.all([
+          api<{ data: { outbound_no: string } }>('/outbound-deliveries/next-no'),
+          api<{ data: { delivery_challan_no: string } }>('/outbound-deliveries/next-challan-no'),
+        ]);
+        setForm((previous) => ({ ...previous, outbound_no: outboundNoResponse.data.outbound_no, delivery_challan_no: challanNoResponse.data.delivery_challan_no }));
+      } catch { /* leave the numbers blank for server generation */ }
       return;
     }
     try {

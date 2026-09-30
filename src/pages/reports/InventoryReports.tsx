@@ -15,7 +15,7 @@ export default function InventoryReports() {
         { key: 'receipt-register', label: 'Material Receipt Register', render: () => <MaterialReceiptRegister embedded /> },
         { key: 'issue-register', label: 'Material Issue Register', render: () => <MaterialIssueRegister embedded /> },
         { key: 'stock-ledger', label: 'Stock Ledger', render: () => <StockLedgerReport embedded /> },
-        { key: 'stock-valuation', label: 'Stock Valuation', render: () => <StockValuationReport embedded /> },
+        { key: 'stock-valuation', label: 'Closing Stock', render: () => <StockValuationReport embedded /> },
       ]}
     />
   );

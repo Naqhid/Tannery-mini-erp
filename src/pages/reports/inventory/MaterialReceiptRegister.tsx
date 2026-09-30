@@ -8,12 +8,13 @@ import { fmtNum, fmtQty, fmtDate } from '../../../lib/reportFormat';
 interface Row extends Record<string, unknown> {
   id: number; receipt_no: string; receipt_date: string; po_no: string; supplier_name: string;
   warehouse_name: string; material_code: string; material_name: string; uom: string;
-  qty: number; rate: number; amount: number; status: string;
+  qty: number; rate: number; amount: number; tax_total_gst: number; status: string;
 }
 
 export default function MaterialReceiptRegister({ embedded }: { embedded?: boolean }) {
   const [warehouse, setWarehouse] = useState('');
   const [supplier, setSupplier] = useState('');
+  const [origin, setOrigin] = useState('');
   const [opts, setOpts] = useState<{ warehouses: { id: number; name: string }[]; suppliers: { id: number; name: string }[] }>({ warehouses: [], suppliers: [] });
 
   useEffect(() => {
@@ -31,21 +32,32 @@ export default function MaterialReceiptRegister({ embedded }: { embedded?: boole
     { key: 'qty', header: 'Qty', align: 'right', render: r => fmtQty(r.qty) },
     { key: 'rate', header: 'Rate', align: 'right', render: r => fmtNum(r.rate) },
     { key: 'amount', header: 'Amount', align: 'right', render: r => <span className="font-semibold">{fmtNum(r.amount)}</span> },
+    { key: 'tax_total_gst', header: 'Tax Total GST', align: 'right', render: r => <span className="text-purple-700 font-semibold">{fmtNum(r.tax_total_gst)}</span> },
   ];
 
   return (
     <ReportShell<Row>
       title="Material Receipt Register"
-      subtitle="Item-wise goods receipts (GRN) with vendor, quantity and amount."
+      subtitle="Item-wise goods receipts (GRN) with vendor, quantity, amount and tax."
       endpoint="/reports/inventory/receipt-register"
       columns={columns}
       embedded={embedded}
       exportFileName="Material_Receipt_Register"
-      extraParams={{ warehouse_id: warehouse, supplier_id: supplier }}
+      extraParams={{ warehouse_id: warehouse, supplier_id: supplier, origin }}
       filterControls={
         <>
           <FilterSelect label="Warehouse" value={warehouse} onChange={setWarehouse} options={opts.warehouses.map(w => ({ value: String(w.id), label: w.name }))} />
           <FilterSelect label="Vendor" value={supplier} onChange={setSupplier} options={opts.suppliers.map(s => ({ value: String(s.id), label: s.name }))} minWidth={170} />
+          <FilterSelect 
+            label="Origin" 
+            value={origin} 
+            onChange={setOrigin} 
+            options={[
+              { value: '', label: 'All' },
+              { value: 'local', label: 'Local' },
+              { value: 'import', label: 'Import' }
+            ]} 
+          />
         </>
       }
       footer={(rows, totals) => totals && (
@@ -54,6 +66,7 @@ export default function MaterialReceiptRegister({ embedded }: { embedded?: boole
           <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.total_qty)}</td>
           <td />
           <td className="px-4 py-3 text-sm text-right">{fmtNum(totals.total_amount)}</td>
+          <td className="px-4 py-3 text-sm text-right text-purple-700 font-semibold">{fmtNum(totals.total_tax_gst)}</td>
         </tr>
       )}
     />

@@ -66,6 +66,17 @@ export async function getNextNo() {
   return `OBD-${year}-${String(next).padStart(5, '0')}`;
 }
 
+export async function getNextChallanNo() {
+  const year = new Date().getFullYear();
+  const [[row]] = await pool.query(
+    'SELECT delivery_challan_no FROM outbound_deliveries WHERE delivery_challan_no LIKE ? ORDER BY id DESC LIMIT 1',
+    [`DCN-${year}-%`]
+  );
+  if (!row) return `DCN-${year}-00001`;
+  const next = (parseInt(row.delivery_challan_no.split('-')[2], 10) || 0) + 1;
+  return `DCN-${year}-${String(next).padStart(5, '0')}`;
+}
+
 async function insertOutboundItems(conn, id, data, items, userId) {
   const allowNegative = await allowsNegativeStock(data.from_warehouse_id);
   const totalQty = items.reduce((sum, item) => sum + itemQty(item), 0);

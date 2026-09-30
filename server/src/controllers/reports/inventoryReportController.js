@@ -5,36 +5,36 @@ const shape = (res, { rows, total, totals }, page, limit) =>
 
 export async function stockSummary(req, res, next) {
   try {
-    const { warehouse_id, group_id, search, sortBy, sortOrder } = req.query;
+    const { warehouse_id, group_id, as_on_date, search, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const result = await model.stockSummary({ warehouse_id, group_id, search, page, limit, sortBy, sortOrder });
+    const result = await model.stockSummary({ warehouse_id, group_id, as_on_date, search, page, limit, sortBy, sortOrder });
     shape(res, result, page, limit);
   } catch (err) { next(err); }
 }
 
 export async function stockValuation(req, res, next) {
   try {
-    const { warehouse_id, group_id, search, sortBy, sortOrder } = req.query;
+    const { warehouse_id, group_id, origin, search, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const result = await model.stockValuation({ warehouse_id, group_id, search, page, limit, sortBy, sortOrder });
+    const result = await model.stockValuation({ warehouse_id, group_id, origin, search, page, limit, sortBy, sortOrder });
     shape(res, result, page, limit);
   } catch (err) { next(err); }
 }
 
 export async function receiptRegister(req, res, next) {
   try {
-    const { from_date, to_date, warehouse_id, supplier_id, search, sortBy, sortOrder } = req.query;
+    const { from_date, to_date, warehouse_id, supplier_id, origin, search, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const result = await model.receiptRegister({ from_date, to_date, warehouse_id, supplier_id, search, page, limit, sortBy, sortOrder });
+    const result = await model.receiptRegister({ from_date, to_date, warehouse_id, supplier_id, origin, search, page, limit, sortBy, sortOrder });
     shape(res, result, page, limit);
   } catch (err) { next(err); }
 }
 
 export async function issueRegister(req, res, next) {
   try {
-    const { from_date, to_date, warehouse_id, process_stage, search, sortBy, sortOrder } = req.query;
+    const { from_date, to_date, warehouse_id, process_stage, origin, search, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const result = await model.issueRegister({ from_date, to_date, warehouse_id, process_stage, search, page, limit, sortBy, sortOrder });
+    const result = await model.issueRegister({ from_date, to_date, warehouse_id, process_stage, origin, search, page, limit, sortBy, sortOrder });
     shape(res, result, page, limit);
   } catch (err) { next(err); }
 }

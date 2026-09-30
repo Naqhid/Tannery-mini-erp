@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import {
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import SkeletonLoader from '../ui/SkeletonLoader';
 import EmptyState from '../ui/EmptyState';
@@ -11,6 +11,7 @@ export interface Column<T> {
   align?: 'left' | 'right' | 'center';
   render?: (row: T) => ReactNode;
   className?: string;
+  sortable?: boolean;
 }
 
 interface Props<T> {
@@ -29,6 +30,10 @@ interface Props<T> {
   emptyDescription?: string;
   footer?: ReactNode; // e.g. totals row
   onRowClick?: (row: T) => void;
+  // sorting (optional)
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  onSort?: (column: string) => void;
 }
 
 const alignClass = (a?: string) =>
@@ -39,8 +44,10 @@ export default function ReportTable<T>({
   page, pageSize, totalRecords, totalPages, onPageChange, onPageSizeChange,
   emptyTitle = 'No data found', emptyDescription = 'No records match your current filters.',
   footer, onRowClick,
+  sortBy, sortOrder, onSort,
 }: Props<T>) {
   const hasPagination = page != null && totalPages != null && onPageChange != null;
+  const hasSorting = onSort != null;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
@@ -53,8 +60,14 @@ export default function ReportTable<T>({
               <tr className="border-b border-gray-200 bg-gray-50">
                 {columns.map((c) => (
                   <th key={c.key}
-                    className={`px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider ${alignClass(c.align)}`}>
-                    {c.header}
+                    onClick={() => hasSorting && onSort!(c.key)}
+                    className={`px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider ${alignClass(c.align)} ${hasSorting ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}>
+                    <div className="flex items-center gap-1">
+                      {c.header}
+                      {hasSorting && sortBy === c.key && (
+                        sortOrder === 'asc' ? <ChevronUp size={12} className="text-blue-600" /> : <ChevronDown size={12} className="text-blue-600" />
+                      )}
+                    </div>
                   </th>
                 ))}
               </tr>

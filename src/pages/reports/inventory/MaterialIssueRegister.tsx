@@ -14,6 +14,7 @@ interface Row extends Record<string, unknown> {
 export default function MaterialIssueRegister({ embedded }: { embedded?: boolean }) {
   const [warehouse, setWarehouse] = useState('');
   const [stage, setStage] = useState('');
+  const [origin, setOrigin] = useState('');
   const [opts, setOpts] = useState<{ warehouses: { id: number; name: string }[]; stages: string[] }>({ warehouses: [], stages: [] });
 
   useEffect(() => {
@@ -42,11 +43,21 @@ export default function MaterialIssueRegister({ embedded }: { embedded?: boolean
       columns={columns}
       embedded={embedded}
       exportFileName="Material_Issue_Register"
-      extraParams={{ warehouse_id: warehouse, process_stage: stage }}
+      extraParams={{ warehouse_id: warehouse, process_stage: stage, origin }}
       filterControls={
         <>
           <FilterSelect label="Warehouse" value={warehouse} onChange={setWarehouse} options={opts.warehouses.map(w => ({ value: String(w.id), label: w.name }))} />
           <FilterSelect label="Stage" value={stage} onChange={setStage} options={opts.stages.map(s => ({ value: s, label: s }))} />
+          <FilterSelect 
+            label="Origin" 
+            value={origin} 
+            onChange={setOrigin} 
+            options={[
+              { value: '', label: 'All' },
+              { value: 'local', label: 'Local' },
+              { value: 'import', label: 'Import' }
+            ]} 
+          />
         </>
       }
       footer={(rows, totals) => totals && (

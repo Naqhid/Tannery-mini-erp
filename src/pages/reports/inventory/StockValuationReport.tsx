@@ -13,6 +13,7 @@ interface Row extends Record<string, unknown> {
 export default function StockValuationReport({ embedded }: { embedded?: boolean }) {
   const [warehouse, setWarehouse] = useState('');
   const [group, setGroup] = useState('');
+  const [origin, setOrigin] = useState('');
   const [opts, setOpts] = useState<{ warehouses: { id: number; name: string }[]; groups: { id: number; name: string }[] }>({ warehouses: [], groups: [] });
 
   useEffect(() => {
@@ -33,18 +34,28 @@ export default function StockValuationReport({ embedded }: { embedded?: boolean 
 
   return (
     <ReportShell<Row>
-      title="Stock Valuation Report"
+      title="Closing Stock Report"
       subtitle="Closing quantity valued at weighted-average rate."
       endpoint="/reports/inventory/stock-valuation"
       columns={columns}
       showDate={false}
       embedded={embedded}
-      exportFileName="Stock_Valuation"
-      extraParams={{ warehouse_id: warehouse, group_id: group }}
+      exportFileName="Closing_Stock"
+      extraParams={{ warehouse_id: warehouse, group_id: group, origin }}
       filterControls={
         <>
           <FilterSelect label="Warehouse" value={warehouse} onChange={setWarehouse} options={opts.warehouses.map(w => ({ value: String(w.id), label: w.name }))} />
           <FilterSelect label="Item Group" value={group} onChange={setGroup} options={opts.groups.map(g => ({ value: String(g.id), label: g.name }))} />
+          <FilterSelect 
+            label="Origin" 
+            value={origin} 
+            onChange={setOrigin} 
+            options={[
+              { value: '', label: 'All' },
+              { value: 'local', label: 'Local' },
+              { value: 'import', label: 'Import' }
+            ]} 
+          />
         </>
       }
       footer={(rows, totals) => totals && (

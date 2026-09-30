@@ -5,17 +5,17 @@ const shape = (res, { rows, total, totals }, page, limit) =>
 
 export async function planSummary(req, res, next) {
   try {
-    const { from_date, to_date, customer_id, status, search, sortBy, sortOrder } = req.query;
+    const { from_date, to_date, customer_id, sales_order_no, status, search, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    shape(res, await model.planSummary({ from_date, to_date, customer_id, status, search, page, limit, sortBy, sortOrder }), page, limit);
+    shape(res, await model.planSummary({ from_date, to_date, customer_id, sales_order_no, status, search, page, limit, sortBy, sortOrder }), page, limit);
   } catch (err) { next(err); }
 }
 
 export async function planVsActual(req, res, next) {
   try {
-    const { from_date, to_date, customer_id, search } = req.query;
+    const { from_date, to_date, customer_id, plan_no, search } = req.query;
     const { page, limit } = req;
-    shape(res, await model.planVsActual({ from_date, to_date, customer_id, search, page, limit }), page, limit);
+    shape(res, await model.planVsActual({ from_date, to_date, customer_id, plan_no, search, page, limit }), page, limit);
   } catch (err) { next(err); }
 }
 

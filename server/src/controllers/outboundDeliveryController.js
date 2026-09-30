@@ -22,6 +22,11 @@ export async function nextNo(_req, res, next) {
   catch (error) { next(error); }
 }
 
+export async function nextChallanNo(_req, res, next) {
+  try { res.json({ data: { delivery_challan_no: await model.getNextChallanNo() } }); }
+  catch (error) { next(error); }
+}
+
 export async function stats(_req, res, next) {
   try { res.json({ data: await model.getStats() }); }
   catch (error) { next(error); }

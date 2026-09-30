@@ -35,23 +35,42 @@ const planWipSql = (planCol) => `
   ), 0)`;
 
 // ─── Production Plan Summary ─────────────────────────────────────────────────
-export async function planSummary({ from_date, to_date, customer_id, status, search, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function planSummary({ from_date, to_date, customer_id, sales_order_no, status, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
   let where = 'pp.deleted_at IS NULL';
   if (from_date) { where += ' AND pp.plan_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND pp.plan_date <= ?'; params.push(to_date); }
   if (customer_id) { where += ' AND pp.customer_id = ?'; params.push(customer_id); }
+  if (sales_order_no) { where += ' AND so.order_no = ?'; params.push(sales_order_no); }
   if (search) {
     where += ' AND (pp.plan_no LIKE ? OR c.name LIKE ? OR pp.article LIKE ? OR so.order_no LIKE ?)';
     const t = `%${search}%`; params.push(t, t, t, t);
   }
 
-  const mOut = measurementOutputSql('pp.id');
+  // Wet Blue stage (first stage) planned qty
+  const wetBluePlannedSql = `
+    COALESCE((SELECT s.planned_qty FROM production_plan_stages s
+      WHERE s.plan_id = pp.id
+      ORDER BY s.seq ASC, s.id ASC LIMIT 1), 0)`;
+
+  // Finishing stage (last stage) output
+  const finishingOutputSql = `
+    COALESCE((SELECT SUM(t.output_qty)
+      FROM production_status_orders pso
+      JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name FROM production_plan_stages s2
+          WHERE s2.plan_id = pp.id
+          ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+        )
+    ), 0)`;
+
   const mWip = planWipSql('pp.id');
   const statusExpr = `CASE
       WHEN (SELECT COUNT(*) FROM production_plan_stages s0 WHERE s0.plan_id = pp.id) = 0 THEN 'Planned'
-      WHEN ${mOut} >= COALESCE(pp.planned_qty,0) AND COALESCE(pp.planned_qty,0) > 0 THEN 'Completed'
-      WHEN ${mOut} > 0 THEN 'In Progress'
+      WHEN ${finishingOutputSql} >= ${wetBluePlannedSql} AND ${wetBluePlannedSql} > 0 THEN 'Completed'
+      WHEN ${finishingOutputSql} > 0 THEN 'In Progress'
       ELSE 'Planned' END`;
 
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
@@ -62,10 +81,10 @@ export async function planSummary({ from_date, to_date, customer_id, status, sea
 
   const selectSql = `
      SELECT pp.id, pp.plan_no, pp.plan_date, c.name AS customer_name, so.order_no AS sales_order_no,
-       pp.article, pp.color, COALESCE(pp.planned_qty,0) AS planned_qty, pp.uom,
-       ${mOut} AS output_qty,
+       pp.article, pp.color, pp.uom,
+       ${wetBluePlannedSql} AS planned_qty,
+       ${finishingOutputSql} AS output_qty,
        ${mWip} AS wip_qty,
-       GREATEST(0, COALESCE(pp.planned_qty,0) - ${mOut}) AS balance_qty,
        ${statusExpr} AS status_val
      FROM production_plans pp
      LEFT JOIN customers c ON pp.customer_id = c.id
@@ -83,26 +102,49 @@ export async function planSummary({ from_date, to_date, customer_id, status, sea
 }
 
 // ─── Plan vs Actual Output ───────────────────────────────────────────────────
-export async function planVsActual({ from_date, to_date, customer_id, search, page = 1, limit = 10 }) {
+export async function planVsActual({ from_date, to_date, customer_id, plan_no, search, page = 1, limit = 10 }) {
   const params = [];
   let where = 'pp.deleted_at IS NULL';
   if (from_date) { where += ' AND pp.plan_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND pp.plan_date <= ?'; params.push(to_date); }
   if (customer_id) { where += ' AND pp.customer_id = ?'; params.push(customer_id); }
+  if (plan_no) { where += ' AND pp.plan_no = ?'; params.push(plan_no); }
   if (search) {
     where += ' AND (pp.plan_no LIKE ? OR pp.article LIKE ? OR c.name LIKE ?)';
     const t = `%${search}%`; params.push(t, t, t);
   }
   const mOut = measurementOutputSql('pp.id');
+  const mWip = planWipSql('pp.id');
+  
+  // Total rejection across all stages
+  const totalRejectionSql = `
+    COALESCE((SELECT SUM(t.rejection_qty)
+      FROM production_status_orders pso
+      JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+    ), 0)`;
+  
+  // Get current stage (last stage with output)
+  const currentStageSql = `
+    (SELECT s.stage_name FROM production_plan_stages s
+      WHERE s.plan_id = pp.id
+      ORDER BY s.seq DESC, s.id DESC LIMIT 1)`;
+  
+  const statusExpr = `CASE
+      WHEN ${mOut} >= COALESCE(pp.planned_qty,0) AND COALESCE(pp.planned_qty,0) > 0 THEN 'Completed'
+      WHEN ${mOut} > 0 THEN 'In Progress'
+      ELSE 'Planned' END`;
+  
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
     `SELECT pp.id, pp.plan_no, pp.plan_date, c.name AS customer_name, pp.article, pp.color, pp.uom,
+       ${currentStageSql} AS stage,
        COALESCE(pp.planned_qty,0) AS planned_qty,
        ${mOut} AS actual_output,
-       (COALESCE(pp.planned_qty,0) - ${mOut}) AS variance,
-       CASE WHEN COALESCE(pp.planned_qty,0) > 0
-         THEN ROUND((${mOut}) / pp.planned_qty * 100, 2) ELSE 0 END AS variance_percent
+       ${mWip} AS wip_qty,
+       ${totalRejectionSql} AS rejection_qty,
+       ${statusExpr} AS status
      FROM production_plans pp
      LEFT JOIN customers c ON pp.customer_id = c.id
      WHERE ${where}
@@ -184,18 +226,31 @@ export async function orderProductionPlan({ from_date, to_date, customer_id, sea
   if (to_date) { where += ' AND pp.plan_date <= ?'; params.push(to_date); }
   if (customer_id) { where += ' AND pp.customer_id = ?'; params.push(customer_id); }
   if (search) {
-    where += ' AND (so.order_no LIKE ? OR pp.plan_no LIKE ? OR pp.article LIKE ? OR c.name LIKE ?)';
-    const t = `%${search}%`; params.push(t, t, t, t);
+    where += ' AND (so.order_no LIKE ? OR pp.article LIKE ? OR c.name LIKE ?)';
+    const t = `%${search}%`; params.push(t, t, t);
   }
   const mOut = measurementOutputSql('pp.id');
   const mWip = planWipSql('pp.id');
   const offset = (page - 1) * limit;
 
+  // Get stage-wise outputs
+  const stageOutputsSql = (stageName) => `
+    COALESCE((SELECT SUM(t.output_qty)
+      FROM production_status_orders pso
+      JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = ?
+    ), 0)`;
+
   const [rows] = await pool.query(
-    `SELECT pp.id, so.order_no AS sales_order_no, pp.plan_no, pp.plan_date,
+    `SELECT pp.id, so.order_no AS sales_order_no, so.order_qty,
        c.name AS customer_name, pp.article, pp.color, pp.uom,
-       COALESCE(pp.planned_qty,0) AS plan_qty,
-       ${mOut} AS output_qty,
+       ${stageOutputsSql('Wet Blue')} AS wet_blue_output,
+       ${stageOutputsSql('Finishing')} AS finishing_output,
+       ${stageOutputsSql('Measurement')} AS measurement_output,
+       ${stageOutputsSql('Packing')} AS packing_output,
+       ${stageOutputsSql('Shipment')} AS shipment_output,
+       ${mOut} AS total_output,
        ${mWip} AS wip_qty,
        pp.status
      FROM production_plans pp
@@ -204,7 +259,7 @@ export async function orderProductionPlan({ from_date, to_date, customer_id, sea
      WHERE ${where}
      ORDER BY pp.plan_date DESC, pp.id DESC
      LIMIT ? OFFSET ?`,
-    [...params, Number(limit), Number(offset)]
+    [...params, 'Wet Blue', 'Finishing', 'Measurement', 'Packing', 'Shipment', Number(limit), Number(offset)]
   );
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM production_plans pp
