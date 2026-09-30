@@ -212,6 +212,7 @@ export async function stageCostSummary({ from_date, to_date, stage, search, page
        COALESCE(pp.order_qty, pp.planned_qty, 0) AS order_qty,
        ${outputQty} AS output_qty,
        ${totalCostExpr} AS total_cost,
+       CASE WHEN ${outputQty} > 0 THEN ${totalCostExpr} / ${outputQty} ELSE 0 END AS cost_per_pc,
        ${costPerSqftExpr} AS cost_per_sqft,
        ${sellingPrice} AS selling_price,
        (${sellingPrice} - (${costPerSqftExpr})) AS variance
@@ -278,9 +279,14 @@ export async function getCostingFilters() {
     `SELECT DISTINCT customer_name AS name FROM production_status_orders
      WHERE deleted_at IS NULL AND customer_name IS NOT NULL AND customer_name <> '' ORDER BY customer_name`
   );
+  // Get stages from both production_status_orders and material_issues to ensure all stages are included
   const [stages] = await pool.query(
     `SELECT DISTINCT process_stage AS name FROM production_status_orders
-     WHERE deleted_at IS NULL AND process_stage IS NOT NULL AND process_stage <> '' ORDER BY process_stage`
+     WHERE deleted_at IS NULL AND process_stage IS NOT NULL AND process_stage <> ''
+     UNION
+     SELECT DISTINCT process_stage AS name FROM material_issues
+     WHERE process_stage IS NOT NULL AND process_stage <> ''
+     ORDER BY name`
   );
   return {
     customers: customers.map(c => c.name),

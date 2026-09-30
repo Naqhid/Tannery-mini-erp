@@ -239,7 +239,7 @@ export async function getCostSummaryByPlan(planId) {
   );
   if (!planInfo) return null;
 
-  // Get all stages for this plan from production_status_orders
+  // Get all stages for this plan from production_status_orders, production_plan_stages, and process_stages master
   const [stages] = await pool.query(
     `SELECT DISTINCT pso.process_stage
      FROM production_status_orders pso
@@ -249,6 +249,10 @@ export async function getCostSummaryByPlan(planId) {
      SELECT DISTINCT s.stage_name AS process_stage
      FROM production_plan_stages s
      WHERE s.plan_id = ? AND s.stage_name IS NOT NULL AND s.stage_name != ''
+     UNION
+     SELECT DISTINCT ps.name AS process_stage
+     FROM process_stages ps
+     WHERE ps.status = 'Active' AND ps.name IS NOT NULL AND ps.name != ''
      ORDER BY process_stage`,
     [planIdNum, planIdNum]
   );
@@ -362,8 +366,9 @@ async function buildDetailFromSeed(seed) {
   const planNoList = siblingPlanNos.length ? siblingPlanNos : [''];
 
   // Build the stage list from the PLAN DEFINITION (production_plan_stages) across
-  // all sibling plans, UNIONed with any Daily Production stages, so EVERY defined
-  // stage appears (Wet End, Finishing, Measurement, Packing, ...) even if no
+  // all sibling plans, UNIONed with any Daily Production stages, and UNIONed with
+  // the master process_stages table to ensure EVERY defined stage appears
+  // (Wet End, Finishing, Measurement, Packing, ...) even if no
   // daily-production/cost has been recorded for it yet. Stages are merged by name.
   // planIdList holds validated integer plan ids, so they are safe to inline.
   const idInList = planIdList.map(n => Number(n) || 0).join(',');
@@ -421,6 +426,11 @@ async function buildDetailFromSeed(seed) {
           FROM production_status_orders pso
          WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
          GROUP BY pso.process_stage COLLATE utf8mb4_unicode_ci
+        UNION
+        SELECT ps.name COLLATE utf8mb4_unicode_ci AS stage_name, ps.seq AS min_seq
+          FROM process_stages ps
+         WHERE ps.status = 'Active'
+         GROUP BY ps.name COLLATE utf8mb4_unicode_ci
      ) stage_union
      GROUP BY stage_union.stage_name
      ORDER BY stage_seq ASC`,
