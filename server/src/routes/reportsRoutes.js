@@ -16,6 +16,7 @@ router.get('/inventory/receipt-register', validatePagination, inv.receiptRegiste
 router.get('/inventory/issue-register', validatePagination, inv.issueRegister);
 router.get('/inventory/stock-movement', validatePagination, inv.stockMovement);
 router.get('/inventory/stock-ledger', validatePagination, inv.stockLedger);
+router.get('/inventory/delivery-challan', validatePagination, inv.deliveryChallanReport);
 // Admin-only, read-only diagnostic — flags cross-table stock discrepancies.
 router.get('/inventory/consistency-check', requireRole('admin'), inv.consistencyCheck);
 

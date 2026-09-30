@@ -4,6 +4,7 @@ import StockValuationReport from './inventory/StockValuationReport';
 import MaterialReceiptRegister from './inventory/MaterialReceiptRegister';
 import MaterialIssueRegister from './inventory/MaterialIssueRegister';
 import StockLedgerReport from './inventory/StockLedgerReport';
+import DeliveryChallanReport from './inventory/DeliveryChallanReport';
 
 export default function InventoryReports() {
   return (
@@ -16,6 +17,7 @@ export default function InventoryReports() {
         { key: 'issue-register', label: 'Material Issue Register', render: () => <MaterialIssueRegister embedded /> },
         { key: 'stock-ledger', label: 'Stock Ledger', render: () => <StockLedgerReport embedded /> },
         { key: 'stock-valuation', label: 'Closing Stock', render: () => <StockValuationReport embedded /> },
+        { key: 'delivery-challan', label: 'Delivery Challan', render: () => <DeliveryChallanReport embedded /> },
       ]}
     />
   );
