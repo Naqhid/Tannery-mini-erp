@@ -67,18 +67,29 @@ export default function Layout() {
   // Flatten menu items for search
   const searchableItems = useMemo(() => {
     const items: { label: string; path: string; parent?: string }[] = [];
+    
+    // Filter menu items based on user's menu_access (same logic as Sidebar)
+    const userMenuAccess = user?.menu_access;
+    const hasMenuRestrictions = Array.isArray(userMenuAccess) && userMenuAccess.length > 0;
+    
     for (const item of menuItems) {
       if (item.path) {
-        items.push({ label: item.label, path: item.path });
+        // Only include if user has access or no restrictions (admin)
+        if (!hasMenuRestrictions || userMenuAccess.includes(item.path)) {
+          items.push({ label: item.label, path: item.path });
+        }
       }
       if (item.children) {
         for (const child of item.children) {
-          items.push({ label: child.label, path: child.path, parent: item.label });
+          // Only include child if user has access or no restrictions (admin)
+          if (!hasMenuRestrictions || userMenuAccess.includes(child.path)) {
+            items.push({ label: child.label, path: child.path, parent: item.label });
+          }
         }
       }
     }
     return items;
-  }, []);
+  }, [user?.menu_access]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
