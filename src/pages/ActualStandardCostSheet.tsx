@@ -115,6 +115,7 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
         <th className="p-3 text-left">Stage</th>
         <th className="p-3 text-left">Cost Component</th>
         <th className="p-3 text-right">Actual Cost (₹)</th>
+        <th className="p-3 text-right">Cost/Piece (₹)</th>
         <th className="p-3 text-right">Cost/Sqft (₹)</th>
       </tr></thead>
       <tbody>
@@ -123,6 +124,7 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
       <tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr>
         <td colSpan={2} className="p-3 text-right font-bold text-slate-700">Grand Total (incl. rejection)</td>
         <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.amt)}</td>
+        <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.amt / (meta?.completed_qty > 0 ? meta.completed_qty : 1))}</td>
         <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.cpp)}</td>
       </tr></tfoot>
     </table></div>
@@ -137,29 +139,33 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
 function SummaryStageRows({s}:{s:SummaryStage}){
   const stageLabel = `${s.process_stage||'Stage'} - ${fmtQty(s.output_qty)} ${s.uom||''}`;
   return <>
-    <tr className="border-t border-slate-200 bg-slate-50/70"><td colSpan={4} className="p-2.5 font-bold text-slate-800">{stageLabel}</td></tr>
+    <tr className="border-t border-slate-200 bg-slate-50/70"><td colSpan={5} className="p-2.5 font-bold text-slate-800">{stageLabel}</td></tr>
     {s.lines.map((ln,i)=><tr key={i} className="border-t border-slate-100">
       <td className="p-2.5"></td>
       <td className="p-2.5">{ln.label}</td>
       <td className="p-2.5 text-right">{fmt(ln.amount)}</td>
+      <td className="p-2.5 text-right">{fmt(ln.amount / (s.output_qty > 0 ? s.output_qty : 1))}</td>
       <td className="p-2.5 text-right">{fmt(ln.cost_per_piece)}</td>
     </tr>)}
     <tr className="border-t border-slate-100 bg-slate-50/40">
       <td className="p-2.5"></td>
       <td className="p-2.5 font-semibold text-slate-600">Total</td>
       <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.amount)}</td>
+      <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.amount / (s.output_qty > 0 ? s.output_qty : 1))}</td>
       <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.cost_per_piece)}</td>
     </tr>
     <tr className="border-t border-slate-100">
       <td className="p-2.5"></td>
       <td className="p-2.5 text-rose-700">Rejection {fmtQty(s.rejection.qty)} {s.uom||''}</td>
       <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.amount)}</td>
+      <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.amount / (s.rejection.qty > 0 ? s.rejection.qty : 1))}</td>
       <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.cost_per_piece)}</td>
     </tr>
     <tr className="border-t border-slate-100 bg-blue-50/40">
       <td className="p-2.5"></td>
       <td className="p-2.5 font-semibold text-blue-800">{s.process_stage} + Rejection</td>
       <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.amount)}</td>
+      <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.amount / ((s.output_qty + s.rejection.qty) > 0 ? (s.output_qty + s.rejection.qty) : 1))}</td>
       <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.cost_per_piece)}</td>
     </tr>
   </>;
