@@ -432,7 +432,7 @@ async function buildDetailFromSeed(seed) {
          WHERE ps.status = 'Active'
          GROUP BY ps.name COLLATE utf8mb4_unicode_ci
      ) stage_union
-     GROUP BY stage_union.stage_name
+     GROUP BY stage_union.stage_name, stage_union.min_seq
      ORDER BY stage_seq ASC`,
     []
   );
