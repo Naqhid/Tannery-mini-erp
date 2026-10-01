@@ -330,11 +330,20 @@ function StageSourceRows({
     </tr>
     {!stageCollapsed && (stageNode.sources.length===0
       ? <tr className="border-t border-slate-100"><td></td><td colSpan={6} className="p-2.5 text-center text-slate-400">No cost entries for this stage</td></tr>
-      : stageNode.sources.map((g)=>{
-          const key=`${stage.process_stage}::${g.source}`;
-          const srcCollapsed=!!collapsedStageSources[key];
-          return <SourceSubRows key={key} stageLabel={stage.process_stage} group={g} measurementQty={measurementQty} collapsed={srcCollapsed} onToggle={()=>onToggleStageSource(key)} />;
-        }))}
+      : <>
+          {stageNode.sources.map((g)=>{
+            const key=`${stage.process_stage}::${g.source}`;
+            const srcCollapsed=!!collapsedStageSources[key];
+            return <SourceSubRows key={key} stageLabel={stage.process_stage} group={g} measurementQty={measurementQty} collapsed={srcCollapsed} onToggle={()=>onToggleStageSource(key)} />;
+          })}
+          {/* Stage total footer so the stage's cost is clearly labelled even when sources are expanded */}
+          <tr className="border-t border-slate-200 bg-blue-50/50">
+            <td className="p-2.5"></td>
+            <td className="p-2.5 pl-8 text-right font-bold text-blue-800" colSpan={4}>{stage.process_stage || 'Stage'} Total</td>
+            <td className="p-2.5 text-right font-bold text-blue-800">{fmt(stageNode.amount)}</td>
+            <td className="p-2.5 text-right font-bold text-blue-800">{fmt(perSqft(stageNode.amount))}</td>
+          </tr>
+        </>)}
   </>;
 }
 
