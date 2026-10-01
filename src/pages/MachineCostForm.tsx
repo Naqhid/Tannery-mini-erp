@@ -41,6 +41,9 @@ export default function MachineCostForm() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [machines, setMachines] = useState<MachineOption[]>([]);
   const [processStages, setProcessStages] = useState<{ id: number; name: string }[]>([]);
+  // Stages of the production plan behind this order, so cost can be entered per
+  // stage. Each carries its own planned/output qty and any existing cost entry.
+  const [stageList, setStageList] = useState<{ process_stage: string; planned_qty: number; output_qty: number; machine_cost_id: number | null; transaction_no: string | null; cost_status: string | null }[]>([]);
   const [focusedNewLine, setFocusedNewLine] = useState<number | null>(null);
   const isPosted = formData.status === 'Posted';
   // Cost cannot be entered without output quantity.
@@ -69,6 +72,41 @@ export default function MachineCostForm() {
       .then(res => setProcessStages(res.data || []))
       .catch(() => {});
   }, []);
+
+  // Load the plan's stages (per-stage planned/output qty + existing cost entry)
+  // so the Process Stage dropdown can switch between stages and cost each one.
+  const loadStages = useCallback((orderId: number) => {
+    if (!orderId) return;
+    api<{ data: typeof stageList }>(`/machine-costs/order/${orderId}/stages`)
+      .then(res => setStageList(res.data || []))
+      .catch(() => setStageList([]));
+  }, []);
+  useEffect(() => {
+    if (formData.production_plan_id) loadStages(formData.production_plan_id);
+  }, [formData.production_plan_id, loadStages]);
+
+  // Switch the form to a different stage of the same order. If a cost entry
+  // already exists for that stage we open it; otherwise we start a fresh entry
+  // for the stage (its own planned/output qty), keeping the same order id.
+  const handleStageChange = (stageName: string) => {
+    const stage = stageList.find(s => s.process_stage === stageName);
+    if (stage?.machine_cost_id) {
+      navigate(`/machine-cost/${stage.machine_cost_id}`);
+      return;
+    }
+    const plannedQty = Number(stage?.planned_qty) || 0;
+    const outputQty = plannedQty > 0 ? (Number(stage?.output_qty) || 0) : 0;
+    setFormData(prev => ({
+      ...prev,
+      process_stage: stageName,
+      planned_qty: plannedQty,
+      output_qty: outputQty,
+      balance_qty: Math.max(0, plannedQty - outputQty),
+      items: [],
+      total_amount: 0,
+      total_cost_per_piece: 0,
+    }));
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -287,7 +325,7 @@ export default function MachineCostForm() {
     setSaving(true);
     try {
       const payload = { production_plan_id: formData.production_plan_id, production_date: formData.production_date,
-        process_stage: formData.process_stage, remarks: formData.remarks,
+        process_stage: formData.process_stage, production_qty: formData.output_qty || 0, remarks: formData.remarks,
         items: validItems.map(i => ({ machine_name: i.machine_name, machine_id: i.machine_id, group_id: i.group_id, group_name: i.group_name, uom: i.uom, total_qty: i.total_qty, cost_per_uom: i.cost_per_uom, amount: i.amount, cost_per_piece: i.cost_per_piece, remarks: i.remarks })),
       };
       if (isNew) {
@@ -348,7 +386,7 @@ export default function MachineCostForm() {
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Planned Qty</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.planned_qty)}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Output Qty</label><p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{(Number(formData.planned_qty) || 0) <= 0 ? '—' : new Intl.NumberFormat('en-IN').format(formData.output_qty || 0)}</p></div>
           <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Balance Qty</label><p className={`text-sm md:text-base font-bold tabular-nums ${formData.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{new Intl.NumberFormat('en-IN').format(Math.max(0, formData.planned_qty - formData.output_qty))}</p></div>
-          <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>{isPosted ? <p className="text-xs md:text-sm font-medium text-gray-900">{formData.process_stage}</p> : <select value={formData.process_stage} onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))} className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"><option value="All">All</option>{formData.process_stage && formData.process_stage !== 'All' && !processStages.some(s => s.name === formData.process_stage) && <option value={formData.process_stage}>{formData.process_stage}</option>}{processStages.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select>}</div>
+          <div><label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Process Stage</label>{isPosted ? <p className="text-xs md:text-sm font-medium text-gray-900">{formData.process_stage}</p> : <select value={formData.process_stage} onChange={e => handleStageChange(e.target.value)} className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500">{stageList.length === 0 && <option value={formData.process_stage}>{formData.process_stage || 'All'}</option>}{formData.process_stage && !stageList.some(s => s.process_stage === formData.process_stage) && <option value={formData.process_stage}>{formData.process_stage}</option>}{stageList.map(s => <option key={s.process_stage} value={s.process_stage}>{s.process_stage}{s.machine_cost_id ? ' ✓' : ''}</option>)}</select>}{!isPosted && stageList.length > 0 && <p className="text-[10px] text-gray-400 mt-1">Switch stage to cost it separately · ✓ already has an entry</p>}</div>
         </div>
       </div>
 

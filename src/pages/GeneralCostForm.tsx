@@ -98,6 +98,9 @@ export default function GeneralCostForm() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [costComponents, setCostComponents] = useState<CostComponentOption[]>([]);
   const [processStages, setProcessStages] = useState<{ id: number; name: string }[]>([]);
+  // Stages of the production plan behind this order, so cost can be entered per
+  // stage. Each carries its own planned/output qty and any existing cost entry.
+  const [stageList, setStageList] = useState<{ process_stage: string; planned_qty: number; output_qty: number; general_cost_id: number | null; transaction_no: string | null; cost_status: string | null }[]>([]);
   const [focusedNewLine, setFocusedNewLine] = useState<number | null>(null);
   const isPosted = formData.status === 'Posted';
   // Cost cannot be entered without output quantity.
@@ -124,6 +127,44 @@ export default function GeneralCostForm() {
       .then(res => setProcessStages(res.data || []))
       .catch(() => {});
   }, []);
+
+  // Load the plan's stages (per-stage planned/output qty + existing cost entry)
+  // so the Process Stage dropdown can switch between stages and cost each one.
+  const loadStages = useCallback((orderId: number) => {
+    if (!orderId) return;
+    api<{ data: typeof stageList }>(`/general-costs/order/${orderId}/stages`)
+      .then(res => setStageList(res.data || []))
+      .catch(() => setStageList([]));
+  }, []);
+  useEffect(() => {
+    if (formData.production_plan_id) loadStages(formData.production_plan_id);
+  }, [formData.production_plan_id, loadStages]);
+
+  // Switch the form to a different stage of the same order. If a cost entry
+  // already exists for that stage we open it; otherwise we start a fresh entry
+  // for the stage (its own planned/output qty), keeping the same order id.
+  const handleStageChange = (stageName: string) => {
+    const stage = stageList.find(s => s.process_stage === stageName);
+    if (stage?.general_cost_id) {
+      navigate(`/general-cost/${stage.general_cost_id}`);
+      return;
+    }
+    const plannedQty = Number(stage?.planned_qty) || 0;
+    const outputQty = plannedQty > 0 ? (Number(stage?.output_qty) || 0) : 0;
+    setFormData(prev => ({
+      ...prev,
+      process_stage: stageName,
+      order_qty: plannedQty,
+      planned_qty: plannedQty,
+      output_qty: outputQty,
+      completed_qty: outputQty,
+      balance_qty: Math.max(0, plannedQty - outputQty),
+      items: [],
+      total_amount: 0,
+      total_cost_per_piece: 0,
+      cost_after_adjustments: 0,
+    }));
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -382,7 +423,7 @@ export default function GeneralCostForm() {
         cost_after_adjustments: formData.cost_after_adjustments,
         order_qty: formData.order_qty,
         planned_qty: formData.planned_qty,
-        production_qty: formData.production_qty,
+        production_qty: formData.output_qty || formData.production_qty || 0,
         remarks: formData.remarks,
         items: formData.items.map(i => ({
           cost_category: i.cost_category,
@@ -532,16 +573,17 @@ export default function GeneralCostForm() {
             ) : (
               <select
                 value={formData.process_stage || 'All'}
-                onChange={e => setFormData(prev => ({ ...prev, process_stage: e.target.value }))}
+                onChange={e => handleStageChange(e.target.value)}
                 className="w-full px-2 py-1.5 text-xs md:text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white transition-colors"
               >
-                <option value="All">All</option>
-                {formData.process_stage && formData.process_stage !== 'All' && !processStages.some(s => s.name === formData.process_stage) && (
+                {stageList.length === 0 && <option value={formData.process_stage || 'All'}>{formData.process_stage || 'All'}</option>}
+                {formData.process_stage && !stageList.some(s => s.process_stage === formData.process_stage) && (
                   <option value={formData.process_stage}>{formData.process_stage}</option>
                 )}
-                {processStages.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                {stageList.map(s => <option key={s.process_stage} value={s.process_stage}>{s.process_stage}{s.general_cost_id ? ' ✓' : ''}</option>)}
               </select>
             )}
+            {!isPosted && stageList.length > 0 && <p className="text-[10px] text-gray-400 mt-1">Switch stage to cost it separately · ✓ already has an entry</p>}
           </div>
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Planned Qty (Pcs)</label>

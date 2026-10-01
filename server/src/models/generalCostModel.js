@@ -2,14 +2,31 @@ import pool from '../config/db.js';
 import { isOrderCostLocked } from './standardCostModel.js';
 
 
-async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQty, currentId = null) {
-  const [[plan]] = await conn.query('SELECT issued_qty FROM production_status_orders WHERE id=? AND deleted_at IS NULL', [productionPlanId]);
+async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQty, currentId = null, processStage = null) {
+  const [[plan]] = await conn.query('SELECT production_plan_id, issued_qty, process_stage FROM production_status_orders WHERE id=? AND deleted_at IS NULL', [productionPlanId]);
   if (!plan) throw new Error('Production plan/order not found');
+
+  // The cap is PER STAGE so each stage can be costed independently. Prefer the
+  // stage's planned qty from the plan; fall back to the order's issued qty.
+  const stage = processStage || plan.process_stage || null;
+  let max = Number(plan.issued_qty) || 0;
+  if (stage) {
+    const [[s]] = await conn.query(
+      `SELECT COALESCE(SUM(planned_qty),0) AS planned FROM production_plan_stages
+        WHERE plan_id = ? AND stage_name COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci`,
+      [plan.production_plan_id, stage]
+    );
+    const planned = Number(s?.planned) || 0;
+    if (planned > 0) max = planned;
+  }
+
+  // Only sum cost headers of the SAME order + stage against this cap.
   const params = [productionPlanId];
+  let stageClause = '';
+  if (stage) { stageClause = ' AND COALESCE(process_stage, \'\') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci'; params.push(stage); }
   let exclude = '';
   if (currentId) { exclude = ' AND id <> ?'; params.push(currentId); }
-  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM general_cost_headers WHERE production_plan_id=?${exclude}`, params);
-  const max = Number(plan.issued_qty) || 0;
+  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM general_cost_headers WHERE production_plan_id=?${stageClause}${exclude}`, params);
   const requested = Number(productionQty) || 0;
   if (requested > Math.max(0, max - (Number(used.qty) || 0)) + 0.000001) {
     throw new Error(`Output quantity cannot be greater than planned quantity. Available planned balance: ${Math.max(0, max - (Number(used.qty) || 0))}`);
@@ -62,6 +79,71 @@ export async function getOrdersByPlan(planId) {
      WHERE o.production_plan_id = ? AND o.deleted_at IS NULL ORDER BY o.process_stage, o.id`, [planId]
   );
   return rows;
+}
+
+/**
+ * Return the list of STAGES for the production plan behind a status-order, so
+ * the General Cost form can let the user cost each stage separately. For every
+ * stage we include its planned qty (from production_plan_stages), its Daily
+ * Production output qty, and any existing general cost header for that
+ * order + stage (so the form can load/edit it).
+ *
+ * @param orderId  a production_status_orders.id (what the form holds as production_plan_id)
+ */
+export async function getStagesForOrder(orderId) {
+  const [[order]] = await pool.query(
+    `SELECT id, production_plan_id, process_stage FROM production_status_orders WHERE id=? AND deleted_at IS NULL`,
+    [orderId]
+  );
+  if (!order) return [];
+  const planId = order.production_plan_id;
+
+  const [rows] = await pool.query(
+    `SELECT stage_name AS process_stage, planned_qty, seq FROM (
+        SELECT s.stage_name, COALESCE(SUM(s.planned_qty),0) AS planned_qty, MIN(s.seq) AS seq
+          FROM production_plan_stages s
+         WHERE s.plan_id = ?
+         GROUP BY s.stage_name
+        UNION
+        SELECT o.process_stage AS stage_name, 0 AS planned_qty, 999999 AS seq
+          FROM production_status_orders o
+         WHERE o.production_plan_id = ? AND o.deleted_at IS NULL
+           AND o.process_stage IS NOT NULL AND o.process_stage <> ''
+     ) u
+     GROUP BY stage_name
+     ORDER BY MIN(seq)`,
+    [planId, planId]
+  );
+
+  const result = [];
+  for (const r of rows) {
+    const [[out]] = await pool.query(
+      `SELECT COALESCE(SUM(t.output_qty),0) AS output_qty
+         FROM production_status_orders o
+         JOIN production_status_transactions t
+           ON t.production_status_order_id = o.id AND t.deleted_at IS NULL
+        WHERE o.production_plan_id = ? AND o.deleted_at IS NULL
+          AND o.process_stage COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci`,
+      [planId, r.process_stage]
+    );
+    const [[cost]] = await pool.query(
+      `SELECT gch.id AS general_cost_id, gch.transaction_no, gch.status
+         FROM general_cost_headers gch
+        WHERE gch.production_plan_id = ?
+          AND COALESCE(gch.process_stage,'') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+        ORDER BY gch.id DESC LIMIT 1`,
+      [orderId, r.process_stage]
+    );
+    result.push({
+      process_stage: r.process_stage,
+      planned_qty: Number(r.planned_qty) || 0,
+      output_qty: Number(out?.output_qty) || 0,
+      general_cost_id: cost?.general_cost_id || null,
+      transaction_no: cost?.transaction_no || null,
+      cost_status: cost?.status || null,
+    });
+  }
+  return result;
 }
 
 /**
@@ -248,7 +330,7 @@ export async function create(data, userId = null) {
   try {
     await conn.beginTransaction();
 
-    await assertProductionQtyWithinPlan(conn, data.production_plan_id, data.production_qty || 0);
+    await assertProductionQtyWithinPlan(conn, data.production_plan_id, data.production_qty || 0, null, data.process_stage);
 
     const transactionNo = await getNextTransactionNo();
 
@@ -315,7 +397,7 @@ export async function update(id, data, userId = null) {
       throw new Error('Cannot edit: the standard cost for this order is Approved and locked');
     }
 
-    await assertProductionQtyWithinPlan(conn, planOrderId, data.production_qty || 0, id);
+    await assertProductionQtyWithinPlan(conn, planOrderId, data.production_qty || 0, id, data.process_stage);
 
     const items = data.items || [];
     const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);

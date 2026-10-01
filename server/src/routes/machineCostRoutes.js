@@ -9,6 +9,7 @@ router.get('/', validatePagination, ctrl.listOrders);
 router.get('/next-no', ctrl.getNextNo);
 router.get('/previous-cost', ctrl.previousCost);
 router.get('/plan/:planId/orders', ctrl.getOrdersByPlan);
+router.get('/order/:orderId/stages', ctrl.getStagesForOrder);
 router.get('/:id', validateId, ctrl.getOne);
 
 router.post('/', requireWriteAccess, ctrl.create);

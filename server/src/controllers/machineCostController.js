@@ -17,6 +17,13 @@ export async function getOrdersByPlan(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function getStagesForOrder(req, res, next) {
+  try {
+    const rows = await model.getStagesForOrder(req.params.orderId);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
 export async function getOne(req, res, next) {
   try {
     const entry = await model.getById(req.params.id);
