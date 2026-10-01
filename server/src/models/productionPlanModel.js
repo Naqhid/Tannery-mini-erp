@@ -521,7 +521,7 @@ export async function getFilterOptions() {
 }
 
 // Get sales order items as production requirement source
-export async function getSalesOrderItems({ search, status, customer_id, article, color, page = 1, limit = 10 } = {}) {
+export async function getSalesOrderItems({ search, status, customer_id, article, color, plan_no, page = 1, limit = 10 } = {}) {
   const params = [];
   let where = 'so.status NOT IN ("Cancelled")';
 
@@ -533,6 +533,18 @@ export async function getSalesOrderItems({ search, status, customer_id, article,
   if (customer_id) { where += ' AND so.customer_id = ?'; params.push(customer_id); }
   if (article) { where += ' AND soi.item_description LIKE ?'; params.push(`%${article}%`); }
   if (color) { where += ' AND soi.finish_color LIKE ?'; params.push(`%${color}%`); }
+  // Plan No filter: keep only sales-order items that have at least one production
+  // plan whose plan_no matches, scoped to the same order + article.
+  if (plan_no) {
+    where += ` AND EXISTS (
+      SELECT 1 FROM production_plans pp3
+      WHERE pp3.sales_order_id = so.id
+        AND pp3.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
+        AND pp3.deleted_at IS NULL
+        AND pp3.plan_no LIKE ?
+    )`;
+    params.push(`%${plan_no}%`);
+  }
   if (status) {
     if (status === 'Pending') {
       where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) = 0';

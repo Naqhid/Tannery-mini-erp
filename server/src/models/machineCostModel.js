@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { isOrderCostLocked } from './standardCostModel.js';
 
 
 async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQty, currentId = null) {
@@ -66,7 +67,19 @@ export async function getOrdersByPlan(planId) {
 export async function getById(id) {
   const [[header]] = await pool.query(
     `SELECT mch.*,
-       o.order_no, o.issued_qty AS order_qty, o.issued_qty AS planned_qty,
+       o.order_no,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS planned_qty,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS order_qty,
        o.completed_qty AS output_qty,
        COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = mch.production_plan_id), 0) AS completed_qty,
        GREATEST(0, o.issued_qty - COALESCE((SELECT SUM(m2.production_qty) FROM machine_cost_headers m2 WHERE m2.production_plan_id = mch.production_plan_id), 0)) AS balance_qty,
@@ -90,6 +103,41 @@ export async function getById(id) {
   );
 
   return { ...header, items };
+}
+
+/**
+ * Return the machine cost items of the most recent entry for the same article
+ * (optionally same process stage), excluding a given entry. Used by the
+ * "Import from Previous Cost" button, mirroring Material Issue's import.
+ */
+export async function getPreviousCostItems({ article, process_stage, exclude_id = null }) {
+  if (!article) return null;
+  const params = [article];
+  let stageClause = '';
+  if (process_stage && process_stage !== 'All') { stageClause = ' AND mch.process_stage = ?'; params.push(process_stage); }
+  let excludeClause = '';
+  if (exclude_id) { excludeClause = ' AND mch.id <> ?'; params.push(exclude_id); }
+
+  const [[header]] = await pool.query(
+    `SELECT mch.id, mch.transaction_no, mch.process_stage
+       FROM machine_cost_headers mch
+       JOIN production_status_orders o ON mch.production_plan_id = o.id
+      WHERE o.article COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+        ${stageClause}${excludeClause}
+      ORDER BY mch.id DESC LIMIT 1`,
+    params
+  );
+  if (!header) return null;
+
+  const [items] = await pool.query(
+    `SELECT mci.machine_name, mci.group_id, COALESCE(g.name, mci.group_name) AS group_name,
+       mci.uom, mci.total_qty, mci.cost_per_uom, mci.amount, mci.cost_per_piece, mci.remarks
+     FROM machine_cost_items mci
+     LEFT JOIN group_master g ON mci.group_id = g.id
+     WHERE mci.machine_cost_id = ? ORDER BY mci.sort_order, mci.id`,
+    [header.id]
+  );
+  return { source_transaction_no: header.transaction_no, process_stage: header.process_stage, items };
 }
 
 export async function getNextTransactionNo() {
@@ -165,11 +213,16 @@ export async function update(id, data, userId = null) {
   try {
     await conn.beginTransaction();
 
-    const [[current]] = await conn.query('SELECT status FROM machine_cost_headers WHERE id = ?', [id]);
+    const [[current]] = await conn.query('SELECT status, production_plan_id FROM machine_cost_headers WHERE id = ?', [id]);
     if (!current) throw new Error('Machine Cost entry not found');
     if (current.status === 'Posted') throw new Error('Cannot edit a posted entry');
 
-    await assertProductionQtyWithinPlan(conn, data.production_plan_id || (await conn.query('SELECT production_plan_id FROM machine_cost_headers WHERE id=?', [id]))[0][0].production_plan_id, data.production_qty || 0, id);
+    const planOrderId = data.production_plan_id || current.production_plan_id;
+    if (await isOrderCostLocked(conn, planOrderId)) {
+      throw new Error('Cannot edit: the standard cost for this order is Approved and locked');
+    }
+
+    await assertProductionQtyWithinPlan(conn, planOrderId, data.production_qty || 0, id);
 
     const items = data.items || [];
     const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -209,9 +262,12 @@ export async function post(id, userId = null) {
 }
 
 export async function remove(id) {
-  const [[current]] = await pool.query('SELECT status FROM machine_cost_headers WHERE id = ?', [id]);
+  const [[current]] = await pool.query('SELECT status, production_plan_id FROM machine_cost_headers WHERE id = ?', [id]);
   if (!current) return false;
   if (current.status === 'Posted') throw new Error('Cannot delete a posted entry');
+  if (await isOrderCostLocked(pool, current.production_plan_id)) {
+    throw new Error('Cannot delete: the standard cost for this order is Approved and locked');
+  }
   const [result] = await pool.query('DELETE FROM machine_cost_headers WHERE id = ?', [id]);
   return result.affectedRows > 0;
 }

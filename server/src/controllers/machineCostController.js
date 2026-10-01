@@ -32,6 +32,16 @@ export async function getNextNo(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function previousCost(req, res, next) {
+  try {
+    const { article, process_stage, exclude_id } = req.query;
+    if (!article) return res.status(400).json({ error: 'article is required' });
+    const data = await model.getPreviousCostItems({ article, process_stage, exclude_id: exclude_id || null });
+    if (!data) return res.status(404).json({ error: 'No previous machine cost found for this article' });
+    res.json({ data });
+  } catch (err) { next(err); }
+}
+
 // At least one machine line (with a machine selected) is required to save.
 function hasMachineItems(body) {
   const items = Array.isArray(body?.items) ? body.items : [];

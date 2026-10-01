@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { ArrowLeft, Plus, Trash2, Printer, Download, Send, Save, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Printer, Download, Send, Save, ChevronDown, Copy } from 'lucide-react';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { usePermission } from '../lib/usePermission';
 import SearchableSelect from '../components/ui/SearchableSelect';
@@ -143,6 +143,8 @@ export default function GeneralCostForm() {
             api<{ data: { transaction_no: string } }>('/general-costs/next-no'),
           ]);
           const plan = planRes.data;
+          // Planned qty comes from the plan's stage planned_qty (not issued_qty).
+          const plannedQty = Number(plan.planned_qty ?? plan.issued_qty) || 0;
           setFormData(prev => ({
             ...prev,
             production_plan_id: Number(planId),
@@ -151,11 +153,11 @@ export default function GeneralCostForm() {
             order_no: plan.order_no || '',
             article: plan.article || '',
             color: plan.color || '',
-            order_qty: plan.issued_qty || 0,
-            planned_qty: plan.issued_qty || 0,
+            order_qty: plannedQty,
+            planned_qty: plannedQty,
             output_qty: plan.completed_qty || 0,
             completed_qty: plan.completed_qty || 0,
-            balance_qty: plan.balance_qty || Math.max(0, (plan.issued_qty || 0) - (plan.completed_qty || 0)),
+            balance_qty: Math.max(0, plannedQty - (plan.completed_qty || 0)),
             plan_status: plan.status || '',
             process_stage: plan.process_stage || 'All',
             uom: plan.uom || 'Pcs',
@@ -200,13 +202,16 @@ export default function GeneralCostForm() {
       .then((res) => {
         const d = res.data;
         if (d) {
-          const outputQty = Number(d.completed_qty || 0);
-          const plannedQty = formData.order_qty || formData.planned_qty || 0;
-          setFormData((prev) => ({
-            ...prev,
-            output_qty: outputQty,
-            balance_qty: Math.max(0, (prev.order_qty || prev.planned_qty) - outputQty),
-          }));
+          setFormData((prev) => {
+            const plannedQty = Number(prev.order_qty || prev.planned_qty) || 0;
+            // Without a planned qty for the stage, output must not drive costing.
+            const outputQty = plannedQty > 0 ? Number(d.completed_qty || 0) : 0;
+            return {
+              ...prev,
+              output_qty: outputQty,
+              balance_qty: Math.max(0, plannedQty - outputQty),
+            };
+          });
         }
       })
       .catch(() => {});
@@ -321,6 +326,38 @@ export default function GeneralCostForm() {
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [isPosted, outputZero, canWrite, formData.items]);
+
+  const importPreviousCost = async () => {
+    if (!formData.article) { toast.error('No article on this order'); return; }
+    try {
+      const params = new URLSearchParams();
+      params.set('article', formData.article);
+      if (formData.process_stage && formData.process_stage !== 'All') params.set('process_stage', formData.process_stage);
+      if (id && !isNew) params.set('exclude_id', String(id));
+      const res = await api<{ data: { items: any[]; source_transaction_no: string } }>(`/general-costs/previous-cost?${params}`);
+      const divideBy = Number(formData.output_qty || formData.planned_qty) || 0;
+      const imported: CostItem[] = (res.data.items || []).map((it: any) => {
+        const matched = costComponents.find(c => c.name === it.cost_category);
+        const totalQty = Number(it.total_qty) || 0;
+        const costPerUom = Number(it.cost_per_uom) || (matched?.rate || 0);
+        const amount = Number((totalQty * costPerUom).toFixed(2));
+        return {
+          cost_category: it.cost_category || '',
+          cost_category_id: matched?.id || 0,
+          group_name: matched?.group_name || '',
+          uom: it.uom || matched?.primary_uom_name || matched?.uom || 'Sq.Ft.',
+          total_qty: totalQty,
+          cost_per_uom: costPerUom,
+          amount,
+          cost_per_piece: divideBy > 0 ? Number((amount / divideBy).toFixed(2)) : 0,
+          remarks: it.remarks || '',
+        };
+      });
+      if (!imported.length) { toast.info('Previous cost had no lines'); return; }
+      recalculate(imported);
+      toast.success(`Imported from ${res.data.source_transaction_no}`);
+    } catch (err) { toast.error((err as Error).message || 'No previous cost found'); }
+  };
 
   const handleSave = async () => {
     if (!formData.production_plan_id) {
@@ -512,7 +549,7 @@ export default function GeneralCostForm() {
           </div>
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Output Qty</label>
-            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{new Intl.NumberFormat('en-IN').format(formData.output_qty || 0)}</p>
+            <p className="text-sm md:text-base font-bold text-gray-900 tabular-nums">{(Number(formData.planned_qty || formData.order_qty) || 0) <= 0 ? '—' : new Intl.NumberFormat('en-IN').format(formData.output_qty || 0)}</p>
           </div>
           <div>
             <label className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Balance Qty</label>
@@ -528,9 +565,14 @@ export default function GeneralCostForm() {
         <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-200 bg-gray-50/95 backdrop-blur">
           <div><h2 className="text-sm md:text-base font-bold text-gray-900">Cost Components (Per Pc)</h2><p className="hidden lg:block text-[11px] text-gray-500 mt-0.5">Enter moves forward · Enter on remarks adds a line · Ctrl + Enter adds a line</p></div>
           {!isPosted && canWrite && (
-            <button onClick={() => addLine(true)} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
-              <Plus size={14} /> Add Line
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={importPreviousCost} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : 'Import lines from the most recent cost for this article'} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                <Copy size={14} /> Import from Previous Cost
+              </button>
+              <button onClick={() => addLine(true)} disabled={outputZero} title={outputZero ? 'Cost cannot be updated without output quantity' : ''} className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                <Plus size={14} /> Add Line
+              </button>
+            </div>
           )}
         </div>
         {!isPosted && outputZero && (

@@ -145,8 +145,9 @@ export async function create(data, items = [], createdBy = null) {
           receipt_id, material_id, uom, primary_uom, secondary_uom,
           order_qty, primary_uom_qty, secondary_uom_qty,
           currency, exchange_rate, rate_fc, rate_inr, amount_fc, amount_inr,
-          received_qty, rate, amount, batch_no, expiry_date
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          received_qty, rate, amount, batch_no, expiry_date,
+          manufacture_date, shelf_life_months
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           receiptId, item.material_id, item.uom || null,
           item.primary_uom || null, item.secondary_uom || null,
@@ -157,6 +158,8 @@ export async function create(data, items = [], createdBy = null) {
           item.amount_fc || 0, item.amount_inr || 0,
           item.primary_uom_qty || 0, item.rate_fc || 0, item.amount_inr || 0,
           item.batch_no || null, item.expiry_date || null,
+          item.manufacture_date || null,
+          item.shelf_life_months != null && item.shelf_life_months !== '' ? item.shelf_life_months : null,
         ]
       );
     }
@@ -290,8 +293,9 @@ export async function update(id, data, items = [], updatedBy = null) {
           receipt_id, material_id, uom, primary_uom, secondary_uom,
           order_qty, primary_uom_qty, secondary_uom_qty,
           currency, exchange_rate, rate_fc, rate_inr, amount_fc, amount_inr,
-          received_qty, rate, amount, batch_no, expiry_date
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          received_qty, rate, amount, batch_no, expiry_date,
+          manufacture_date, shelf_life_months
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id, item.material_id, item.uom || null,
           item.primary_uom || null, item.secondary_uom || null,
@@ -302,6 +306,8 @@ export async function update(id, data, items = [], updatedBy = null) {
           item.amount_fc || 0, item.amount_inr || 0,
           item.primary_uom_qty || 0, item.rate_fc || 0, item.amount_inr || 0,
           item.batch_no || null, item.expiry_date || null,
+          item.manufacture_date || null,
+          item.shelf_life_months != null && item.shelf_life_months !== '' ? item.shelf_life_months : null,
         ]
       );
     }

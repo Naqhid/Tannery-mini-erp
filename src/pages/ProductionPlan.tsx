@@ -50,6 +50,7 @@ export default function ProductionPlan() {
   const [finish, setFinish] = useState('');
   const [salesOrderNo, setSalesOrderNo] = useState('');
   const [customerOrderNo, setCustomerOrderNo] = useState('');
+  const [planNo, setPlanNo] = useState('');
 
   // Filter options
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({ articles: [], colors: [], finishes: [] });
@@ -180,6 +181,7 @@ export default function ProductionPlan() {
     if (finish) params.finish = finish;
     if (salesOrderNo) params.sales_order_no = salesOrderNo;
     if (customerOrderNo) params.customer_order_no = customerOrderNo;
+    if (planNo) params.plan_no = planNo;
     setActiveParams(params);
     setCurrentPage(1);
   };
@@ -192,6 +194,7 @@ export default function ProductionPlan() {
     setFinish('');
     setSalesOrderNo('');
     setCustomerOrderNo('');
+    setPlanNo('');
     setActiveParams({});
     setCurrentPage(1);
   };
@@ -227,7 +230,7 @@ export default function ProductionPlan() {
         </div>
 
         {/* Filter Row 1 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Customer</label>
             <SearchableSelect
@@ -262,6 +265,17 @@ export default function ProductionPlan() {
               value={color}
               onChange={setColor}
               placeholder="All"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Plan No.</label>
+            <input
+              type="text"
+              value={planNo}
+              onChange={(e) => setPlanNo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+              placeholder="e.g. PP-2026-00001"
+              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />
           </div>
           <div className="flex items-end gap-2">

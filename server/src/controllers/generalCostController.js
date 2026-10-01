@@ -47,6 +47,16 @@ export async function getNextNo(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function previousCost(req, res, next) {
+  try {
+    const { article, process_stage, exclude_id } = req.query;
+    if (!article) return res.status(400).json({ error: 'article is required' });
+    const data = await model.getPreviousCostItems({ article, process_stage, exclude_id: exclude_id || null });
+    if (!data) return res.status(404).json({ error: 'No previous general cost found for this article' });
+    res.json({ data });
+  } catch (err) { next(err); }
+}
+
 export async function create(req, res, next) {
   try {
     if (!req.body.production_plan_id) return res.status(400).json({ error: 'production_plan_id is required' });

@@ -184,11 +184,11 @@ export async function createBomCostSheet(data, userId = null) {
 
     const [result] = await conn.query(
       `INSERT INTO standard_cost_sheets
-       (product_id, bom_id, bom_type, bom_version, cost_sheet_no, cost_sheet_version,
+       (product_id, bom_id, production_plan_id, bom_type, bom_version, cost_sheet_no, cost_sheet_version,
         currency, basis_unit, total_bom_cost, total_actual_cost, total_variance,
         total_other_cost, standard_cost, status, prepared_by, created_by, updated_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [data.product_id || null, data.bom_id || null, data.bom_type || 'BOM',
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [data.product_id || null, data.bom_id || null, data.production_plan_id || null, data.bom_type || 'BOM',
        data.bom_version || 1, costSheetNo, 1,
        data.currency || 'INR', data.basis_unit || 'Sq.Ft.',
        totalBom, totalActual, totalVariance,
@@ -389,6 +389,36 @@ export async function remove(id) {
   if (current.status === 'Posted') throw new Error('Cannot delete a posted cost sheet');
   const [result] = await pool.query('DELETE FROM standard_cost_sheets WHERE id = ?', [id]);
   return result.affectedRows > 0;
+}
+
+/**
+ * Returns true when the order linked to a production_status_orders row has an
+ * Approved (or Posted) standard cost sheet. Such orders have their general &
+ * machine cost LOCKED (no edit / no delete). Checks the status order's own
+ * production plan and all sibling plans (same sales order + article).
+ *
+ * @param conn  a pool or an active transaction connection
+ * @param productionStatusOrderId  the id stored as machine/general cost.production_plan_id
+ */
+export async function isOrderCostLocked(conn, productionStatusOrderId) {
+  const db = conn || pool;
+  const [[row]] = await db.query(
+    `SELECT COUNT(*) AS cnt
+       FROM production_status_orders o
+       JOIN production_plans pp ON pp.id = o.production_plan_id AND pp.deleted_at IS NULL
+       JOIN production_plans pp2
+         ON ((pp.sales_order_id IS NOT NULL AND pp2.sales_order_id = pp.sales_order_id)
+             OR (pp.sales_order_id IS NULL AND pp2.id = pp.id))
+        AND pp2.deleted_at IS NULL
+        AND TRIM(REGEXP_REPLACE(COALESCE(pp2.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+            = TRIM(REGEXP_REPLACE(COALESCE(pp.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+       JOIN standard_cost_sheets scs
+         ON scs.production_plan_id = pp2.id
+        AND scs.status IN ('Approved', 'Posted')
+      WHERE o.id = ?`,
+    [productionStatusOrderId]
+  );
+  return Number(row?.cnt || 0) > 0;
 }
 
 /**

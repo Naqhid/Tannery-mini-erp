@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { isOrderCostLocked } from './standardCostModel.js';
 
 
 async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQty, currentId = null) {
@@ -123,7 +124,19 @@ export async function getTransactionLines({ search, process_stage, page = 1, lim
 export async function getById(id) {
   const [[header]] = await pool.query(
     `SELECT gch.*,
-       o.order_no, o.issued_qty AS order_qty, o.issued_qty AS planned_qty,
+       o.order_no,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS planned_qty,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS order_qty,
        o.completed_qty AS output_qty,
        COALESCE((SELECT SUM(g2.production_qty) FROM general_cost_headers g2 WHERE g2.production_plan_id = gch.production_plan_id AND g2.id != gch.id), 0) AS completed_qty,
        GREATEST(0, o.issued_qty - COALESCE((SELECT SUM(g2.production_qty) FROM general_cost_headers g2 WHERE g2.production_plan_id = gch.production_plan_id), 0)) AS balance_qty,
@@ -178,6 +191,38 @@ export async function getByPlanId(planId) {
 /**
  * Generate next transaction number: GC-YYYY-MM-NNNN
  */
+/**
+ * Return the general cost items of the most recent entry for the same article
+ * (optionally same process stage), excluding a given entry. Used by the
+ * "Import from Previous Cost" button, mirroring Material Issue's import.
+ */
+export async function getPreviousCostItems({ article, process_stage, exclude_id = null }) {
+  if (!article) return null;
+  const params = [article];
+  let stageClause = '';
+  if (process_stage && process_stage !== 'All') { stageClause = ' AND gch.process_stage = ?'; params.push(process_stage); }
+  let excludeClause = '';
+  if (exclude_id) { excludeClause = ' AND gch.id <> ?'; params.push(exclude_id); }
+
+  const [[header]] = await pool.query(
+    `SELECT gch.id, gch.transaction_no, gch.process_stage
+       FROM general_cost_headers gch
+       JOIN production_status_orders o ON gch.production_plan_id = o.id
+      WHERE o.article COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+        ${stageClause}${excludeClause}
+      ORDER BY gch.id DESC LIMIT 1`,
+    params
+  );
+  if (!header) return null;
+
+  const [items] = await pool.query(
+    `SELECT cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks
+     FROM general_cost_items WHERE general_cost_id = ? ORDER BY sort_order, id`,
+    [header.id]
+  );
+  return { source_transaction_no: header.transaction_no, process_stage: header.process_stage, items };
+}
+
 export async function getNextTransactionNo() {
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -261,11 +306,16 @@ export async function update(id, data, userId = null) {
     await conn.beginTransaction();
 
     // Check if posted
-    const [[current]] = await conn.query('SELECT status FROM general_cost_headers WHERE id = ?', [id]);
+    const [[current]] = await conn.query('SELECT status, production_plan_id FROM general_cost_headers WHERE id = ?', [id]);
     if (!current) throw new Error('General Cost entry not found');
     if (current.status === 'Posted') throw new Error('Cannot edit a posted entry');
 
-    await assertProductionQtyWithinPlan(conn, data.production_plan_id || (await conn.query('SELECT production_plan_id FROM general_cost_headers WHERE id=?', [id]))[0][0].production_plan_id, data.production_qty || 0, id);
+    const planOrderId = data.production_plan_id || current.production_plan_id;
+    if (await isOrderCostLocked(conn, planOrderId)) {
+      throw new Error('Cannot edit: the standard cost for this order is Approved and locked');
+    }
+
+    await assertProductionQtyWithinPlan(conn, planOrderId, data.production_qty || 0, id);
 
     const items = data.items || [];
     const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -322,9 +372,12 @@ export async function post(id, userId = null) {
  * Delete a general cost entry
  */
 export async function remove(id) {
-  const [[current]] = await pool.query('SELECT status FROM general_cost_headers WHERE id = ?', [id]);
+  const [[current]] = await pool.query('SELECT status, production_plan_id FROM general_cost_headers WHERE id = ?', [id]);
   if (!current) return false;
   if (current.status === 'Posted') throw new Error('Cannot delete a posted entry');
+  if (await isOrderCostLocked(pool, current.production_plan_id)) {
+    throw new Error('Cannot delete: the standard cost for this order is Approved and locked');
+  }
   const [result] = await pool.query('DELETE FROM general_cost_headers WHERE id = ?', [id]);
   return result.affectedRows > 0;
 }

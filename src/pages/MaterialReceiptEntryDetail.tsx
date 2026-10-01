@@ -29,6 +29,8 @@ interface Item {
   amount_fc: number;
   amount_inr: number;
   expiry_date: string;
+  manufacture_date: string;
+  shelf_life_months: string;
 }
 
 interface ReceiptData {
@@ -55,7 +57,18 @@ interface ReceiptData {
   status: string;
 }
 
-const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', primary_uom: '', secondary_uom: '', order_qty: '', primary_uom_qty: '', secondary_uom_qty: '', currency: 'INR', exchange_rate: '1', rate_fc: '', rate_inr: 0, discount_percent: 0, amount_fc: 0, amount_inr: 0, expiry_date: '' };
+const emptyItem: Item = { _key: '', material_id: '', material_code: '', material_name: '', uom: '', primary_uom: '', secondary_uom: '', order_qty: '', primary_uom_qty: '', secondary_uom_qty: '', currency: 'INR', exchange_rate: '1', rate_fc: '', rate_inr: 0, discount_percent: 0, amount_fc: 0, amount_inr: 0, expiry_date: '', manufacture_date: '', shelf_life_months: '' };
+
+// Expiry date = manufacture date + shelf life (in months). Non-editable, derived.
+function computeExpiryDate(manufactureDate: string, shelfLifeMonths: string): string {
+  if (!manufactureDate || shelfLifeMonths === '' || shelfLifeMonths == null) return '';
+  const months = parseInt(shelfLifeMonths, 10);
+  if (!Number.isFinite(months)) return '';
+  const d = new Date(manufactureDate);
+  if (Number.isNaN(d.getTime())) return '';
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().split('T')[0];
+}
 
 const emptyReceipt: ReceiptData = {
   receipt_no: '', receipt_date: new Date().toISOString().split('T')[0], receipt_type: 'Direct Purchase',
@@ -157,7 +170,10 @@ export default function MaterialReceiptEntryDetail() {
         discount_percent: parseFloat(it.discount_percent) || 0,
         amount_fc: parseFloat(it.amount_fc) || 0,
         amount_inr: parseFloat(it.amount_inr) || parseFloat(it.amount) || 0,
-        expiry_date: it.expiry_date?.split('T')[0] || '',
+        manufacture_date: it.manufacture_date?.split('T')[0] || '',
+        shelf_life_months: it.shelf_life_months != null ? String(it.shelf_life_months) : '',
+        expiry_date: it.expiry_date?.split('T')[0]
+          || computeExpiryDate(it.manufacture_date?.split('T')[0] || '', it.shelf_life_months != null ? String(it.shelf_life_months) : ''),
       })));
     } catch { toast.error('Failed to load receipt'); }
     finally { setLoading(false); }
@@ -220,13 +236,27 @@ export default function MaterialReceiptEntryDetail() {
       const st = sup?.state_name || sup?.state || '';
       next.tax_type = stateIsIntra(st) ? 'CGST_SGST' : 'IGST';
     }
+    // Physical Stock receipts carry no tax: force GST to zero.
+    if (key === 'receipt_type' && value === 'Physical Stock') {
+      next.gst_percent = '0';
+    }
     return next;
   });
+
+  // GST input is disabled and treated as zero for Physical Stock receipts.
+  const isPhysicalStock = receipt.receipt_type === 'Physical Stock';
 
   const updateItem = (key: string, field: string, value: any) => {
     setItems((prev) => prev.map((it) => {
       if (it._key !== key) return it;
       const updated = { ...it, [field]: value };
+      // Expiry date is derived (non-editable) = manufacture date + shelf life (months).
+      if (field === 'manufacture_date' || field === 'shelf_life_months') {
+        updated.expiry_date = computeExpiryDate(
+          field === 'manufacture_date' ? value : updated.manufacture_date,
+          field === 'shelf_life_months' ? value : updated.shelf_life_months,
+        );
+      }
       if (field === 'material_id') {
         const mat = materials.find((m) => String(m.id) === value);
         if (mat) {
@@ -335,7 +365,7 @@ export default function MaterialReceiptEntryDetail() {
   const loadingCharges = parseFloat(receipt.loading_charges) || 0;
   const otherCharges = parseFloat(receipt.other_charges) || 0;
   const totalOtherCharges = freight + loadingCharges + otherCharges;
-  const gstPercent = parseFloat(receipt.gst_percent) || 0;
+  const gstPercent = isPhysicalStock ? 0 : (parseFloat(receipt.gst_percent) || 0);
   const isIntra = receipt.tax_type === 'CGST_SGST';
   const gstTotal = totalAmountInr * gstPercent / 100;
   const cgstAmount = isIntra ? gstTotal / 2 : 0;
@@ -386,6 +416,8 @@ export default function MaterialReceiptEntryDetail() {
           amount_inr: i.amount_inr,
           batch_no: null,
           expiry_date: i.expiry_date || null,
+          manufacture_date: i.manufacture_date || null,
+          shelf_life_months: i.shelf_life_months === '' ? null : Number(i.shelf_life_months),
         })),
       };
 
@@ -447,6 +479,8 @@ export default function MaterialReceiptEntryDetail() {
           amount_inr: i.amount_inr,
           batch_no: null,
           expiry_date: i.expiry_date || null,
+          manufacture_date: i.manufacture_date || null,
+          shelf_life_months: i.shelf_life_months === '' ? null : Number(i.shelf_life_months),
         })),
       };
       if (isNew) {
@@ -500,6 +534,8 @@ export default function MaterialReceiptEntryDetail() {
           amount_inr: i.amount_inr,
           batch_no: null,
           expiry_date: i.expiry_date || null,
+          manufacture_date: i.manufacture_date || null,
+          shelf_life_months: i.shelf_life_months === '' ? null : Number(i.shelf_life_months),
         })),
       };
       if (isNew) {
@@ -622,6 +658,9 @@ export default function MaterialReceiptEntryDetail() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Discount %</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount(FC)</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Amount(INR)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Mfg. Date</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Shelf Life (Months)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Expiry Date</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Actions</th>
               </tr>
             </thead>
@@ -688,6 +727,23 @@ export default function MaterialReceiptEntryDetail() {
                   </td>
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{item.currency === 'INR' ? '' : (item.amount_fc || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3 text-xs font-bold text-teal-700 text-right">{(item.amount_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2.5 px-3">
+                    <input type="date" value={item.manufacture_date}
+                      onChange={(e) => updateItem(item._key, 'manufacture_date', e.target.value)}
+                      disabled={isPosted}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[130px] ${isPosted ? 'bg-gray-100 cursor-not-allowed' : ''}`} />
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <input type="number" min="0" step="1" value={item.shelf_life_months}
+                      onChange={(e) => updateItem(item._key, 'shelf_life_months', e.target.value)}
+                      disabled={isPosted}
+                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[90px] text-right ${isPosted ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder="0" />
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <input type="date" value={item.expiry_date} readOnly disabled
+                      title="Expiry = Manufacture date + Shelf life (months)"
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-100 cursor-not-allowed text-gray-600 min-w-[130px]" />
+                  </td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
                       <Trash2 size={14} />
@@ -720,8 +776,9 @@ export default function MaterialReceiptEntryDetail() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs text-gray-600 flex items-center gap-1">
                     GST
-                    <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
-                      className="w-16 px-2 py-1 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
+                    <input type="number" value={isPhysicalStock ? '0' : receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
+                      disabled={isPhysicalStock}
+                      className={`w-16 px-2 py-1 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isPhysicalStock ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder="0" />
                     % (CGST + SGST)
                   </span>
                 </div>
@@ -738,8 +795,9 @@ export default function MaterialReceiptEntryDetail() {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs text-gray-500 flex items-center gap-1">
                   IGST
-                  <input type="number" value={receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
-                    className="w-16 px-2 py-1 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
+                  <input type="number" value={isPhysicalStock ? '0' : receipt.gst_percent} onChange={(e) => update('gst_percent', e.target.value)}
+                    disabled={isPhysicalStock}
+                    className={`w-16 px-2 py-1 text-xs text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isPhysicalStock ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder="0" />
                   %
                 </span>
                 <span className="text-xs font-semibold text-gray-700">{igstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>

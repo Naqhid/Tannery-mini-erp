@@ -78,9 +78,9 @@ export async function filterOptions(_req, res, next) {
 
 export async function salesOrderItems(req, res, next) {
   try {
-    const { search, status, customer_id, article, color } = req.query;
+    const { search, status, customer_id, article, color, plan_no } = req.query;
     const { page, limit } = req;
-    const { rows, total } = await model.getSalesOrderItems({ search, status, customer_id, article, color, page, limit });
+    const { rows, total } = await model.getSalesOrderItems({ search, status, customer_id, article, color, plan_no, page, limit });
     res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (err) { next(err); }
 }
