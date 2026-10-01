@@ -394,11 +394,21 @@ async function buildDetailFromSeed(seed) {
           WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
             AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
         ), 0) AS completed_qty,
-        COALESCE((
-          SELECT SUM(pso.issued_qty) FROM production_status_orders pso
-          WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
-            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
-        ), 0) AS order_qty,
+        COALESCE(
+          NULLIF((
+            SELECT SUM(pso.issued_qty) FROM production_status_orders pso
+            WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
+              AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+          ), 0),
+          -- Fall back to the planned qty defined on the production plan stage
+          -- when nothing has been issued into this stage yet (issued_qty = 0).
+          (
+            SELECT SUM(s.planned_qty) FROM production_plan_stages s
+            WHERE s.plan_id IN (${idInList})
+              AND s.stage_name COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+          ),
+          0
+        ) AS order_qty,
         COALESCE((
           SELECT ps.uom FROM process_stages ps
           WHERE ps.name COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
