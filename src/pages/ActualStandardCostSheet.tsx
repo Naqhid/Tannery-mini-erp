@@ -29,13 +29,13 @@ type CostRow = { data_source:string; item_group:string; item_name:string; cost_g
 type Stage = { id:number; process_stage:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; rejection_qty?:number; rows:CostRow[] };
 type SummaryLine = { label:string; amount:number; cost_per_piece:number };
 type SummaryStage = {
-  process_stage:string; uom:string; output_qty:number; rejection_qty:number;
+  process_stage:string; uom:string; output_qty:number; planned_qty?:number; rejection_qty:number;
   lines:SummaryLine[];
   total:{ amount:number; cost_per_piece:number };
   rejection:{ qty:number; amount:number; cost_per_piece:number };
   total_with_rejection:{ amount:number; cost_per_piece:number };
 };
-type SummaryMeta = { order_qty:number; completed_qty:number; excess_shortage:number };
+type SummaryMeta = { order_qty:number; completed_qty:number; measurement_sqft?:number; excess_shortage:number };
 type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[]; summary?:SummaryStage[]; summary_meta?:SummaryMeta };
 
 const fmt = (n:number) => new Intl.NumberFormat('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);
@@ -268,7 +268,7 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
       <tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr>
         <td colSpan={2} className="p-3 text-right font-bold text-slate-700">Grand Total (incl. rejection)</td>
         <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.amt)}</td>
-        <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.amt / (meta?.completed_qty > 0 ? meta.completed_qty : 1))}</td>
+        <td className="p-3 text-right font-bold text-blue-800">—</td>
         <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.cpp)}</td>
       </tr></tfoot>
     </table></div>
@@ -281,35 +281,40 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
 }
 
 function SummaryStageRows({s}:{s:SummaryStage}){
-  const stageLabel = `${s.process_stage||'Stage'} - ${fmtQty(s.output_qty)} ${s.uom||''}`;
+  // Label + Cost/Piece are based on the stage's PLANNED qty (matches the
+  // Production Plan's "Plan Qty"), not the completed output qty. Cost/Sqft comes
+  // from the backend (measurement Sq.Ft. basis) via cost_per_piece.
+  const pieceQty = Number(s.planned_qty) || 0;
+  const perPiece = (amt:number) => pieceQty > 0 ? amt / pieceQty : 0;
+  const stageLabel = `${s.process_stage||'Stage'} - ${fmtQty(pieceQty)} ${s.uom||''}`;
   return <>
     <tr className="border-t border-slate-200 bg-slate-50/70"><td colSpan={5} className="p-2.5 font-bold text-slate-800">{stageLabel}</td></tr>
     {s.lines.map((ln,i)=><tr key={i} className="border-t border-slate-100">
       <td className="p-2.5"></td>
       <td className="p-2.5">{ln.label}</td>
       <td className="p-2.5 text-right">{fmt(ln.amount)}</td>
-      <td className="p-2.5 text-right">{fmt(ln.amount / (s.output_qty > 0 ? s.output_qty : 1))}</td>
+      <td className="p-2.5 text-right">{fmt(perPiece(ln.amount))}</td>
       <td className="p-2.5 text-right">{fmt(ln.cost_per_piece)}</td>
     </tr>)}
     <tr className="border-t border-slate-100 bg-slate-50/40">
       <td className="p-2.5"></td>
       <td className="p-2.5 font-semibold text-slate-600">Total</td>
       <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.amount)}</td>
-      <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.amount / (s.output_qty > 0 ? s.output_qty : 1))}</td>
+      <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(perPiece(s.total.amount))}</td>
       <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(s.total.cost_per_piece)}</td>
     </tr>
     <tr className="border-t border-slate-100">
       <td className="p-2.5"></td>
       <td className="p-2.5 text-rose-700">Rejection {fmtQty(s.rejection.qty)} {s.uom||''}</td>
       <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.amount)}</td>
-      <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.amount / (s.rejection.qty > 0 ? s.rejection.qty : 1))}</td>
+      <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.qty > 0 ? s.rejection.amount / s.rejection.qty : 0)}</td>
       <td className="p-2.5 text-right text-rose-700">{fmt(s.rejection.cost_per_piece)}</td>
     </tr>
     <tr className="border-t border-slate-100 bg-blue-50/40">
       <td className="p-2.5"></td>
       <td className="p-2.5 font-semibold text-blue-800">{s.process_stage} + Rejection</td>
       <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.amount)}</td>
-      <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.amount / ((s.output_qty + s.rejection.qty) > 0 ? (s.output_qty + s.rejection.qty) : 1))}</td>
+      <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(perPiece(s.total_with_rejection.amount))}</td>
       <td className="p-2.5 text-right font-semibold text-blue-800">{fmt(s.total_with_rejection.cost_per_piece)}</td>
     </tr>
   </>;

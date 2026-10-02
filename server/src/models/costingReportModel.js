@@ -507,6 +507,16 @@ async function buildDetailFromSeed(seed) {
     : stages.reduce((m, r) => Math.max(m, Number(r.order_qty) || 0), 0);
   const balanceQty = Math.max(0, orderQty - completedQty);
 
+  // Measurement (Sq.Ft.) basis for the Summary's Cost/Sqft column. The sqft
+  // basis is the completed qty of the stage(s) measured in Square Feet (the
+  // Measurement stage). If measurement has produced 0 Sq.Ft. yet, there is no
+  // valid sqft basis, so Cost/Sqft must be 0 (not derived from a piece count).
+  const isSqftUom = (u) => /sq\.?\s*ft|square\s*feet|sqft/i.test(String(u || ''));
+  const measurementSqft = stages.reduce(
+    (m, r) => isSqftUom(r.uom) ? m + (Number(r.completed_qty) || 0) : m,
+    0
+  );
+
   // Material Issues link by plan_no + process_stage. We aggregate across ALL
   // sibling plan numbers so material issued under any plan of this sales order
   // is included. planNoList was resolved above.
@@ -661,9 +671,10 @@ async function buildDetailFromSeed(seed) {
     stageDetails.push({ ...stage, rows });
 
     // --- Per-stage Summary (mirrors the Excel breakdown) ---
-    // In the Summary, Cost/Sqft = amount / overall completed (measurement) qty,
-    // NOT the per-stage output qty.
-    const perSqft = (amt) => completedQty > 0 ? amt / completedQty : 0;
+    // In the Summary, Cost/Sqft = amount / measurement (Sq.Ft.) qty. When the
+    // Measurement stage has produced 0 Sq.Ft., there is no sqft basis and the
+    // Cost/Sqft is 0.
+    const perSqft = (amt) => measurementSqft > 0 ? amt / measurementSqft : 0;
     const sumBy = (list) => list.reduce((a, r) => a + (Number(r.actual_cost) || 0), 0);
     const materialCost = sumBy(materialRows);
     const generalCost = sumBy(generalRows);
@@ -674,10 +685,16 @@ async function buildDetailFromSeed(seed) {
     const stageCostPerPiece = perSqft(stageTotal);
     const rejectionAmount = stageCostPerPiece * rejectionQty;
 
+    // Planned qty for this stage (from production_plan_stages.planned_qty, or
+    // the issued qty). This is what the stage label and the per-piece cost are
+    // based on, matching the Production Plan's "Plan Qty" column.
+    const plannedQty = Number(stage.order_qty) || 0;
+
     summary.push({
       process_stage: stage.process_stage,
       uom: stage.uom,
       output_qty: outputQty,
+      planned_qty: plannedQty,
       rejection_qty: rejectionQty,
       lines: [
         { label: 'Material Cost', amount: materialCost, cost_per_piece: perSqft(materialCost) },
@@ -717,6 +734,7 @@ async function buildDetailFromSeed(seed) {
     summary_meta: {
       order_qty: orderQty,
       completed_qty: completedQty,
+      measurement_sqft: measurementSqft,
       excess_shortage: excessShortage,
     },
     cost_totals: {
