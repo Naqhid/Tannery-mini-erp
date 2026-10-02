@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Save, Trash2, Plus, RefreshCw, Pencil, Send,
@@ -48,6 +48,9 @@ interface TransactionSummary {
   total_output_qty: number;
   total_rejection_qty: number;
   total_wip_qty: number;
+  // Running-balance values: WIP / opening of the latest transaction (not a sum).
+  latest_wip_qty: number;
+  latest_opening_qty: number;
 }
 
 export default function ProductionStatusForm() {
@@ -73,7 +76,7 @@ export default function ProductionStatusForm() {
   // Transactions state (only in edit mode)
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [txnLoading, setTxnLoading] = useState(false);
-  const [txnSummary, setTxnSummary] = useState<TransactionSummary>({ total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0 });
+  const [txnSummary, setTxnSummary] = useState<TransactionSummary>({ total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0, latest_wip_qty: 0, latest_opening_qty: 0 });
   const [txnPage, setTxnPage] = useState(1);
   const [txnTotal, setTxnTotal] = useState(0);
   const [txnTotalPages, setTxnTotalPages] = useState(0);
@@ -86,6 +89,35 @@ export default function ProductionStatusForm() {
   const [deletingTxn, setDeletingTxn] = useState<TransactionRow | null>(null);
 
   const isPosted = !!form.posted_at;
+  // Output / rejection can only be entered once input qty is greater than 0.
+  const inputReady = (parseFloat(txnForm.input_qty) || 0) > 0;
+  // Auto-focus the Input Qty field when the transaction form opens (keyboard-friendly).
+  const inputQtyRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (showTxnForm) {
+      // Defer so the field is mounted before focusing.
+      const t = setTimeout(() => inputQtyRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [showTxnForm]);
+
+  // Keyboard shortcuts for the delete confirmation dialogs: Escape cancels,
+  // Enter confirms. Keeps the whole page keyboard-friendly.
+  useEffect(() => {
+    if (!showDeleteConfirm && !deletingTxn) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showDeleteConfirm) setShowDeleteConfirm(false);
+        if (deletingTxn) setDeletingTxn(null);
+      } else if (e.key === 'Enter') {
+        if (showDeleteConfirm) handleDelete();
+        else if (deletingTxn) handleDeleteTxn();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDeleteConfirm, deletingTxn]);
 
   // Fetch dropdowns
   useEffect(() => {
@@ -160,7 +192,7 @@ export default function ProductionStatusForm() {
       setTransactions(res.data || []);
       setTxnTotal(res.total || 0);
       setTxnTotalPages(res.totalPages || 0);
-      setTxnSummary(res.summary || { total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0 });
+      setTxnSummary(res.summary || { total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0, latest_wip_qty: 0, latest_opening_qty: 0 });
     } catch {
       setTransactions([]);
     } finally {
@@ -269,8 +301,9 @@ export default function ProductionStatusForm() {
   // Transaction CRUD
   const openAddTxn = () => {
     setEditingTxn(null);
-    // Default opening to 0; carry-forward logic will be handled when previous WIP exists
-    const lastWip = Number(txnSummary.total_wip_qty) || 0;
+    // Opening carries forward from the LATEST transaction's WIP (running balance),
+    // not the sum of every day's WIP.
+    const lastWip = Number(txnSummary.latest_wip_qty) || 0;
     const newForm = { production_date: new Date().toISOString().split('T')[0], opening_qty: lastWip > 0 ? lastWip.toFixed(2) : '0', input_qty: '', output_qty: '', rejection_qty: '', wip_qty: '', remarks: '' };
     newForm.wip_qty = calcWip(newForm.opening_qty, newForm.input_qty, newForm.output_qty, newForm.rejection_qty);
     setTxnForm(newForm);
@@ -295,6 +328,19 @@ export default function ProductionStatusForm() {
 
   const handleSaveTxn = async () => {
     if (!txnForm.production_date) { toast.error('Production date is required'); return; }
+    // Input is the material fed into the stage and must always be greater than 0.
+    // Output cannot be recorded without first adding input.
+    const inputVal = parseFloat(txnForm.input_qty) || 0;
+    const outputVal = parseFloat(txnForm.output_qty) || 0;
+    const openingVal = parseFloat(txnForm.opening_qty) || 0;
+    if (inputVal <= 0) {
+      toast.error(outputVal > 0 ? 'Add input first — input qty must be greater than 0' : 'Input qty must be greater than 0');
+      return;
+    }
+    if (outputVal + (parseFloat(txnForm.rejection_qty) || 0) > openingVal + inputVal) {
+      toast.error('Output + rejection cannot exceed opening + input');
+      return;
+    }
     setTxnSaving(true);
     try {
       if (editingTxn) {
@@ -461,7 +507,7 @@ export default function ProductionStatusForm() {
             </div>
             <div className="text-center p-3 bg-amber-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">WIP</p>
-              <p className="text-lg font-bold text-amber-700 mt-1">{formatNumber(txnSummary.total_wip_qty)}</p>
+              <p className="text-lg font-bold text-amber-700 mt-1">{formatNumber(txnSummary.latest_wip_qty)}</p>
             </div>
           </div>
         )}
@@ -486,7 +532,21 @@ export default function ProductionStatusForm() {
 
           {/* Transaction Form (inline) */}
           {showTxnForm && !isPosted && (
-            <div className="px-5 py-4 bg-blue-50/50 border-b border-gray-200">
+            <div
+              className="px-5 py-4 bg-blue-50/50 border-b border-gray-200"
+              onKeyDown={(e) => {
+                // Keyboard-friendly: Enter saves, Escape cancels. Ignore Enter when
+                // focus is on a button (let the button's own click fire).
+                const target = e.target as HTMLElement;
+                if (e.key === 'Enter' && target.tagName !== 'BUTTON' && target.tagName !== 'TEXTAREA') {
+                  e.preventDefault();
+                  if (!txnSaving) handleSaveTxn();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setShowTxnForm(false);
+                }
+              }}
+            >
               <p className="text-xs font-semibold text-gray-700 mb-3">{editingTxn ? 'Edit Transaction' : 'New Transaction'}</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                 <div>
@@ -501,19 +561,23 @@ export default function ProductionStatusForm() {
                     className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-gray-50 text-gray-700" placeholder="0" />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-600 mb-1">Input Qty</label>
-                  <input type="number" step="0.01" value={txnForm.input_qty} onChange={e => updateTxnField('input_qty', e.target.value)}
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">Input Qty <span className="text-rose-500">*</span></label>
+                  <input ref={inputQtyRef} type="number" step="0.01" min="0" value={txnForm.input_qty} onChange={e => updateTxnField('input_qty', e.target.value)}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500" placeholder="0" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">Output Qty</label>
-                  <input type="number" step="0.01" value={txnForm.output_qty} onChange={e => updateTxnField('output_qty', e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                  <input type="number" step="0.01" min="0" value={txnForm.output_qty} onChange={e => updateTxnField('output_qty', e.target.value)}
+                    disabled={!inputReady}
+                    title={!inputReady ? 'Add input qty first' : undefined}
+                    className={`w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 ${!inputReady ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`} placeholder={!inputReady ? 'Add input first' : '0'} />
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">Rejection Qty</label>
-                  <input type="number" step="0.01" value={txnForm.rejection_qty} onChange={e => updateTxnField('rejection_qty', e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                  <input type="number" step="0.01" min="0" value={txnForm.rejection_qty} onChange={e => updateTxnField('rejection_qty', e.target.value)}
+                    disabled={!inputReady}
+                    title={!inputReady ? 'Add input qty first' : undefined}
+                    className={`w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 ${!inputReady ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`} placeholder={!inputReady ? 'Add input first' : '0'} />
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">WIP Qty</label>
@@ -583,7 +647,7 @@ export default function ProductionStatusForm() {
                       <td className="px-4 py-2.5 text-blue-700 text-right tabular-nums">{formatNumber(txnSummary.total_input_qty)}</td>
                       <td className="px-4 py-2.5 text-blue-700 text-right tabular-nums">{formatNumber(txnSummary.total_output_qty)}</td>
                       <td className="px-4 py-2.5 text-rose-700 text-right tabular-nums">{formatNumber(txnSummary.total_rejection_qty)}</td>
-                      <td className="px-4 py-2.5 text-amber-700 text-right tabular-nums">{formatNumber(txnSummary.total_wip_qty)}</td>
+                      <td className="px-4 py-2.5 text-amber-700 text-right tabular-nums" title="Latest WIP (running balance)">{formatNumber(txnSummary.latest_wip_qty)}</td>
                       {!isPosted && <td></td>}
                     </tr>
                   </tbody>

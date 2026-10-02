@@ -246,6 +246,20 @@ export async function getTransactions({ production_status_order_id, page = 1, li
      FROM production_status_transactions t WHERE ${where}`, params
   );
 
+  // WIP and Opening are a running balance, not a sum. The order-level WIP is the
+  // WIP of the LATEST transaction (by production date, then id). The latest
+  // opening is that same transaction's opening. These drive the KPI card and the
+  // carry-forward opening for a new transaction.
+  const [[latest]] = await pool.query(
+    `SELECT t.wip_qty AS latest_wip_qty, t.opening_qty AS latest_opening_qty
+       FROM production_status_transactions t
+      WHERE ${where}
+      ORDER BY t.production_date DESC, t.id DESC
+      LIMIT 1`, params
+  );
+  summary.latest_wip_qty = Number(latest?.latest_wip_qty) || 0;
+  summary.latest_opening_qty = Number(latest?.latest_opening_qty) || 0;
+
   return { rows, total, summary };
 }
 
@@ -274,6 +288,12 @@ export async function getNextTransactionNo() {
 }
 
 export async function createTransaction(data, userId = null) {
+  // Input qty must always be greater than 0 (output cannot be recorded without input).
+  if ((parseFloat(data.input_qty) || 0) <= 0) {
+    const err = new Error('Input qty must be greater than 0');
+    err.status = 400;
+    throw err;
+  }
   const transactionNo = data.transaction_no || await getNextTransactionNo();
 
   const [result] = await pool.query(
@@ -302,6 +322,12 @@ export async function createTransaction(data, userId = null) {
 }
 
 export async function updateTransaction(id, data, userId = null) {
+  // Input qty must always be greater than 0 (output cannot be recorded without input).
+  if ((parseFloat(data.input_qty) || 0) <= 0) {
+    const err = new Error('Input qty must be greater than 0');
+    err.status = 400;
+    throw err;
+  }
   // Get the order id before update
   const [[existing]] = await pool.query('SELECT production_status_order_id FROM production_status_transactions WHERE id = ?', [id]);
   if (!existing) return false;
