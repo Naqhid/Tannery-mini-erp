@@ -52,7 +52,12 @@ export async function getOrders({ search, status, process_stage, show_completed,
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
     `SELECT pp.id AS plan_id, pp.plan_no, MAX(o.customer_name) AS customer_name, MAX(o.article) AS article, MAX(o.color) AS color,
-       SUM(o.issued_qty) AS order_qty, SUM(o.completed_qty) AS completed_qty, SUM(o.balance_qty) AS balance_qty,
+       SUM(COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0)) AS order_qty, SUM(o.completed_qty) AS completed_qty, SUM(o.balance_qty) AS balance_qty,
        CASE WHEN SUM(CASE WHEN o.status = 'Completed' THEN 1 ELSE 0 END) = COUNT(o.id) THEN 'Completed'
          WHEN SUM(CASE WHEN o.status IN ('In Progress', 'In-Process') THEN 1 ELSE 0 END) > 0 THEN 'In Progress'
          WHEN SUM(CASE WHEN o.status = 'Posted' THEN 1 ELSE 0 END) > 0 THEN 'Posted' ELSE 'Pending' END AS status,
@@ -73,7 +78,13 @@ export async function getOrders({ search, status, process_stage, show_completed,
 
 export async function getOrdersByPlan(planId) {
   const [rows] = await pool.query(
-    `SELECT o.id, o.order_no, o.customer_name, o.article, o.color, o.process_stage, o.issued_qty AS order_qty,
+    `SELECT o.id, o.order_no, o.customer_name, o.article, o.color, o.process_stage,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS order_qty,
        o.completed_qty, o.balance_qty, o.status, o.uom, mch.id AS machine_cost_id, mch.transaction_no, mch.status AS cost_status
      FROM production_status_orders o LEFT JOIN machine_cost_headers mch ON mch.production_plan_id = o.id
      WHERE o.production_plan_id = ? AND o.deleted_at IS NULL ORDER BY o.process_stage, o.id`, [planId]
@@ -98,19 +109,23 @@ export async function getStagesForOrder(orderId) {
   if (!order) return [];
   const planId = order.production_plan_id;
 
-  // Stage list = plan stages UNION the status order's own stage, so a stage that
-  // isn't formally defined on the plan but exists on the order still appears.
+  // Stage list = plan stages UNION the status order's own stage UNION all active
+  // master process stages, so the user can cost ANY stage, not only the ones the
+  // plan was created with. planned_qty comes from the plan stage when defined.
   const [rows] = await pool.query(
-    `SELECT stage_name AS process_stage, planned_qty, seq FROM (
-        SELECT s.stage_name, COALESCE(SUM(s.planned_qty),0) AS planned_qty, MIN(s.seq) AS seq
+    `SELECT stage_name AS process_stage, SUM(planned_qty) AS planned_qty, MIN(seq) AS seq FROM (
+        SELECT s.stage_name COLLATE utf8mb4_unicode_ci AS stage_name, COALESCE(s.planned_qty,0) AS planned_qty, s.seq AS seq
           FROM production_plan_stages s
          WHERE s.plan_id = ?
-         GROUP BY s.stage_name
-        UNION
-        SELECT o.process_stage AS stage_name, 0 AS planned_qty, 999999 AS seq
+        UNION ALL
+        SELECT o.process_stage COLLATE utf8mb4_unicode_ci AS stage_name, 0 AS planned_qty, 999998 AS seq
           FROM production_status_orders o
          WHERE o.production_plan_id = ? AND o.deleted_at IS NULL
            AND o.process_stage IS NOT NULL AND o.process_stage <> ''
+        UNION ALL
+        SELECT ps.name COLLATE utf8mb4_unicode_ci AS stage_name, 0 AS planned_qty, COALESCE(ps.seq, 999999) AS seq
+          FROM process_stages ps
+         WHERE ps.status = 'Active' AND ps.name IS NOT NULL AND ps.name <> ''
      ) u
      GROUP BY stage_name
      ORDER BY MIN(seq)`,

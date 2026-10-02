@@ -52,7 +52,12 @@ export async function getOrders({ search, status, process_stage, show_completed,
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
     `SELECT pp.id AS plan_id, pp.plan_no, MAX(o.customer_name) AS customer_name, MAX(o.article) AS article, MAX(o.color) AS color,
-       SUM(o.issued_qty) AS order_qty, SUM(o.completed_qty) AS completed_qty, SUM(o.balance_qty) AS balance_qty,
+       SUM(COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0)) AS order_qty, SUM(o.completed_qty) AS completed_qty, SUM(o.balance_qty) AS balance_qty,
        CASE WHEN SUM(CASE WHEN o.status = 'Completed' THEN 1 ELSE 0 END) = COUNT(o.id) THEN 'Completed'
          WHEN SUM(CASE WHEN o.status IN ('In Progress', 'In-Process') THEN 1 ELSE 0 END) > 0 THEN 'In Progress'
          WHEN SUM(CASE WHEN o.status = 'Posted' THEN 1 ELSE 0 END) > 0 THEN 'Posted' ELSE 'Pending' END AS status,
@@ -73,7 +78,13 @@ export async function getOrders({ search, status, process_stage, show_completed,
 
 export async function getOrdersByPlan(planId) {
   const [rows] = await pool.query(
-    `SELECT o.id, o.order_no, o.customer_name, o.article, o.color, o.process_stage, o.issued_qty AS order_qty,
+    `SELECT o.id, o.order_no, o.customer_name, o.article, o.color, o.process_stage,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS order_qty,
        o.completed_qty, o.balance_qty, o.status, o.uom, gch.id AS general_cost_id, gch.transaction_no, gch.status AS cost_status
      FROM production_status_orders o LEFT JOIN general_cost_headers gch ON gch.production_plan_id = o.id
      WHERE o.production_plan_id = ? AND o.deleted_at IS NULL ORDER BY o.process_stage, o.id`, [planId]
