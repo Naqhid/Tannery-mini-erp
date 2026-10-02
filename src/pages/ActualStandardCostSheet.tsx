@@ -15,7 +15,15 @@ const SOURCE_LABELS: Record<string, string> = {
   'General Cost': 'General Cost',
 };
 const SOURCE_ORDER = ['Material Cost', 'Machine Cost', 'General Cost'];
-const normalizeSource = (s: string) => SOURCE_LABELS[s] || s || 'Other';
+// Map any raw data_source label into one of our known cost sources. Unknown or
+// unexpected values (e.g. a stray numeric id) collapse to "Other" so the Cost
+// Details source column stays consistent with the Summary cost components.
+const normalizeSource = (s: string) => {
+  const mapped = SOURCE_LABELS[s];
+  if (mapped) return mapped;
+  if (SOURCE_ORDER.includes(s)) return s;
+  return 'Other';
+};
 
 type CostRow = { data_source:string; item_group:string; item_name:string; cost_group:string; cost_category:string; uom:string; actual_cost:number; cost_per_uom:number };
 type Stage = { id:number; process_stage:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; rejection_qty?:number; rows:CostRow[] };
@@ -101,10 +109,6 @@ export default function ActualStandardCostSheet(){
     return {amount,costPerUom:out>0?amount/out:0};
   },[data]);
 
-  // Measurement qty drives cost/piece (Sq.Ft.). This is the measurement-stage
-  // completed qty resolved by the backend as order.completed_qty.
-  const measurementQty = Number(data?.order.completed_qty) || 0;
-
   // Build the Cost Details tree: STAGE -> SOURCE (Material / Machine / General)
   // -> line items. Each stage keeps its own output qty, and within it the rows
   // are classified by source so the UI can nest a source accordion under each
@@ -131,6 +135,7 @@ export default function ActualStandardCostSheet(){
   const buildExportRows = () => {
     const rows: string[][] = [];
     for (const st of stageTree) {
+      const stageQty = Number(st.stage.order_qty) || 0;
       for (const g of st.sources) {
         for (const r of g.rows) {
           const amt = Number(r.actual_cost)||0;
@@ -141,29 +146,32 @@ export default function ActualStandardCostSheet(){
             r.item_name || r.cost_category || '—',
             r.uom || '—',
             fmt(amt),
-            fmt(measurementQty>0 ? amt/measurementQty : 0),
+            fmt(stageQty>0 ? amt/stageQty : 0),
           ]);
         }
       }
     }
-    rows.push(['', '', '', 'TOTAL', '', fmt(totals.amount), fmt(measurementQty>0 ? totals.amount/measurementQty : 0)]);
+    rows.push(['', '', '', 'TOTAL', '', fmt(totals.amount), '—']);
     return rows;
   };
 
   const handleExportExcel = () => {
     if (!data) return;
-    const rows = stageTree.flatMap(st => st.sources.flatMap(g => g.rows.map(r => {
-      const amt = Number(r.actual_cost)||0;
-      return {
-        stage: st.stage.process_stage || 'Stage',
-        source: g.source,
-        item_group: r.item_group || '',
-        item_name: r.item_name || r.cost_category || '',
-        uom: r.uom || '',
-        actual_cost: fmt(amt),
-        cost_per_sqft: fmt(measurementQty>0 ? amt/measurementQty : 0),
-      };
-    })));
+    const rows = stageTree.flatMap(st => {
+      const stageQty = Number(st.stage.order_qty) || 0;
+      return st.sources.flatMap(g => g.rows.map(r => {
+        const amt = Number(r.actual_cost)||0;
+        return {
+          stage: st.stage.process_stage || 'Stage',
+          source: g.source,
+          item_group: r.item_group || '',
+          item_name: r.item_name || r.cost_category || '',
+          uom: r.uom || '',
+          actual_cost: fmt(amt),
+          cost_per_piece: fmt(stageQty>0 ? amt/stageQty : 0),
+        };
+      }));
+    });
     exportToExcel({
       data: rows,
       columns: [
@@ -173,7 +181,7 @@ export default function ActualStandardCostSheet(){
         { key:'item_name', header:'Item Name' },
         { key:'uom', header:'UOM' },
         { key:'actual_cost', header:'Actual Cost (INR)' },
-        { key:'cost_per_sqft', header:'Cost / Sq.Ft. (INR)' },
+        { key:'cost_per_piece', header:'Cost / Piece (INR)' },
       ],
       fileName: `StandardCost_${data.order.order_no || 'sheet'}`,
     });
@@ -184,7 +192,7 @@ export default function ActualStandardCostSheet(){
     downloadPDF({
       title: 'Standard Cost Sheet',
       subtitle: `${data.order.customer_name} · ${data.order.article} · ${data.order.order_no}`,
-      columns: ['Stage','Source','Item Group','Item Name','UOM','Actual Cost (INR)','Cost / Sq.Ft. (INR)'],
+      columns: ['Stage','Source','Item Group','Item Name','UOM','Actual Cost (INR)','Cost / Piece (INR)'],
       rows: buildExportRows(),
       accentColor: [37, 99, 235],
       fileName: `StandardCost_${data.order.order_no || 'sheet'}.pdf`,
@@ -220,9 +228,9 @@ export default function ActualStandardCostSheet(){
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700 flex items-center justify-between">
         <span>Cost Details</span>
-        <span className="text-xs font-normal text-slate-500">Stage-wise · classified by source · Cost/Sq.Ft. based on measurement qty ({fmtQty(measurementQty)} Sq.Ft.)</span>
+        <span className="text-xs font-normal text-slate-500">Stage-wise · classified by source · Cost/Piece based on each stage's qty</span>
       </div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-10"></th><th className="p-3 text-left">Stage / Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Actual Cost (₹)</th><th className="p-3 text-right">Cost/Sq.Ft. (₹)</th></tr></thead><tbody>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-700"><tr><th className="p-3 text-center w-10"></th><th className="p-3 text-left">Stage / Source</th><th className="p-3 text-left">Item Group</th><th className="p-3 text-left">Item Name</th><th className="p-3 text-left">UOM</th><th className="p-3 text-right">Actual Cost (₹)</th><th className="p-3 text-right">Cost/Piece (₹)</th></tr></thead><tbody>
       {stageTree.length===0
         ? <tr><td colSpan={7} className="p-6 text-center text-slate-400">No cost entries</td></tr>
         : stageTree.map((st,si)=>(
@@ -230,14 +238,13 @@ export default function ActualStandardCostSheet(){
             key={st.stage.id ?? si}
             index={si+1}
             stageNode={st}
-            measurementQty={measurementQty}
             stageCollapsed={!!collapsedStages[st.stage.process_stage]}
             onToggleStage={()=>toggleStage(st.stage.process_stage)}
             collapsedStageSources={collapsedStageSources}
             onToggleStageSource={toggleStageSource}
           />
         ))}
-      </tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={5} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(measurementQty>0 ? totals.amount/measurementQty : 0)}</td></tr></tfoot></table></div>
+      </tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={5} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">—</td></tr></tfoot></table></div>
     </div>
     {data.summary && data.summary.length>0 && <SummarySection summary={data.summary} meta={data.summary_meta}/>}
   </div>;
@@ -312,21 +319,24 @@ function SummaryStageRows({s}:{s:SummaryStage}){
 // Cost/Sq.Ft. is computed from the measurement qty, not the per-stage output.
 type StageNode = { stage:Stage; sources:{ source:string; rows:CostRow[]; amount:number }[]; amount:number };
 function StageSourceRows({
-  index, stageNode, measurementQty, stageCollapsed, onToggleStage, collapsedStageSources, onToggleStageSource,
+  index, stageNode, stageCollapsed, onToggleStage, collapsedStageSources, onToggleStageSource,
 }:{
-  index:number; stageNode:StageNode; measurementQty:number; stageCollapsed:boolean; onToggleStage:()=>void;
+  index:number; stageNode:StageNode; stageCollapsed:boolean; onToggleStage:()=>void;
   collapsedStageSources:Record<string,boolean>; onToggleStageSource:(key:string)=>void;
 }){
-  const perSqft=(amt:number)=> measurementQty>0 ? amt/measurementQty : 0;
   const { stage } = stageNode;
-  const stageLabel=`${stage.process_stage || 'Stage'} - ${fmtQty(stage.order_qty||0)} ${stage.uom||''}`;
+  // Cost/Piece is based on THIS stage's own qty. When a stage has no qty
+  // (e.g. Measurement = 0), its Cost/Piece is 0.
+  const stageQty = Number(stage.order_qty) || 0;
+  const perPiece=(amt:number)=> stageQty>0 ? amt/stageQty : 0;
+  const stageLabel=`${stage.process_stage || 'Stage'} - ${fmtQty(stageQty)} ${stage.uom||''}`;
   return <>
     {/* Stage header (level 1 accordion) */}
     <tr className="border-t border-slate-200 bg-slate-100/80 cursor-pointer hover:bg-slate-200/70" onClick={onToggleStage}>
       <td className="p-2.5 text-center text-slate-600">{stageCollapsed ? <ChevronRight size={15}/> : <ChevronDown size={15}/>}</td>
       <td className="p-2.5 font-bold text-slate-800" colSpan={4}>{index}. {stageLabel}</td>
       <td className="p-2.5 text-right font-bold text-slate-800">{fmt(stageNode.amount)}</td>
-      <td className="p-2.5 text-right font-bold text-slate-800">{fmt(perSqft(stageNode.amount))}</td>
+      <td className="p-2.5 text-right font-bold text-slate-800">{fmt(perPiece(stageNode.amount))}</td>
     </tr>
     {!stageCollapsed && (stageNode.sources.length===0
       ? <tr className="border-t border-slate-100"><td></td><td colSpan={6} className="p-2.5 text-center text-slate-400">No cost entries for this stage</td></tr>
@@ -334,22 +344,22 @@ function StageSourceRows({
           {stageNode.sources.map((g)=>{
             const key=`${stage.process_stage}::${g.source}`;
             const srcCollapsed=!!collapsedStageSources[key];
-            return <SourceSubRows key={key} stageLabel={stage.process_stage} group={g} measurementQty={measurementQty} collapsed={srcCollapsed} onToggle={()=>onToggleStageSource(key)} />;
+            return <SourceSubRows key={key} stageLabel={stage.process_stage} group={g} stageQty={stageQty} collapsed={srcCollapsed} onToggle={()=>onToggleStageSource(key)} />;
           })}
           {/* Stage total footer so the stage's cost is clearly labelled even when sources are expanded */}
           <tr className="border-t border-slate-200 bg-blue-50/50">
             <td className="p-2.5"></td>
             <td className="p-2.5 pl-8 text-right font-bold text-blue-800" colSpan={4}>{stage.process_stage || 'Stage'} Total</td>
             <td className="p-2.5 text-right font-bold text-blue-800">{fmt(stageNode.amount)}</td>
-            <td className="p-2.5 text-right font-bold text-blue-800">{fmt(perSqft(stageNode.amount))}</td>
+            <td className="p-2.5 text-right font-bold text-blue-800">{fmt(perPiece(stageNode.amount))}</td>
           </tr>
         </>)}
   </>;
 }
 
-// Source sub-accordion rendered inside a stage.
-function SourceSubRows({stageLabel,group,measurementQty,collapsed,onToggle}:{stageLabel:string;group:{source:string;rows:CostRow[];amount:number};measurementQty:number;collapsed:boolean;onToggle:()=>void}){
-  const perSqft=(amt:number)=> measurementQty>0 ? amt/measurementQty : 0;
+// Source sub-accordion rendered inside a stage. Cost/Piece uses the stage qty.
+function SourceSubRows({stageLabel,group,stageQty,collapsed,onToggle}:{stageLabel:string;group:{source:string;rows:CostRow[];amount:number};stageQty:number;collapsed:boolean;onToggle:()=>void}){
+  const perPiece=(amt:number)=> stageQty>0 ? amt/stageQty : 0;
   return <>
     <tr className="border-t border-slate-100 bg-slate-50/70 cursor-pointer hover:bg-slate-100/70" onClick={onToggle}>
       <td className="p-2.5"></td>
@@ -357,7 +367,7 @@ function SourceSubRows({stageLabel,group,measurementQty,collapsed,onToggle}:{sta
         <span className="inline-flex items-center gap-1.5">{collapsed ? <ChevronRight size={13}/> : <ChevronDown size={13}/>}{group.source} <span className="text-xs font-normal text-slate-500">({group.rows.length} item{group.rows.length!==1?'s':''})</span></span>
       </td>
       <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(group.amount)}</td>
-      <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(perSqft(group.amount))}</td>
+      <td className="p-2.5 text-right font-semibold text-slate-700">{fmt(perPiece(group.amount))}</td>
     </tr>
     {!collapsed && group.rows.map((r,i)=><tr key={`${stageLabel}-${group.source}-${i}`} className="border-t border-slate-100">
       <td className="p-2.5"></td>
@@ -366,7 +376,7 @@ function SourceSubRows({stageLabel,group,measurementQty,collapsed,onToggle}:{sta
       <td className="p-2.5 font-medium">{r.item_name||r.cost_category||'—'}</td>
       <td className="p-2.5">{r.uom||'—'}</td>
       <td className="p-2.5 text-right">{fmt(r.actual_cost)}</td>
-      <td className="p-2.5 text-right">{fmt(perSqft(Number(r.actual_cost)||0))}</td>
+      <td className="p-2.5 text-right">{fmt(perPiece(Number(r.actual_cost)||0))}</td>
     </tr>)}
   </>;
 }
