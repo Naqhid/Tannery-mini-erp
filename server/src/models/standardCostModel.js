@@ -192,7 +192,7 @@ export async function createBomCostSheet(data, userId = null) {
        data.bom_version || 1, costSheetNo, 1,
        data.currency || 'INR', data.basis_unit || 'Sq.Ft.',
        totalBom, totalActual, totalVariance,
-       0, totalActual, data.status || 'Draft', data.prepared_by || null, userId, userId]
+       0, totalActual, data.status || 'Draft', userId, userId, userId]
     );
     const costSheetId = result.insertId;
 
