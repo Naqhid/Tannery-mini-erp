@@ -334,10 +334,10 @@ export default function GeneralCost() {
                   <th onClick={() => handleSort('color')} className="group px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Color <SortIcon field="color" /></span>
                   </th>
-                  <th onClick={() => handleSort('order_qty')} className="group px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
-                    <span className="inline-flex items-center gap-1 justify-end">Planned Qty (Pcs) <SortIcon field="order_qty" /></span>
+                  <th onClick={() => handleSort('order_qty')} className="group px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
+                    <span className="inline-flex items-center gap-1 justify-center">Planned Qty (Pcs) <SortIcon field="order_qty" /></span>
                   </th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Completed Qty (Pcs)</th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Completed Qty (Pcs)</th>
                   <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance Qty (Pcs)</th>
                   <th onClick={() => handleSort('status')} className="group px-4 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span>
@@ -366,8 +366,8 @@ export default function GeneralCost() {
                       <td className="px-4 py-3.5 text-sm text-gray-900 font-medium">{row.customer_name || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-700">{row.color || '—'}</td>
-                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.order_qty)}</td>
-                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-center tabular-nums">{formatNumber(row.order_qty)}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-900 font-semibold text-center tabular-nums">{formatNumber(row.completed_qty)}</td>
                       <td className="px-4 py-3.5 text-sm text-right tabular-nums">
                         <span className={`font-semibold ${row.balance_qty > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
                           {formatNumber(row.balance_qty)}
@@ -396,8 +396,8 @@ export default function GeneralCost() {
                                   <thead>
                                     <tr className="border-b border-slate-200">
                                       <th className="text-left py-2 px-3 font-semibold text-slate-600">Process Stage</th>
-                                      <th className="text-right py-2 px-3 font-semibold text-slate-600">Planned Qty</th>
-                                      <th className="text-right py-2 px-3 font-semibold text-slate-600">Completed Qty</th>
+                                      <th className="text-center py-2 px-3 font-semibold text-slate-600">Planned Qty</th>
+                                      <th className="text-center py-2 px-3 font-semibold text-slate-600">Completed Qty</th>
                                       <th className="text-right py-2 px-3 font-semibold text-slate-600">Balance Qty</th>
                                       <th className="text-center py-2 px-3 font-semibold text-slate-600">Status</th>
                                       <th className="text-center py-2 px-3 font-semibold text-slate-600">Cost Entry</th>
@@ -407,8 +407,8 @@ export default function GeneralCost() {
                                     {detailRows[row.plan_id].map((detail) => (
                                       <tr key={detail.id} onClick={() => handleDetailRowClick(detail)} className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition-colors">
                                         <td className="py-2 px-3 font-medium text-slate-700">{detail.process_stage || 'N/A'}</td>
-                                        <td className="py-2 px-3 text-right text-slate-600">{formatNumber(detail.order_qty)}</td>
-                                        <td className="py-2 px-3 text-right text-slate-600">{formatNumber(detail.completed_qty)}</td>
+                                        <td className="py-2 px-3 text-center text-slate-600">{formatNumber(detail.order_qty)}</td>
+                                        <td className="py-2 px-3 text-center text-slate-600">{formatNumber(detail.completed_qty)}</td>
                                         <td className="py-2 px-3 text-right text-slate-600">{formatNumber(detail.balance_qty)}</td>
                                         <td className="py-2 px-3 text-center">
                                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[detail.status] || 'bg-gray-100 text-gray-600'}`}>{detail.status}</span>

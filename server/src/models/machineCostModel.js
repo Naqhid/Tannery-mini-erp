@@ -52,12 +52,14 @@ export async function getOrders({ search, status, process_stage, show_completed,
   const offset = (page - 1) * limit;
   const [rows] = await pool.query(
     `SELECT pp.id AS plan_id, pp.plan_no, MAX(o.customer_name) AS customer_name, MAX(o.article) AS article, MAX(o.color) AS color,
-       SUM(COALESCE((
+       -- Collapsed row shows ONLY the Wet End stage planned qty (the first
+       -- process stage), not the sum across every stage.
+       COALESCE((
          SELECT s.planned_qty FROM production_plan_stages s
-         WHERE s.plan_id = o.production_plan_id
-           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         WHERE s.plan_id = pp.id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = 'Wet End' COLLATE utf8mb4_unicode_ci
          ORDER BY s.seq ASC LIMIT 1
-       ), o.issued_qty, 0)) AS order_qty, SUM(o.completed_qty) AS completed_qty, SUM(o.balance_qty) AS balance_qty,
+       ), 0) AS order_qty, SUM(o.completed_qty) AS completed_qty, SUM(o.balance_qty) AS balance_qty,
        CASE WHEN SUM(CASE WHEN o.status = 'Completed' THEN 1 ELSE 0 END) = COUNT(o.id) THEN 'Completed'
          WHEN SUM(CASE WHEN o.status IN ('In Progress', 'In-Process') THEN 1 ELSE 0 END) > 0 THEN 'In Progress'
          WHEN SUM(CASE WHEN o.status = 'Posted' THEN 1 ELSE 0 END) > 0 THEN 'Posted' ELSE 'Pending' END AS status,
@@ -87,7 +89,20 @@ export async function getOrdersByPlan(planId) {
        ), o.issued_qty, 0) AS order_qty,
        o.completed_qty, o.balance_qty, o.status, o.uom, mch.id AS machine_cost_id, mch.transaction_no, mch.status AS cost_status
      FROM production_status_orders o LEFT JOIN machine_cost_headers mch ON mch.production_plan_id = o.id
-     WHERE o.production_plan_id = ? AND o.deleted_at IS NULL ORDER BY o.process_stage, o.id`, [planId]
+     WHERE o.production_plan_id = ? AND o.deleted_at IS NULL
+     -- Order stages by their defined production sequence (plan stage seq first,
+     -- then the master process_stages seq), matching how stages are shown
+     -- elsewhere, rather than alphabetically.
+     ORDER BY COALESCE((
+         SELECT s.seq FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), (
+         SELECT ps.seq FROM process_stages ps
+         WHERE ps.name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY (ps.status='Active') DESC, ps.id ASC LIMIT 1
+       ), 999999) ASC, o.id ASC`, [planId]
   );
   return rows;
 }
