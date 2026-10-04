@@ -336,11 +336,11 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
     <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Summary</div>
     <div className="overflow-x-auto"><table className="w-full text-sm">
       <thead className="bg-slate-50 text-slate-700"><tr>
-        <th className="p-3 text-left">Stage</th>
+        <th className="p-3 text-left w-12"></th>
         <th className="p-3 text-left">Cost Component</th>
-        <th className="p-3 text-right">Actual Cost (₹)</th>
-        <th className="p-3 text-right">Cost/Piece (₹)</th>
-        <th className="p-3 text-right">Cost/Sqft (₹)</th>
+        <th className="p-3 text-right w-44">Actual Cost (₹)</th>
+        <th className="p-3 text-right w-44">Cost/Piece (₹)</th>
+        <th className="p-3 text-right w-44">Cost/Sqft (₹)</th>
       </tr></thead>
       <tbody>
         {summary.map((s,si)=><SummaryStageRows key={si} s={s}/>)}

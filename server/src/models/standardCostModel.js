@@ -422,6 +422,38 @@ export async function isOrderCostLocked(conn, productionStatusOrderId) {
 }
 
 /**
+ * Same Approved/Posted standard-cost lock as isOrderCostLocked(), but resolves
+ * the order from a production plan NUMBER (plan_no). Material Issues reference
+ * the plan via `production_batch` = production_plans.plan_no, so this is used to
+ * lock material issues for orders whose standard cost is Approved.
+ *
+ * Checks the plan AND all sibling plans (same sales order + article).
+ *
+ * @param conn    a pool or an active transaction connection
+ * @param planNo  production_plans.plan_no (stored on material_issues.production_batch)
+ */
+export async function isPlanCostLockedByPlanNo(conn, planNo) {
+  if (!planNo) return false;
+  const db = conn || pool;
+  const [[row]] = await db.query(
+    `SELECT COUNT(*) AS cnt
+       FROM production_plans pp
+       JOIN production_plans pp2
+         ON ((pp.sales_order_id IS NOT NULL AND pp2.sales_order_id = pp.sales_order_id)
+             OR (pp.sales_order_id IS NULL AND pp2.id = pp.id))
+        AND pp2.deleted_at IS NULL
+        AND TRIM(REGEXP_REPLACE(COALESCE(pp2.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+            = TRIM(REGEXP_REPLACE(COALESCE(pp.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+       JOIN standard_cost_sheets scs
+         ON scs.production_plan_id = pp2.id
+        AND scs.status IN ('Approved', 'Posted')
+      WHERE pp.plan_no = ? AND pp.deleted_at IS NULL`,
+    [planNo]
+  );
+  return Number(row?.cnt || 0) > 0;
+}
+
+/**
  * Get order cost summary for a product:
  * - Completed Sq.ft (from production_status_transactions)
  * - Cost Per Sq.ft (total general + machine + material cost / completed qty)

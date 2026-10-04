@@ -1,6 +1,7 @@
 import pool from '../config/db.js';
 import { updateStock, addLedgerEntry, allowsNegativeStock, rebuildAndReprice } from './stockLedgerModel.js';
 import { getIssueItemInfo, replaceReferenceTransactions, ensureOpeningStockSeeded } from './materialTransactionModel.js';
+import { isPlanCostLockedByPlanNo } from './standardCostModel.js';
 
 export async function getAll({ search, status, warehouse_id, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
@@ -178,9 +179,20 @@ export async function update(id, data, items = [], updatedBy = null) {
     await conn.beginTransaction();
 
     // Check current status
-    const [[current]] = await conn.query('SELECT status, issue_no FROM material_issues WHERE id=?', [id]);
+    const [[current]] = await conn.query('SELECT status, issue_no, production_batch FROM material_issues WHERE id=?', [id]);
     const wasPosted = current && current.status === 'Posted';
     const newStatus = data.status || current?.status || 'Draft';
+
+    // Lock when the order's standard cost is Approved/Posted — same rule as
+    // machine & general cost. The material issue references the plan via
+    // production_batch (= production_plans.plan_no). Check both the stored and
+    // the incoming batch so a re-point to a locked order is also blocked.
+    const batchNo = data.production_batch || current?.production_batch || null;
+    if (await isPlanCostLockedByPlanNo(conn, batchNo)) {
+      const err = new Error('Cannot edit: the standard cost for this order is Approved and locked');
+      err.status = 403;
+      throw err;
+    }
 
     // Track every (warehouse, material) pair affected by old or new version.
     const affectedPairs = new Map();
@@ -294,8 +306,16 @@ export async function remove(id) {
     // status === 'Posted'). So a Draft delete must NOT reverse stock, ledger or
     // transactions — otherwise it would add phantom stock. Only a Posted issue
     // needs its stock effects reversed.
-    const [[current]] = await conn.query('SELECT status FROM material_issues WHERE id=?', [id]);
+    const [[current]] = await conn.query('SELECT status, production_batch FROM material_issues WHERE id=?', [id]);
     const wasPosted = current && current.status === 'Posted';
+
+    // Lock delete when the order's standard cost is Approved/Posted — same rule
+    // as machine & general cost.
+    if (await isPlanCostLockedByPlanNo(conn, current?.production_batch)) {
+      const err = new Error('Cannot delete: the standard cost for this order is Approved and locked');
+      err.status = 403;
+      throw err;
+    }
 
     const [items] = await conn.query(
       'SELECT material_id, uom, issue_qty, warehouse_id FROM material_issue_items mii JOIN material_issues mi ON mii.issue_id = mi.id WHERE mii.issue_id=?',
