@@ -5,6 +5,7 @@ import { Save, X, ArrowLeft, Plus, Trash2, Truck, RotateCcw, Info, Minus, Send }
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import SearchableSelect from '../components/ui/SearchableSelect';
+import DualDateInput from '../components/ui/DualDateInput';
 import api from '../lib/api';
 
 interface Warehouse { id: number; code: string; name: string; }
@@ -250,7 +251,9 @@ export default function MaterialReceiptEntryDetail() {
     setItems((prev) => prev.map((it) => {
       if (it._key !== key) return it;
       const updated = { ...it, [field]: value };
-      // Expiry date is derived (non-editable) = manufacture date + shelf life (months).
+      // Expiry date auto-fills from manufacture date + shelf life (months). The
+      // user can still override it directly (pick or type) afterwards; a manual
+      // expiry edit is preserved until mfg date / shelf life change again.
       if (field === 'manufacture_date' || field === 'shelf_life_months') {
         updated.expiry_date = computeExpiryDate(
           field === 'manufacture_date' ? value : updated.manufacture_date,
@@ -728,10 +731,12 @@ export default function MaterialReceiptEntryDetail() {
                   <td className="py-2.5 px-3 text-xs font-bold text-gray-700 text-right">{item.currency === 'INR' ? '' : (item.amount_fc || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3 text-xs font-bold text-teal-700 text-right">{(item.amount_inr || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="py-2.5 px-3">
-                    <input type="date" value={item.manufacture_date}
-                      onChange={(e) => updateItem(item._key, 'manufacture_date', e.target.value)}
+                    <DualDateInput
+                      value={item.manufacture_date}
+                      onChange={(iso) => updateItem(item._key, 'manufacture_date', iso)}
                       disabled={isPosted}
-                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[130px] ${isPosted ? 'bg-gray-100 cursor-not-allowed' : ''}`} />
+                      minWidth={130}
+                    />
                   </td>
                   <td className="py-2.5 px-3">
                     <input type="number" min="0" step="1" value={item.shelf_life_months}
@@ -740,9 +745,13 @@ export default function MaterialReceiptEntryDetail() {
                       className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 min-w-[90px] text-right ${isPosted ? 'bg-gray-100 cursor-not-allowed' : ''}`} placeholder="0" />
                   </td>
                   <td className="py-2.5 px-3">
-                    <input type="date" value={item.expiry_date} readOnly disabled
-                      title="Expiry = Manufacture date + Shelf life (months)"
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-100 cursor-not-allowed text-gray-600 min-w-[130px]" />
+                    <DualDateInput
+                      value={item.expiry_date}
+                      onChange={(iso) => updateItem(item._key, 'expiry_date', iso)}
+                      disabled={isPosted}
+                      title="Auto-filled from Manufacture date + Shelf life (months); you can also pick or type it"
+                      minWidth={130}
+                    />
                   </td>
                   <td className="py-2.5 px-3 text-center">
                     <button onClick={() => removeItem(item._key)} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
