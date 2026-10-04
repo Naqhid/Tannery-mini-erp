@@ -153,8 +153,8 @@ async function getSalesOrderTrend() {
        COUNT(*) AS order_count
      FROM sales_orders
      WHERE order_date >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 5 MONTH)
-     GROUP BY ym, label
-     ORDER BY ym ASC`
+     GROUP BY DATE_FORMAT(order_date, '%Y-%m'), DATE_FORMAT(order_date, '%b %Y')
+     ORDER BY DATE_FORMAT(order_date, '%Y-%m') ASC`
   );
   return rows.map(r => ({ label: r.label, value: Number(r.value) || 0, orderCount: Number(r.order_count) || 0 }));
 }
@@ -166,7 +166,7 @@ async function getInventoryValue() {
        COALESCE(SUM(COALESCE(current_stock, 0) * COALESCE(rate, 0)), 0) AS value
      FROM materials
      WHERE status = 'Active'
-     GROUP BY category
+     GROUP BY COALESCE(NULLIF(TRIM(type), ''), 'Other')
      HAVING value > 0
      ORDER BY value DESC`
   );
