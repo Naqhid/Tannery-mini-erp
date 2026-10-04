@@ -193,6 +193,16 @@ export default function ProductionPlanDetail() {
   const totalRejectionQty = stages.reduce((s, st) => s + (parseFloat(st.rejection_qty) || 0), 0);
   const totalWipQty = stages.reduce((s, st) => s + st.wip_qty, 0);
 
+  // Plan status derived from ACTUAL production progress (the stage statuses),
+  // so the header/status field stay consistent with the Stage Wise table.
+  // Not based on planned qty vs sales order qty.
+  const derivedStatus = (() => {
+    if (stages.length === 0 || totalPlanQty <= 0) return 'Pending';
+    if (stages.every(s => s.status === 'Completed')) return 'Completed';
+    if (stages.some(s => s.status === 'Completed' || s.status === 'In Progress')) return 'In Progress';
+    return 'Planned';
+  })();
+
   const handleOrderChange = (value: string) => {
     const so = salesOrders.find((s) => String(s.id) === value);
     update('sales_order_id', value);
@@ -244,6 +254,12 @@ export default function ProductionPlanDetail() {
   const handleSave = async () => {
     if (!plan.plan_date) { toast.error('Plan date is required'); return; }
     if (!plan.article) { toast.error('Article is required'); return; }
+    // Every stage must have a planned qty greater than 0 before saving.
+    const zeroQtyStage = stages.find(s => (parseFloat(s.planned_qty) || 0) <= 0);
+    if (zeroQtyStage) {
+      toast.error(`Planned qty must be greater than 0 for stage "${zeroQtyStage.stage_name || 'unnamed'}"`);
+      return;
+    }
 
     // If all stages are deleted on an existing plan, just save with empty stages (plan stays, stages removed)
     if (!isNew && stages.length === 0) {
@@ -277,7 +293,9 @@ export default function ProductionPlanDetail() {
 
     setSaving(true);
     try {
-      const autoStatus = totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress';
+      // Plan status reflects ACTUAL production progress (derived from stage
+      // statuses), so it stays consistent with the Stage Wise table.
+      const autoStatus = derivedStatus;
       const payload = {
         ...plan,
         status: autoStatus,
@@ -346,8 +364,8 @@ export default function ProductionPlanDetail() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-gray-900">Production Requirement Plan</h1>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_COLORS[totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'] || 'bg-gray-100 text-gray-700'}`}>
-                {totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'}
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_COLORS[derivedStatus] || 'bg-gray-100 text-gray-700'}`}>
+                {derivedStatus}
               </span>
             </div>
           </div>
@@ -425,7 +443,7 @@ export default function ProductionPlanDetail() {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
             <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-medium">
-              {totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'}
+              {derivedStatus}
             </div>
           </div>
           <div>
@@ -574,7 +592,7 @@ export default function ProductionPlanDetail() {
               {/* Plan Info Grid */}
               <div className="grid grid-cols-2 gap-x-8 gap-y-2 mb-6 border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <div className="flex justify-between"><span className="text-gray-500">Plan Date:</span><span className="font-medium">{plan.plan_date || '—'}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Status:</span><span className="font-medium">{totalPlanQty <= 0 ? 'Pending' : totalPlanQty >= salesOrderQty && salesOrderQty > 0 ? 'Completed' : 'In Progress'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Status:</span><span className="font-medium">{derivedStatus}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Article:</span><span className="font-medium">{plan.article || '—'}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Color:</span><span className="font-medium">{plan.color || '—'}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Customer:</span><span className="font-medium">{customers.find(c => String(c.id) === plan.customer_id)?.name || '—'}</span></div>

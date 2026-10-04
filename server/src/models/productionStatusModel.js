@@ -224,11 +224,14 @@ export async function getTransactions({ production_status_order_id, page = 1, li
 
   const allowedSort = ['production_date', 'transaction_no', 'opening_qty', 'input_qty', 'output_qty', 'wip_qty'];
   const col = allowedSort.includes(sortBy) ? `t.${sortBy}` : 't.production_date';
-  const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+  // Default to chronological (ascending) order so transactions read like a
+  // running ledger: earliest day first, latest day last. A tie-break on id keeps
+  // same-day rows stable.
+  const ord = sortOrder === 'desc' ? 'DESC' : 'ASC';
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
-    `SELECT t.* FROM production_status_transactions t WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
+    `SELECT t.* FROM production_status_transactions t WHERE ${where} ORDER BY ${col} ${ord}, t.id ${ord} LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
   );
 
@@ -246,10 +249,11 @@ export async function getTransactions({ production_status_order_id, page = 1, li
      FROM production_status_transactions t WHERE ${where}`, params
   );
 
-  // WIP and Opening are a running balance, not a sum. The order-level WIP is the
-  // WIP of the LATEST transaction (by production date, then id). The latest
-  // opening is that same transaction's opening. These drive the KPI card and the
-  // carry-forward opening for a new transaction.
+  // WIP and Opening are a running balance, not a sum.
+  //  - WIP (order level)      = WIP of the LATEST transaction (by date, then id).
+  //  - latest_wip_qty         = carry-forward opening for the NEXT new transaction.
+  //  - Opening (order level)  = opening of the BEGINNING (earliest) transaction,
+  //                             which is 0 for the first day's entry.
   const [[latest]] = await pool.query(
     `SELECT t.wip_qty AS latest_wip_qty, t.opening_qty AS latest_opening_qty
        FROM production_status_transactions t
@@ -257,8 +261,16 @@ export async function getTransactions({ production_status_order_id, page = 1, li
       ORDER BY t.production_date DESC, t.id DESC
       LIMIT 1`, params
   );
+  const [[beginning]] = await pool.query(
+    `SELECT t.opening_qty AS beginning_opening_qty
+       FROM production_status_transactions t
+      WHERE ${where}
+      ORDER BY t.production_date ASC, t.id ASC
+      LIMIT 1`, params
+  );
   summary.latest_wip_qty = Number(latest?.latest_wip_qty) || 0;
   summary.latest_opening_qty = Number(latest?.latest_opening_qty) || 0;
+  summary.beginning_opening_qty = Number(beginning?.beginning_opening_qty) || 0;
 
   return { rows, total, summary };
 }
@@ -294,6 +306,32 @@ export async function createTransaction(data, userId = null) {
     err.status = 400;
     throw err;
   }
+
+  // Input qty must not exceed the stage planned qty.
+  if (data.production_status_order_id) {
+    const [[order]] = await pool.query(
+      'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
+      [data.production_status_order_id]
+    );
+    const plannedQty = parseFloat(order?.planned_qty) || 0;
+    if (plannedQty > 0 && (parseFloat(data.input_qty) || 0) > plannedQty) {
+      const err = new Error(`Input qty cannot exceed planned qty (${plannedQty})`);
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  // Output + rejection must not exceed opening + input.
+  const openingVal = parseFloat(data.opening_qty) || 0;
+  const inputVal = parseFloat(data.input_qty) || 0;
+  const outputVal = parseFloat(data.output_qty) || 0;
+  const rejectionVal = parseFloat(data.rejection_qty) || 0;
+  if (outputVal + rejectionVal > openingVal + inputVal) {
+    const err = new Error('Output + rejection cannot exceed opening + input');
+    err.status = 400;
+    throw err;
+  }
+
   const transactionNo = data.transaction_no || await getNextTransactionNo();
 
   const [result] = await pool.query(
@@ -329,8 +367,33 @@ export async function updateTransaction(id, data, userId = null) {
     throw err;
   }
   // Get the order id before update
-  const [[existing]] = await pool.query('SELECT production_status_order_id FROM production_status_transactions WHERE id = ?', [id]);
+  const [[existing]] = await pool.query(
+    'SELECT production_status_order_id FROM production_status_transactions WHERE id = ?', [id]
+  );
   if (!existing) return false;
+
+  // Input qty must not exceed the stage planned qty.
+  const [[order]] = await pool.query(
+    'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
+    [existing.production_status_order_id]
+  );
+  const plannedQty = parseFloat(order?.planned_qty) || 0;
+  if (plannedQty > 0 && (parseFloat(data.input_qty) || 0) > plannedQty) {
+    const err = new Error(`Input qty cannot exceed planned qty (${plannedQty})`);
+    err.status = 400;
+    throw err;
+  }
+
+  // Output + rejection must not exceed opening + input.
+  const openingVal = parseFloat(data.opening_qty) || 0;
+  const inputVal = parseFloat(data.input_qty) || 0;
+  const outputVal = parseFloat(data.output_qty) || 0;
+  const rejectionVal = parseFloat(data.rejection_qty) || 0;
+  if (outputVal + rejectionVal > openingVal + inputVal) {
+    const err = new Error('Output + rejection cannot exceed opening + input');
+    err.status = 400;
+    throw err;
+  }
 
   const [result] = await pool.query(
     `UPDATE production_status_transactions SET

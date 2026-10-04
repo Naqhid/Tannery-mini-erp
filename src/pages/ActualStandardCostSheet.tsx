@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, X, ChevronDown, ChevronRight, FileSpreadsheet, FileText } from 'lucide-react';
+import { Save, X, ChevronDown, ChevronRight, Download, Eye, FileSpreadsheet, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../lib/api';
-import { exportToExcel } from '../lib/excelExport';
-import { downloadPDF } from '../lib/pdfExport';
+import { exportSectionedToExcel } from '../lib/excelExport';
+import type { ExcelSection } from '../lib/excelExport';
+import { previewSectionedPDF, downloadSectionedPDF } from '../lib/pdfExport';
+import type { PdfSection, PdfKeyValue, SectionedPdfConfig } from '../lib/pdfExport';
 
 // Normalize the various data_source labels into the 3 cost sources we classify by.
 const SOURCE_LABELS: Record<string, string> = {
@@ -132,7 +134,41 @@ export default function ActualStandardCostSheet(){
     });
   },[data]);
 
-  const buildExportRows = () => {
+  // ── Export: build the full document (Details + Cost Details + Summary +
+  // Grand Total) once, reused by View PDF / Download PDF / Download Excel. ──
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setExportMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  // Section 1: Standard Cost Sheet Details (key/value block).
+  const buildDetails = (): PdfKeyValue[] => {
+    if (!data) return [];
+    return [
+      { label: 'Effective From', value: effectiveFrom },
+      { label: 'Prepared By', value: user?.name || user?.full_name || 'Costing Dept.' },
+      { label: 'Cost Sheet No.', value: costSheetNo || '(Auto-generated)' },
+      { label: 'Currency', value: currency },
+      { label: 'Status', value: status },
+      { label: 'Description', value: description || '—' },
+      { label: 'Customer', value: data.order.customer_name || '—' },
+      { label: 'Article', value: data.order.article || '—' },
+      { label: 'Color', value: data.order.color || '—' },
+      { label: 'Order No.', value: data.order.order_no || '—' },
+      { label: 'Order Qty', value: `${fmtQty(data.order.order_qty)} Sq.Ft.` },
+      { label: 'Completed Qty', value: `${fmtQty(data.order.completed_qty)} Sq.Ft.` },
+      { label: 'Balance Qty', value: `${fmtQty(data.order.balance_qty)} Sq.Ft.` },
+    ];
+  };
+
+  // Section 2: Cost Details rows (Stage / Source / Item / Actual / Cost per Piece).
+  const costDetailColumns = ['Stage','Source','Item Group','Item Name','UOM','Actual Cost (₹)','Cost/Piece (₹)'];
+  const buildCostDetailRows = (): string[][] => {
     const rows: string[][] = [];
     for (const st of stageTree) {
       const stageQty = Number(st.stage.order_qty) || 0;
@@ -155,48 +191,82 @@ export default function ActualStandardCostSheet(){
     return rows;
   };
 
-  const handleExportExcel = () => {
-    if (!data) return;
-    const rows = stageTree.flatMap(st => {
-      const stageQty = Number(st.stage.order_qty) || 0;
-      return st.sources.flatMap(g => g.rows.map(r => {
-        const amt = Number(r.actual_cost)||0;
-        return {
-          stage: st.stage.process_stage || 'Stage',
-          source: g.source,
-          item_group: r.item_group || '',
-          item_name: r.item_name || r.cost_category || '',
-          uom: r.uom || '',
-          actual_cost: fmt(amt),
-          cost_per_piece: fmt(stageQty>0 ? amt/stageQty : 0),
-        };
-      }));
-    });
-    exportToExcel({
-      data: rows,
-      columns: [
-        { key:'stage', header:'Stage' },
-        { key:'source', header:'Source' },
-        { key:'item_group', header:'Item Group' },
-        { key:'item_name', header:'Item Name' },
-        { key:'uom', header:'UOM' },
-        { key:'actual_cost', header:'Actual Cost (INR)' },
-        { key:'cost_per_piece', header:'Cost / Piece (INR)' },
-      ],
-      fileName: `StandardCost_${data.order.order_no || 'sheet'}`,
-    });
+  // Section 3: Summary rows (per stage: lines, total, rejection, +rejection).
+  const summaryColumns = ['Stage','Cost Component','Actual Cost (₹)','Cost/Piece (₹)','Cost/Sqft (₹)'];
+  const buildSummaryRows = (): string[][] => {
+    const rows: string[][] = [];
+    const summary = data?.summary || [];
+    for (const s of summary) {
+      const pieceQty = Number(s.planned_qty) || 0;
+      const perPiece = (amt:number) => pieceQty > 0 ? amt / pieceQty : 0;
+      rows.push([`${s.process_stage||'Stage'} - ${fmtQty(pieceQty)} ${s.uom||''}`, '', '', '', '']);
+      for (const ln of s.lines) {
+        rows.push(['', ln.label, fmt(ln.amount), fmt(perPiece(ln.amount)), fmt(ln.cost_per_piece)]);
+      }
+      rows.push(['', 'Total', fmt(s.total.amount), fmt(perPiece(s.total.amount)), fmt(s.total.cost_per_piece)]);
+      rows.push(['', `Rejection ${fmtQty(s.rejection.qty)} ${s.uom||''}`, fmt(s.rejection.amount), fmt(s.rejection.qty>0 ? s.rejection.amount/s.rejection.qty : 0), fmt(s.rejection.cost_per_piece)]);
+      rows.push(['', `${s.process_stage} + Rejection`, fmt(s.total_with_rejection.amount), fmt(perPiece(s.total_with_rejection.amount)), fmt(s.total_with_rejection.cost_per_piece)]);
+    }
+    return rows;
   };
 
-  const handleExportPdf = () => {
-    if (!data) return;
-    downloadPDF({
+  // Section 4: Grand Total (incl. rejection).
+  const buildGrandTotalRows = (): string[][] => {
+    const summary = data?.summary || [];
+    const grand = summary.reduce((a,s)=>({ amt:a.amt+s.total_with_rejection.amount, cpp:a.cpp+s.total_with_rejection.cost_per_piece }),{amt:0,cpp:0});
+    const meta = data?.summary_meta;
+    return [
+      ['Grand Total (incl. rejection)', fmt(grand.amt), '—', fmt(grand.cpp)],
+      ['Order Qty', `${fmtQty(meta?.order_qty||0)} Sq.Ft.`, 'Measurement Qty', `${fmtQty(meta?.completed_qty||0)} Sq.Ft.`],
+      ['Excess / Shortage', `${fmtQty(meta?.excess_shortage||0)} Sq.Ft.`, '', ''],
+    ];
+  };
+
+  const buildPdfConfig = (): SectionedPdfConfig | null => {
+    if (!data) return null;
+    const sections: PdfSection[] = [
+      { heading: 'Cost Details', columns: costDetailColumns, rows: buildCostDetailRows() },
+    ];
+    if ((data.summary||[]).length > 0) {
+      sections.push({ heading: 'Summary', columns: summaryColumns, rows: buildSummaryRows() });
+      sections.push({ heading: 'Grand Total', columns: ['', 'Actual Cost (₹)', 'Cost/Piece (₹)', 'Cost/Sqft (₹)'], rows: buildGrandTotalRows() });
+    }
+    return {
       title: 'Standard Cost Sheet',
       subtitle: `${data.order.customer_name} · ${data.order.article} · ${data.order.order_no}`,
-      columns: ['Stage','Source','Item Group','Item Name','UOM','Actual Cost (INR)','Cost / Piece (INR)'],
-      rows: buildExportRows(),
+      details: buildDetails(),
+      sections,
       accentColor: [37, 99, 235],
       fileName: `StandardCost_${data.order.order_no || 'sheet'}.pdf`,
+    };
+  };
+
+  const handleViewPdf = () => {
+    const cfg = buildPdfConfig();
+    if (cfg) previewSectionedPDF(cfg);
+    setExportMenuOpen(false);
+  };
+  const handleDownloadPdf = () => {
+    const cfg = buildPdfConfig();
+    if (cfg) downloadSectionedPDF(cfg);
+    setExportMenuOpen(false);
+  };
+  const handleDownloadExcel = () => {
+    if (!data) { setExportMenuOpen(false); return; }
+    const sections: ExcelSection[] = [
+      { heading: 'Cost Details', columns: costDetailColumns, rows: buildCostDetailRows() },
+    ];
+    if ((data.summary||[]).length > 0) {
+      sections.push({ heading: 'Summary', columns: summaryColumns, rows: buildSummaryRows() });
+      sections.push({ heading: 'Grand Total', columns: ['', 'Actual Cost (₹)', 'Cost/Piece (₹)', 'Cost/Sqft (₹)'], rows: buildGrandTotalRows() });
+    }
+    exportSectionedToExcel({
+      title: 'Standard Cost Sheet',
+      details: buildDetails(),
+      sections,
+      fileName: `StandardCost_${data.order.order_no || 'sheet'}`,
     });
+    setExportMenuOpen(false);
   };
 
   if(loading) return <div className="p-8 text-center text-gray-500">Loading standard cost sheet...</div>;
@@ -205,8 +275,18 @@ export default function ActualStandardCostSheet(){
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost Sheet</h1><span className="px-3 py-1 rounded bg-amber-50 text-amber-700 text-sm font-semibold border border-amber-200">Draft</span></div>
       <div className="flex gap-3">
-        <button onClick={handleExportExcel} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50"><FileSpreadsheet size={16}/>Excel</button>
-        <button onClick={handleExportPdf} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50"><FileText size={16}/>PDF</button>
+        <div className="relative" ref={exportMenuRef}>
+          <button onClick={()=>setExportMenuOpen(o=>!o)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">
+            <Download size={16}/>Export<ChevronDown size={14} className={`transition-transform ${exportMenuOpen?'rotate-180':''}`}/>
+          </button>
+          {exportMenuOpen && (
+            <div className="absolute right-0 mt-1 w-48 rounded-lg border border-slate-200 bg-white shadow-lg z-20 py-1">
+              <button onClick={handleViewPdf} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><Eye size={15}/>View PDF</button>
+              <button onClick={handleDownloadPdf} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><FileText size={15}/>Download PDF</button>
+              <button onClick={handleDownloadExcel} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><FileSpreadsheet size={15}/>Download Excel</button>
+            </div>
+          )}
+        </div>
         <button onClick={()=>navigate('/standard-costing')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold"><X size={16}/>Cancel</button>
         <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"><Save size={16}/>{saving?'Saving...':'Save'}</button>
       </div>

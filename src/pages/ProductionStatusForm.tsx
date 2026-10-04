@@ -48,9 +48,10 @@ interface TransactionSummary {
   total_output_qty: number;
   total_rejection_qty: number;
   total_wip_qty: number;
-  // Running-balance values: WIP / opening of the latest transaction (not a sum).
-  latest_wip_qty: number;
-  latest_opening_qty: number;
+  // Running-balance values (not sums).
+  latest_wip_qty: number;        // WIP of the latest transaction (carry-forward opening for next row)
+  latest_opening_qty: number;    // opening of the latest transaction
+  beginning_opening_qty: number; // opening of the earliest transaction (order-level Opening, 0 on day one)
 }
 
 export default function ProductionStatusForm() {
@@ -76,7 +77,7 @@ export default function ProductionStatusForm() {
   // Transactions state (only in edit mode)
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [txnLoading, setTxnLoading] = useState(false);
-  const [txnSummary, setTxnSummary] = useState<TransactionSummary>({ total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0, latest_wip_qty: 0, latest_opening_qty: 0 });
+  const [txnSummary, setTxnSummary] = useState<TransactionSummary>({ total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0, latest_wip_qty: 0, latest_opening_qty: 0, beginning_opening_qty: 0 });
   const [txnPage, setTxnPage] = useState(1);
   const [txnTotal, setTxnTotal] = useState(0);
   const [txnTotalPages, setTxnTotalPages] = useState(0);
@@ -91,6 +92,16 @@ export default function ProductionStatusForm() {
   const isPosted = !!form.posted_at;
   // Output / rejection can only be entered once input qty is greater than 0.
   const inputReady = (parseFloat(txnForm.input_qty) || 0) > 0;
+  // Identify the latest transaction (by production date, then id) so it can be
+  // flagged in the table — the running WIP balance belongs to this row.
+  const latestTxnId = transactions.reduce<number | null>((latest, t) => {
+    if (latest === null) return t.id;
+    const cur = transactions.find(x => x.id === latest)!;
+    const curTime = new Date(cur.production_date).getTime();
+    const tTime = new Date(t.production_date).getTime();
+    if (tTime > curTime || (tTime === curTime && t.id > cur.id)) return t.id;
+    return latest;
+  }, null);
   // Auto-focus the Input Qty field when the transaction form opens (keyboard-friendly).
   const inputQtyRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -192,7 +203,7 @@ export default function ProductionStatusForm() {
       setTransactions(res.data || []);
       setTxnTotal(res.total || 0);
       setTxnTotalPages(res.totalPages || 0);
-      setTxnSummary(res.summary || { total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0, latest_wip_qty: 0, latest_opening_qty: 0 });
+      setTxnSummary(res.summary || { total_opening_qty: 0, total_input_qty: 0, total_output_qty: 0, total_rejection_qty: 0, total_wip_qty: 0, latest_wip_qty: 0, latest_opening_qty: 0, beginning_opening_qty: 0 });
     } catch {
       setTransactions([]);
     } finally {
@@ -333,11 +344,19 @@ export default function ProductionStatusForm() {
     const inputVal = parseFloat(txnForm.input_qty) || 0;
     const outputVal = parseFloat(txnForm.output_qty) || 0;
     const openingVal = parseFloat(txnForm.opening_qty) || 0;
+    const rejectionVal = parseFloat(txnForm.rejection_qty) || 0;
+    const plannedVal = parseFloat(form.planned_qty) || 0;
     if (inputVal <= 0) {
       toast.error(outputVal > 0 ? 'Add input first — input qty must be greater than 0' : 'Input qty must be greater than 0');
       return;
     }
-    if (outputVal + (parseFloat(txnForm.rejection_qty) || 0) > openingVal + inputVal) {
+    // Input cannot exceed the stage's planned qty.
+    if (plannedVal > 0 && inputVal > plannedVal) {
+      toast.error(`Input qty (${inputVal}) cannot exceed planned qty (${plannedVal})`);
+      return;
+    }
+    // Output cannot exceed opening + input (you can't produce more than what's in the stage).
+    if (outputVal + rejectionVal > openingVal + inputVal) {
       toast.error('Output + rejection cannot exceed opening + input');
       return;
     }
@@ -492,7 +511,11 @@ export default function ProductionStatusForm() {
 
         {/* KPIs (read-only, driven by transactions) */}
         {isEdit && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-4 border-t border-gray-100">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-5 pt-4 border-t border-gray-100">
+            <div className="text-center p-3 bg-slate-50 rounded-lg">
+              <p className="text-xs text-gray-500 font-medium">Opening Qty</p>
+              <p className="text-lg font-bold text-slate-700 mt-1" title="Opening of the first (beginning) transaction">{formatNumber(txnSummary.beginning_opening_qty)}</p>
+            </div>
             <div className="text-center p-3 bg-blue-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">Input Qty</p>
               <p className="text-lg font-bold text-blue-700 mt-1">{formatNumber(txnSummary.total_input_qty)}</p>
@@ -562,14 +585,19 @@ export default function ProductionStatusForm() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">Input Qty <span className="text-rose-500">*</span></label>
-                  <input ref={inputQtyRef} type="number" step="0.01" min="0" value={txnForm.input_qty} onChange={e => updateTxnField('input_qty', e.target.value)}
+                  <input ref={inputQtyRef} type="number" step="0.01" min="0.01"
+                    max={(parseFloat(form.planned_qty) || 0) > 0 ? parseFloat(form.planned_qty) : undefined}
+                    value={txnForm.input_qty} onChange={e => updateTxnField('input_qty', e.target.value)}
+                    title={(parseFloat(form.planned_qty)||0) > 0 ? `Max planned: ${form.planned_qty}` : undefined}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500" placeholder="0" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-gray-600 mb-1">Output Qty</label>
-                  <input type="number" step="0.01" min="0" value={txnForm.output_qty} onChange={e => updateTxnField('output_qty', e.target.value)}
+                  <input type="number" step="0.01" min="0"
+                    max={inputReady ? ((parseFloat(txnForm.opening_qty)||0) + (parseFloat(txnForm.input_qty)||0)) : undefined}
+                    value={txnForm.output_qty} onChange={e => updateTxnField('output_qty', e.target.value)}
                     disabled={!inputReady}
-                    title={!inputReady ? 'Add input qty first' : undefined}
+                    title={!inputReady ? 'Add input qty first' : `Max: ${(parseFloat(txnForm.opening_qty)||0) + (parseFloat(txnForm.input_qty)||0)}`}
                     className={`w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 ${!inputReady ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`} placeholder={!inputReady ? 'Add input first' : '0'} />
                 </div>
                 <div>
@@ -621,9 +649,16 @@ export default function ProductionStatusForm() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {transactions.map((txn, idx) => (
-                      <tr key={txn.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}>
-                        <td className="px-4 py-2.5 text-gray-700">{formatDate(txn.production_date)}</td>
+                    {transactions.map((txn, idx) => {
+                      const isLatest = txn.id === latestTxnId;
+                      return (
+                      <tr key={txn.id} className={`${isLatest ? 'bg-amber-50/70' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                        <td className="px-4 py-2.5 text-gray-700">
+                          <span className="inline-flex items-center gap-1.5">
+                            {formatDate(txn.production_date)}
+                            {isLatest && <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wide">Latest</span>}
+                          </span>
+                        </td>
                         <td className="px-4 py-2.5 text-blue-700 font-mono font-medium">{txn.transaction_no}</td>
                         <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{formatNumber(txn.opening_qty)}</td>
                         <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{formatNumber(txn.input_qty)}</td>
@@ -639,7 +674,8 @@ export default function ProductionStatusForm() {
                           </td>
                         )}
                       </tr>
-                    ))}
+                      );
+                    })}
                     {/* Totals */}
                     <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
                       <td className="px-4 py-2.5 text-blue-700" colSpan={2}>Total</td>
