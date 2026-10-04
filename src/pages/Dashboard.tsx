@@ -11,10 +11,42 @@ import {
   BarChart3,
   Eye,
   X,
+  ClipboardList,
+  FlaskConical,
+  Layers,
+  Boxes,
+  Users,
+  TrendingUp,
+  Truck,
+  FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import api from '../lib/api';
+import LineChart from '../components/charts/LineChart';
+import DonutChart from '../components/charts/DonutChart';
+
+interface KpiCounts {
+  salesOrdersThisMonth: number;
+  recipesActive: number;
+  bomsActive: number;
+  totalItems: number;
+  materialsActive: number;
+  suppliersActive: number;
+}
+interface SalesTrendPoint { label: string; value: number; orderCount: number; }
+interface InventoryValue { total: number; breakdown: { category: string; value: number }[]; }
+interface TopProduct { product: string; value: number; }
+interface RecentReceipt { id: number; receipt_no: string; receipt_date: string; supplier_name: string; amount: number; status: string; }
+interface QuickSummary {
+  pendingSalesOrders: number;
+  pendingGoodsReceipt: number;
+  pendingMaterialIssues: number;
+  lowStockItems: number;
+  openProductionPlans: number;
+}
+
+const fmtMoney = (n: number) => '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
 
 interface DashboardStat {
   label: string;
@@ -70,9 +102,20 @@ export default function Dashboard() {
   const [productionOrders, setProductionOrders] = useState<{ counts: { pendingOrInProgress: number; completed: number }; orders: { pendingOrInProgress: ProductionPlanRow[]; completed: ProductionPlanRow[] } }>({ counts: { pendingOrInProgress: 0, completed: 0 }, orders: { pendingOrInProgress: [], completed: [] } });
   const [highestWipStages, setHighestWipStages] = useState<WipStage[]>([]);
   const [selectedOrderGroup, setSelectedOrderGroup] = useState<'pendingOrInProgress' | 'completed' | null>(null);
+  const [kpiCounts, setKpiCounts] = useState<KpiCounts | null>(null);
+  const [salesTrend, setSalesTrend] = useState<SalesTrendPoint[]>([]);
+  const [inventoryValue, setInventoryValue] = useState<InventoryValue>({ total: 0, breakdown: [] });
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
+  const [quickSummary, setQuickSummary] = useState<QuickSummary | null>(null);
 
   useEffect(() => {
-    api<{ data: { stats: DashboardStat[]; recentOrders: RecentOrder[]; lowStock: LowStockItem[]; productionOrders: typeof productionOrders; highestWipStages: WipStage[] } }>('/dashboard/stats')
+    api<{ data: {
+      stats: DashboardStat[]; recentOrders: RecentOrder[]; lowStock: LowStockItem[];
+      productionOrders: typeof productionOrders; highestWipStages: WipStage[];
+      kpiCounts: KpiCounts; salesTrend: SalesTrendPoint[]; inventoryValue: InventoryValue;
+      topProducts: TopProduct[]; recentReceipts: RecentReceipt[]; quickSummary: QuickSummary;
+    } }>('/dashboard/stats')
       .then((res) => {
         const s = res.data.stats;
         setStats([
@@ -84,12 +127,81 @@ export default function Dashboard() {
         setLowStock(res.data.lowStock || []);
         setProductionOrders(res.data.productionOrders || { counts: { pendingOrInProgress: 0, completed: 0 }, orders: { pendingOrInProgress: [], completed: [] } });
         setHighestWipStages(res.data.highestWipStages || []);
+        setKpiCounts(res.data.kpiCounts || null);
+        setSalesTrend(res.data.salesTrend || []);
+        setInventoryValue(res.data.inventoryValue || { total: 0, breakdown: [] });
+        setTopProducts(res.data.topProducts || []);
+        setRecentReceipts(res.data.recentReceipts || []);
+        setQuickSummary(res.data.quickSummary || null);
       })
       .catch(() => {});
   }, []);
 
+  const kpiCards = kpiCounts ? [
+    { label: 'Sales Orders', sub: 'This Month', value: kpiCounts.salesOrdersThisMonth, icon: <ClipboardList size={20} />, tint: 'bg-blue-50 text-blue-600', to: '/sales-orders' },
+    { label: 'Recipes', sub: 'Active', value: kpiCounts.recipesActive, icon: <FlaskConical size={20} />, tint: 'bg-emerald-50 text-emerald-600', to: '/recipe-creation' },
+    { label: 'BOMs', sub: 'Active', value: kpiCounts.bomsActive, icon: <Layers size={20} />, tint: 'bg-violet-50 text-violet-600', to: '/bom' },
+    { label: 'Total Items', sub: 'In Inventory', value: kpiCounts.totalItems, icon: <Boxes size={20} />, tint: 'bg-amber-50 text-amber-600', to: '/chemical-master' },
+    { label: 'Materials', sub: 'Active', value: kpiCounts.materialsActive, icon: <Package size={20} />, tint: 'bg-cyan-50 text-cyan-600', to: '/chemical-master' },
+    { label: 'Suppliers', sub: 'Active', value: kpiCounts.suppliersActive, icon: <Users size={20} />, tint: 'bg-rose-50 text-rose-600', to: '/supplier-master' },
+  ] : [];
+
   return (
     <div className="space-y-5 sm:space-y-6">
+      {/* KPI cards (live counts) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+        {kpiCards.map((k) => (
+          <button
+            key={k.label}
+            onClick={() => navigate(k.to)}
+            className="group flex items-center gap-3 bg-white rounded-xl border border-gray-100 p-3 sm:p-4 shadow-sm hover:shadow-md hover:border-gray-200 transition-all text-left"
+          >
+            <span className={`p-2.5 rounded-xl ${k.tint} group-hover:scale-110 transition-transform`}>{k.icon}</span>
+            <span className="min-w-0">
+              <span className="block text-[11px] text-gray-500 font-medium truncate">{k.label}</span>
+              <span className="block text-xl font-bold text-gray-900 leading-tight">{new Intl.NumberFormat('en-IN').format(k.value)}</span>
+              <span className="block text-[10px] text-gray-400">{k.sub}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Charts row: Sales trend · Inventory value · Top products */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
+        <Card className="xl:col-span-1" title="Sales Order Value" subtitle="Last 6 months">
+          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtMoney} />
+        </Card>
+
+        <Card title="Inventory Value" subtitle="Live stock valuation by type"
+          action={<span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full"><TrendingUp size={11} />{fmtMoney(inventoryValue.total)}</span>}>
+          <div className="space-y-2.5">
+            <p className="text-2xl font-bold text-gray-900">{fmtMoney(inventoryValue.total)}</p>
+            <p className="text-[11px] text-gray-400 -mt-1 mb-2">Total Stock Value</p>
+            {inventoryValue.breakdown.length === 0 ? (
+              <p className="py-4 text-center text-xs text-gray-400">No stock value available</p>
+            ) : inventoryValue.breakdown.map((b, i) => {
+              const pct = inventoryValue.total > 0 ? Math.round((b.value / inventoryValue.total) * 100) : 0;
+              const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-cyan-500', 'bg-slate-500'];
+              return (
+                <div key={b.category}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="flex items-center gap-2 text-gray-700"><span className={`inline-block w-2.5 h-2.5 rounded-sm ${colors[i % colors.length]}`} />{b.category}</span>
+                    <span className="font-semibold text-gray-900">{fmtMoney(b.value)}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${colors[i % colors.length]}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card title="Top 5 Products" subtitle="By sales order value">
+          <DonutChart data={topProducts.map((p) => ({ label: p.product, value: p.value }))} formatValue={fmtMoney} />
+        </Card>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
         {stats.map((s) => (
@@ -251,6 +363,67 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Recent Goods Receipt (live) */}
+      <Card
+        title="Recent Goods Receipt"
+        subtitle="Latest 5 material receipts"
+        action={
+          <button onClick={() => navigate('/material-receipt')} className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+            <Eye size={13} /> View All
+          </button>
+        }
+      >
+        <div className="overflow-x-auto -mx-4 px-4">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">GR No.</th>
+                <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Supplier</th>
+                <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Date</th>
+                <th className="text-right py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Amount (₹)</th>
+                <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {recentReceipts.length === 0 ? (
+                <tr><td colSpan={5} className="py-6 text-center text-xs text-gray-400">No goods receipts</td></tr>
+              ) : recentReceipts.map((r) => (
+                <tr key={r.id} onClick={() => navigate(`/material-receipt/${r.id}`)} className="hover:bg-gray-50/80 transition-colors cursor-pointer">
+                  <td className="py-3 px-3 font-semibold text-gray-900 text-xs flex items-center gap-1.5"><FileText size={12} className="text-gray-400" />{r.receipt_no}</td>
+                  <td className="py-3 px-3 text-gray-600 text-xs">{r.supplier_name}</td>
+                  <td className="py-3 px-3 text-gray-400 text-xs hidden sm:table-cell">{fmtDate(r.receipt_date)}</td>
+                  <td className="py-3 px-3 text-gray-800 font-medium text-xs text-right tabular-nums">{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2 }).format(r.amount)}</td>
+                  <td className="py-3 px-3">{statusBadge(r.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Quick Summary (live) */}
+      {quickSummary && (
+        <Card title="Quick Summary" subtitle="Items needing attention">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[
+              { label: 'Pending Sales Orders', value: quickSummary.pendingSalesOrders, icon: <ShoppingCart size={16} />, tint: 'text-blue-600 bg-blue-50', to: '/sales-orders' },
+              { label: 'Pending Goods Receipt', value: quickSummary.pendingGoodsReceipt, icon: <Truck size={16} />, tint: 'text-emerald-600 bg-emerald-50', to: '/material-receipt' },
+              { label: 'Pending Material Issues', value: quickSummary.pendingMaterialIssues, icon: <ClipboardList size={16} />, tint: 'text-violet-600 bg-violet-50', to: '/material-issue' },
+              { label: 'Low Stock Items', value: quickSummary.lowStockItems, icon: <AlertTriangle size={16} />, tint: 'text-amber-600 bg-amber-50', to: '/chemical-master' },
+              { label: 'Open Production Plans', value: quickSummary.openProductionPlans, icon: <Factory size={16} />, tint: 'text-rose-600 bg-rose-50', to: '/production-plan' },
+            ].map((q) => (
+              <button key={q.label} onClick={() => navigate(q.to)} className="flex items-center gap-3 rounded-xl border border-gray-100 p-3 text-left hover:border-gray-200 hover:shadow-sm transition-all">
+                <span className={`p-2 rounded-lg ${q.tint}`}>{q.icon}</span>
+                <span className="min-w-0">
+                  <span className="block text-lg font-bold text-gray-900 leading-tight">{new Intl.NumberFormat('en-IN').format(q.value)}</span>
+                  <span className="block text-[11px] text-gray-500 leading-tight">{q.label}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {selectedOrderGroup && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={() => setSelectedOrderGroup(null)}>

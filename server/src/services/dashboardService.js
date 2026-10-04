@@ -122,10 +122,117 @@ async function getHighestWipStages() {
   }));
 }
 
+// ─── KPI counts for the top cards (live) ─────────────────────────────────────
+async function getKpiCounts() {
+  const [[row]] = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) FROM sales_orders
+         WHERE order_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')) AS sales_orders_this_month,
+       (SELECT COUNT(*) FROM recipes WHERE status = 'active') AS recipes_active,
+       (SELECT COUNT(*) FROM boms WHERE status = 'Active') AS boms_active,
+       (SELECT COUNT(*) FROM materials) AS total_items,
+       (SELECT COUNT(*) FROM materials WHERE status = 'Active') AS materials_active,
+       (SELECT COUNT(*) FROM suppliers WHERE status = 'Active') AS suppliers_active`
+  );
+  return {
+    salesOrdersThisMonth: Number(row.sales_orders_this_month) || 0,
+    recipesActive: Number(row.recipes_active) || 0,
+    bomsActive: Number(row.boms_active) || 0,
+    totalItems: Number(row.total_items) || 0,
+    materialsActive: Number(row.materials_active) || 0,
+    suppliersActive: Number(row.suppliers_active) || 0,
+  };
+}
+
+// ─── Sales order value trend (last 6 months, live) ───────────────────────────
+async function getSalesOrderTrend() {
+  const [rows] = await pool.query(
+    `SELECT DATE_FORMAT(order_date, '%Y-%m') AS ym,
+       DATE_FORMAT(order_date, '%b %Y') AS label,
+       COALESCE(SUM(grand_total), 0) AS value,
+       COUNT(*) AS order_count
+     FROM sales_orders
+     WHERE order_date >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 5 MONTH)
+     GROUP BY ym, label
+     ORDER BY ym ASC`
+  );
+  return rows.map(r => ({ label: r.label, value: Number(r.value) || 0, orderCount: Number(r.order_count) || 0 }));
+}
+
+// ─── Inventory value by material type (live valuation) ───────────────────────
+async function getInventoryValue() {
+  const [rows] = await pool.query(
+    `SELECT COALESCE(NULLIF(TRIM(type), ''), 'Other') AS category,
+       COALESCE(SUM(COALESCE(current_stock, 0) * COALESCE(rate, 0)), 0) AS value
+     FROM materials
+     WHERE status = 'Active'
+     GROUP BY category
+     HAVING value > 0
+     ORDER BY value DESC`
+  );
+  const breakdown = rows.map(r => ({ category: r.category, value: Number(r.value) || 0 }));
+  const total = breakdown.reduce((s, r) => s + r.value, 0);
+  return { total, breakdown };
+}
+
+// ─── Top 5 products by sales order value (live) ──────────────────────────────
+async function getTopProducts() {
+  const [rows] = await pool.query(
+    `SELECT soi.item_description AS product,
+       COALESCE(SUM(soi.quantity * COALESCE(soi.unit_price, 0)), 0) AS value
+     FROM sales_order_items soi
+     WHERE soi.item_description IS NOT NULL AND soi.item_description <> ''
+     GROUP BY soi.item_description
+     ORDER BY value DESC
+     LIMIT 5`
+  );
+  return rows.map(r => ({ product: r.product, value: Number(r.value) || 0 }));
+}
+
+// ─── Recent goods receipts (latest 5, live) ──────────────────────────────────
+async function getRecentReceipts() {
+  const [rows] = await pool.query(
+    `SELECT mr.id, mr.receipt_no, mr.receipt_date, mr.grand_total, mr.status,
+       s.name AS supplier_name
+     FROM material_receipts mr
+     LEFT JOIN suppliers s ON mr.supplier_id = s.id
+     ORDER BY mr.receipt_date DESC, mr.id DESC
+     LIMIT 5`
+  );
+  return rows.map(r => ({
+    id: r.id, receipt_no: r.receipt_no, receipt_date: r.receipt_date,
+    supplier_name: r.supplier_name || '—', amount: Number(r.grand_total) || 0, status: r.status,
+  }));
+}
+
+// ─── Quick summary counts (live) ─────────────────────────────────────────────
+async function getQuickSummary() {
+  const [[row]] = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) FROM sales_orders WHERE status IN ('Draft', 'Processing')) AS pending_sales_orders,
+       (SELECT COUNT(*) FROM material_receipts WHERE status = 'Draft') AS pending_goods_receipt,
+       (SELECT COUNT(*) FROM material_issues WHERE status = 'Draft') AS pending_material_issues,
+       (SELECT COUNT(*) FROM materials
+         WHERE status = 'Active' AND COALESCE(reorder_level,0) > 0
+           AND COALESCE(current_stock,0) <= reorder_level) AS low_stock_items,
+       (SELECT COUNT(*) FROM production_plans
+         WHERE deleted_at IS NULL
+           AND COALESCE(status,'') NOT IN ('Completed','Cancelled','Canceled')) AS open_production_plans`
+  );
+  return {
+    pendingSalesOrders: Number(row.pending_sales_orders) || 0,
+    pendingGoodsReceipt: Number(row.pending_goods_receipt) || 0,
+    pendingMaterialIssues: Number(row.pending_material_issues) || 0,
+    lowStockItems: Number(row.low_stock_items) || 0,
+    openProductionPlans: Number(row.open_production_plans) || 0,
+  };
+}
+
 export async function getDashboardStats() {
   const [
     customerStats, productStats, supplierStats, bomStats,
     recentOrders, lowStock, productionOrders, highestWipStages,
+    kpiCounts, salesTrend, inventoryValue, topProducts, recentReceipts, quickSummary,
   ] = await Promise.all([
     customerModel.getStats(),
     productModel.getStats(),
@@ -135,6 +242,12 @@ export async function getDashboardStats() {
     getLowStock(),
     getProductionOrders(),
     getHighestWipStages(),
+    getKpiCounts(),
+    getSalesOrderTrend(),
+    getInventoryValue(),
+    getTopProducts(),
+    getRecentReceipts(),
+    getQuickSummary(),
   ]);
 
   return {
@@ -153,5 +266,12 @@ export async function getDashboardStats() {
       suppliers: supplierStats,
       boms: bomStats,
     },
+    // New live dashboard data (charts + KPI cards + quick summary).
+    kpiCounts,
+    salesTrend,
+    inventoryValue,
+    topProducts,
+    recentReceipts,
+    quickSummary,
   };
 }
