@@ -44,7 +44,7 @@ export default function DonutChart({
   }
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-4">
+    <div className="flex flex-col sm:flex-row items-center gap-4 w-full min-w-0 overflow-hidden">
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
@@ -80,19 +80,22 @@ export default function DonutChart({
           )}
         </div>
       </div>
-      <div className="flex-1 space-y-1.5 w-full">
+      <div className="flex-1 min-w-0 w-full space-y-1.5">
         {slices.map((s) => (
           <div
             key={s.i}
-            className="flex items-center justify-between gap-2 text-xs rounded-md px-1.5 py-1 hover:bg-gray-50"
+            className="flex items-start gap-2 text-xs rounded-md px-1.5 py-1 hover:bg-gray-50"
             onMouseEnter={() => setHover(s.i)}
             onMouseLeave={() => setHover(null)}
           >
-            <span className="flex items-center gap-2 min-w-0">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
-              <span className="truncate text-gray-700">{s.label}</span>
+            <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0 mt-1" style={{ backgroundColor: s.color }} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-gray-700">{s.label}</span>
+              <span className="block text-gray-500">
+                <span className="font-semibold text-gray-900">{formatValue(s.value)}</span>
+                <span className="text-gray-400"> ({Math.round(s.frac * 100)}%)</span>
+              </span>
             </span>
-            <span className="shrink-0 font-semibold text-gray-900">{formatValue(s.value)} <span className="text-gray-400 font-normal">({Math.round(s.frac * 100)}%)</span></span>
           </div>
         ))}
       </div>
