@@ -221,6 +221,24 @@ export default function ProductionPlanDetail() {
   };
 
   const updateStage = (key: string, field: string, value: any) => {
+    // When selecting a process stage, enforce the master sequence: every stage
+    // with a LOWER master seq must already be chosen in the plan. This prevents
+    // selecting e.g. "Measurement"/"Packing" before "Wet End"/"Finishing".
+    if (field === 'stage_id' && value) {
+      const ps = processStages.find((p) => String(p.id) === value);
+      const seqNum = (v: any) => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== '' ? n : Number.MAX_SAFE_INTEGER; };
+      if (ps) {
+        const targetSeq = seqNum(ps.seq);
+        const chosenIds = new Set(stages.filter((s) => s._key !== key && s.stage_id).map((s) => String(s.stage_id)));
+        const missingEarlier = processStages
+          .filter((p) => seqNum(p.seq) < targetSeq && !chosenIds.has(String(p.id)))
+          .map((p) => p.name);
+        if (missingEarlier.length > 0) {
+          toast.error(`Select "${missingEarlier[0]}" first — stages must be planned in sequence`);
+          return; // reject the out-of-sequence selection
+        }
+      }
+    }
     setStages((prev) => prev.map((s) => {
       if (s._key !== key) return s;
       const updated = { ...s, [field]: value };
@@ -229,6 +247,10 @@ export default function ProductionPlanDetail() {
         if (ps) {
           updated.stage_name = ps.name;
           updated.uom = ps.uom || '';
+          // Store the REAL master process-stage sequence so sequence checks and
+          // ordering use the actual order, not the row position.
+          const n = Number(ps.seq);
+          if (Number.isFinite(n)) updated.seq = n;
         }
       }
       // Recalculate WIP = Input - Output - Rejection
@@ -499,14 +521,31 @@ export default function ProductionPlanDetail() {
                 <tr key={stage._key} className="hover:bg-blue-50/30 transition-all">
                   <td className="py-3 px-3 text-center text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-3 px-3">
-                    <select
-                      value={stage.stage_id}
-                      onChange={(e) => updateStage(stage._key, 'stage_id', e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[160px] text-blue-700 font-medium"
-                    >
-                      <option value="">Select stage</option>
-                      {processStages.map((ps) => <option key={ps.id} value={String(ps.id)}>{ps.name}</option>)}
-                    </select>
+                    {(() => {
+                      // Only offer stages that are valid at this point in the
+                      // sequence: a stage is selectable when every earlier-seq
+                      // master stage is already chosen. The currently selected
+                      // stage and already-chosen stages stay listed.
+                      const seqNum = (v: any) => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== '' ? n : Number.MAX_SAFE_INTEGER; };
+                      const chosenIds = new Set(stages.filter((s) => s._key !== stage._key && s.stage_id).map((s) => String(s.stage_id)));
+                      const options = processStages.filter((ps) => {
+                        if (String(ps.id) === String(stage.stage_id)) return true; // keep current
+                        if (chosenIds.has(String(ps.id))) return false;            // already used elsewhere
+                        const targetSeq = seqNum(ps.seq);
+                        // selectable only if no earlier-seq stage is still unchosen
+                        return !processStages.some((p) => seqNum(p.seq) < targetSeq && !chosenIds.has(String(p.id)));
+                      });
+                      return (
+                        <select
+                          value={stage.stage_id}
+                          onChange={(e) => updateStage(stage._key, 'stage_id', e.target.value)}
+                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[160px] text-blue-700 font-medium"
+                        >
+                          <option value="">Select stage</option>
+                          {options.map((ps) => <option key={ps.id} value={String(ps.id)}>{ps.name}</option>)}
+                        </select>
+                      );
+                    })()}
                   </td>
                   <td className="py-3 px-3 text-center text-xs text-gray-600 font-medium">{stage.uom || '—'}</td>
                   <td className="py-3 px-3">
