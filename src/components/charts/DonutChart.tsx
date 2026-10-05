@@ -9,7 +9,8 @@ interface DonutChartProps {
   formatValue?: (n: number) => string;
 }
 
-const PALETTE = ['#2563eb', '#16a34a', '#f59e0b', '#7c3aed', '#dc2626', '#0891b2', '#64748b'];
+// Light, professional palette for the donut slices (soft tones, not dark).
+const PALETTE = ['#93c5fd', '#86efac', '#fcd34d', '#c4b5fd', '#f9a8d4', '#67e8f9', '#cbd5e1'];
 
 /**
  * Lightweight dependency-free SVG donut chart with a legend. Data is live.

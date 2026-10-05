@@ -10,12 +10,11 @@ import {
   Eye,
   X,
   ClipboardList,
-  FlaskConical,
-  Layers,
   Boxes,
   Users,
   TrendingUp,
   Truck,
+  CalendarClock,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
@@ -24,10 +23,10 @@ import LineChart from '../components/charts/LineChart';
 import DonutChart from '../components/charts/DonutChart';
 
 interface KpiCounts {
-  salesOrdersThisMonth: number;
-  recipesActive: number;
-  bomsActive: number;
-  totalItems: number;
+  salesOrdersNotShipped: number;
+  openOrders: number;
+  customersTotal: number;
+  productsTotal: number;
   materialsActive: number;
   suppliersActive: number;
 }
@@ -36,6 +35,7 @@ interface InventoryValue { total: number; breakdown: { category: string; value: 
 interface TopProduct { product: string; value: number; }
 interface RecentReceipt { id: number; receipt_no: string; receipt_date: string; supplier_name: string; amount: number; status: string; }
 interface QuickSummary {
+  nearestDeliveryOrders: number;
   pendingSalesOrders: number;
   pendingGoodsReceipt: number;
   pendingMaterialIssues: number;
@@ -83,12 +83,12 @@ export default function Dashboard() {
   const [selectedOrderGroup, setSelectedOrderGroup] = useState<'pendingOrInProgress' | 'completed' | null>(null);
   // Default to zero-valued objects (not null) so the KPI cards and Quick Summary
   // always render — they fill with live values once the API responds.
-  const [kpiCounts, setKpiCounts] = useState<KpiCounts>({ salesOrdersThisMonth: 0, recipesActive: 0, bomsActive: 0, totalItems: 0, materialsActive: 0, suppliersActive: 0 });
+  const [kpiCounts, setKpiCounts] = useState<KpiCounts>({ salesOrdersNotShipped: 0, openOrders: 0, customersTotal: 0, productsTotal: 0, materialsActive: 0, suppliersActive: 0 });
   const [salesTrend, setSalesTrend] = useState<SalesTrendPoint[]>([]);
   const [inventoryValue, setInventoryValue] = useState<InventoryValue>({ total: 0, breakdown: [] });
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
-  const [quickSummary, setQuickSummary] = useState<QuickSummary>({ pendingSalesOrders: 0, pendingGoodsReceipt: 0, pendingMaterialIssues: 0, lowStockItems: 0, openProductionPlans: 0 });
+  const [quickSummary, setQuickSummary] = useState<QuickSummary>({ nearestDeliveryOrders: 0, pendingSalesOrders: 0, pendingGoodsReceipt: 0, pendingMaterialIssues: 0, lowStockItems: 0, openProductionPlans: 0 });
 
   useEffect(() => {
     api<{ data: {
@@ -113,12 +113,12 @@ export default function Dashboard() {
   }, []);
 
   const kpiCards = [
-    { label: 'Sales Orders', sub: 'This Month', value: kpiCounts.salesOrdersThisMonth, icon: <ClipboardList size={20} />, tint: 'bg-blue-50 text-blue-600', to: '/sales-orders' },
-    { label: 'Recipes', sub: 'Active', value: kpiCounts.recipesActive, icon: <FlaskConical size={20} />, tint: 'bg-emerald-50 text-emerald-600', to: '/recipe-creation' },
-    { label: 'BOMs', sub: 'Active', value: kpiCounts.bomsActive, icon: <Layers size={20} />, tint: 'bg-violet-50 text-violet-600', to: '/bom' },
-    { label: 'Total Items', sub: 'In Inventory', value: kpiCounts.totalItems, icon: <Boxes size={20} />, tint: 'bg-amber-50 text-amber-600', to: '/chemical-master' },
-    { label: 'Materials', sub: 'Active', value: kpiCounts.materialsActive, icon: <Package size={20} />, tint: 'bg-cyan-50 text-cyan-600', to: '/chemical-master' },
-    { label: 'Suppliers', sub: 'Active', value: kpiCounts.suppliersActive, icon: <Users size={20} />, tint: 'bg-rose-50 text-rose-600', to: '/supplier-master' },
+    { label: 'Sales Orders', sub: 'Not shipped', value: kpiCounts.salesOrdersNotShipped, icon: <ClipboardList size={20} />, tint: 'bg-indigo-50 text-indigo-600', to: '/sales-orders' },
+    { label: 'Open Orders', sub: 'In process', value: kpiCounts.openOrders, icon: <Clock size={20} />, tint: 'bg-sky-50 text-sky-600', to: '/sales-orders' },
+    { label: 'Customers', sub: 'Active', value: kpiCounts.customersTotal, icon: <Users size={20} />, tint: 'bg-teal-50 text-teal-600', to: '/customer-master' },
+    { label: 'Total Products', sub: 'Active', value: kpiCounts.productsTotal, icon: <Boxes size={20} />, tint: 'bg-emerald-50 text-emerald-600', to: '/product-master' },
+    { label: 'Materials', sub: 'Active', value: kpiCounts.materialsActive, icon: <Package size={20} />, tint: 'bg-amber-50 text-amber-600', to: '/chemical-master' },
+    { label: 'Suppliers', sub: 'Active', value: kpiCounts.suppliersActive, icon: <Factory size={20} />, tint: 'bg-slate-100 text-slate-600', to: '/supplier-master' },
   ];
 
   return (
@@ -143,8 +143,8 @@ export default function Dashboard() {
 
       {/* Charts row: Sales trend · Inventory value · Top products */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-        <Card className="xl:col-span-1" title="Sales Order Value" subtitle="Last 6 months">
-          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtMoney} />
+        <Card className="xl:col-span-1" title="Sales Order Value" subtitle="All orders by month">
+          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtMoney} color="#4f46e5" />
         </Card>
 
         <Card title="Inventory Value" subtitle="Live stock valuation by type"
@@ -156,7 +156,7 @@ export default function Dashboard() {
               <p className="py-4 text-center text-xs text-gray-400">No stock value available</p>
             ) : inventoryValue.breakdown.map((b, i) => {
               const pct = inventoryValue.total > 0 ? Math.round((b.value / inventoryValue.total) * 100) : 0;
-              const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-cyan-500', 'bg-slate-500'];
+              const colors = ['bg-indigo-400', 'bg-emerald-400', 'bg-amber-400', 'bg-violet-400', 'bg-sky-400', 'bg-teal-400', 'bg-slate-400'];
               return (
                 <div key={b.category}>
                   <div className="flex items-center justify-between text-xs mb-1">
@@ -290,13 +290,14 @@ export default function Dashboard() {
       {/* Quick Summary (live) */}
       {quickSummary && (
         <Card title="Quick Summary" subtitle="Items needing attention">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
-              { label: 'Pending Sales Orders', value: quickSummary.pendingSalesOrders, icon: <ShoppingCart size={16} />, tint: 'text-blue-600 bg-blue-50', to: '/sales-orders' },
-              { label: 'Pending Goods Receipt', value: quickSummary.pendingGoodsReceipt, icon: <Truck size={16} />, tint: 'text-emerald-600 bg-emerald-50', to: '/material-receipt' },
-              { label: 'Pending Material Issues', value: quickSummary.pendingMaterialIssues, icon: <ClipboardList size={16} />, tint: 'text-violet-600 bg-violet-50', to: '/material-issue' },
-              { label: 'Low Stock Items', value: quickSummary.lowStockItems, icon: <AlertTriangle size={16} />, tint: 'text-amber-600 bg-amber-50', to: '/chemical-master' },
-              { label: 'Open Production Plans', value: quickSummary.openProductionPlans, icon: <Factory size={16} />, tint: 'text-rose-600 bg-rose-50', to: '/production-plan' },
+              { label: 'Nearest Delivery Orders', value: quickSummary.nearestDeliveryOrders, icon: <CalendarClock size={16} />, tint: 'text-indigo-600 bg-indigo-50', to: '/sales-orders' },
+              { label: 'Pending Sales Orders', value: quickSummary.pendingSalesOrders, icon: <ShoppingCart size={16} />, tint: 'text-sky-600 bg-sky-50', to: '/sales-orders' },
+              { label: 'Pending Goods Receipt', value: quickSummary.pendingGoodsReceipt, icon: <Truck size={16} />, tint: 'text-teal-600 bg-teal-50', to: '/material-receipt' },
+              { label: 'Pending Material Issues', value: quickSummary.pendingMaterialIssues, icon: <ClipboardList size={16} />, tint: 'text-amber-600 bg-amber-50', to: '/material-issue' },
+              { label: 'Low Stock Items', value: quickSummary.lowStockItems, icon: <AlertTriangle size={16} />, tint: 'text-rose-600 bg-rose-50', to: '/chemical-master' },
+              { label: 'Open Production Plans', value: quickSummary.openProductionPlans, icon: <Factory size={16} />, tint: 'text-slate-600 bg-slate-100', to: '/production-plan' },
             ].map((q) => (
               <button key={q.label} onClick={() => navigate(q.to)} className="flex items-center gap-3 rounded-xl border border-gray-100 p-3 text-left hover:border-gray-200 hover:shadow-sm transition-all">
                 <span className={`p-2 rounded-lg ${q.tint}`}>{q.icon}</span>

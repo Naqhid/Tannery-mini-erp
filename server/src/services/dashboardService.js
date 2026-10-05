@@ -127,24 +127,25 @@ async function getKpiCounts() {
   const [[row]] = await pool.query(
     `SELECT
        (SELECT COUNT(*) FROM sales_orders
-         WHERE order_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')) AS sales_orders_this_month,
-       (SELECT COUNT(*) FROM recipes WHERE status = 'active') AS recipes_active,
-       (SELECT COUNT(*) FROM boms WHERE status = 'Active') AS boms_active,
-       (SELECT COUNT(*) FROM materials) AS total_items,
+         WHERE status NOT IN ('Shipped', 'Delivered', 'Cancelled')) AS sales_orders_not_shipped,
+       (SELECT COUNT(*) FROM sales_orders
+         WHERE status IN ('Processing', 'Confirmed')) AS open_orders,
+       (SELECT COUNT(*) FROM customers WHERE status = 'Active') AS customers_total,
+       (SELECT COUNT(*) FROM products WHERE status = 'Active') AS products_total,
        (SELECT COUNT(*) FROM materials WHERE status = 'Active') AS materials_active,
        (SELECT COUNT(*) FROM suppliers WHERE status = 'Active') AS suppliers_active`
   );
   return {
-    salesOrdersThisMonth: Number(row.sales_orders_this_month) || 0,
-    recipesActive: Number(row.recipes_active) || 0,
-    bomsActive: Number(row.boms_active) || 0,
-    totalItems: Number(row.total_items) || 0,
+    salesOrdersNotShipped: Number(row.sales_orders_not_shipped) || 0,
+    openOrders: Number(row.open_orders) || 0,
+    customersTotal: Number(row.customers_total) || 0,
+    productsTotal: Number(row.products_total) || 0,
     materialsActive: Number(row.materials_active) || 0,
     suppliersActive: Number(row.suppliers_active) || 0,
   };
 }
 
-// ─── Sales order value trend (last 6 months, live) ───────────────────────────
+// ─── Sales order value trend (ALL orders, grouped by month, live) ────────────
 async function getSalesOrderTrend() {
   const [rows] = await pool.query(
     `SELECT DATE_FORMAT(order_date, '%Y-%m') AS ym,
@@ -152,7 +153,6 @@ async function getSalesOrderTrend() {
        COALESCE(SUM(grand_total), 0) AS value,
        COUNT(*) AS order_count
      FROM sales_orders
-     WHERE order_date >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 5 MONTH)
      GROUP BY DATE_FORMAT(order_date, '%Y-%m'), DATE_FORMAT(order_date, '%b %Y')
      ORDER BY DATE_FORMAT(order_date, '%Y-%m') ASC`
   );
@@ -209,7 +209,15 @@ async function getRecentReceipts() {
 async function getQuickSummary() {
   const [[row]] = await pool.query(
     `SELECT
-       (SELECT COUNT(*) FROM sales_orders WHERE status IN ('Draft', 'Processing')) AS pending_sales_orders,
+       -- Orders whose delivery date is within the next 7 days and not yet
+       -- delivered/cancelled (the "nearest" delivery orders).
+       (SELECT COUNT(*) FROM sales_orders
+         WHERE delivery_date IS NOT NULL
+           AND delivery_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+           AND status NOT IN ('Delivered', 'Cancelled')) AS nearest_delivery_orders,
+       -- Sales orders that are not yet completed (not Delivered/Cancelled).
+       (SELECT COUNT(*) FROM sales_orders
+         WHERE status NOT IN ('Delivered', 'Cancelled')) AS pending_sales_orders,
        (SELECT COUNT(*) FROM material_receipts WHERE status = 'Draft') AS pending_goods_receipt,
        (SELECT COUNT(*) FROM material_issues WHERE status = 'Draft') AS pending_material_issues,
        (SELECT COUNT(*) FROM materials
@@ -220,6 +228,7 @@ async function getQuickSummary() {
            AND COALESCE(status,'') NOT IN ('Completed','Cancelled','Canceled')) AS open_production_plans`
   );
   return {
+    nearestDeliveryOrders: Number(row.nearest_delivery_orders) || 0,
     pendingSalesOrders: Number(row.pending_sales_orders) || 0,
     pendingGoodsReceipt: Number(row.pending_goods_receipt) || 0,
     pendingMaterialIssues: Number(row.pending_material_issues) || 0,
