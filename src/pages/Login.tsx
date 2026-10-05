@@ -47,10 +47,10 @@ export default function Login() {
       <div className="w-full max-w-[420px] relative z-10">
         {/* Logo and Title - Same as main dashboard */}
         <div className="text-center mb-4">
-          <div className="flex items-center justify-center -mt-16">
-            <img src={`${import.meta.env.BASE_URL}images/company-logo.png`} alt="Demo Leather" className="h-[180px] object-contain brightness-[2] drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
+          <div className="flex items-center justify-center -mt-6">
+            <img src={`${import.meta.env.BASE_URL}images/company-logo.png`} alt="Demo Leather" className="h-20 sm:h-24 object-contain brightness-[2] drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
           </div>
-          <h1 className="text-4xl font-black text-white mb-1.5 tracking-wider -mt-12">CORIX</h1>
+          <h1 className="text-4xl font-black text-white mb-1.5 tracking-wider -mt-4">CORIX</h1>
           <p className="text-white text-xs font-semibold tracking-[0.25em] uppercase">Powering Modern Tanneries</p>
         </div>
 
