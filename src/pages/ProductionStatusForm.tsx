@@ -540,7 +540,7 @@ export default function ProductionStatusForm() {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-5 pt-4 border-t border-gray-100">
             <div className="text-center p-3 bg-slate-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">Opening Qty</p>
-              <p className="text-lg font-bold text-slate-700 mt-1" title="Opening of the first (beginning) transaction">{formatNumber(txnSummary.beginning_opening_qty)}</p>
+              <p className="text-lg font-bold text-slate-700 mt-1" title="Latest transaction's opening — carries forward to the next day's opening">{formatNumber(txnSummary.latest_opening_qty)}</p>
             </div>
             <div className="text-center p-3 bg-blue-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">Input Qty</p>
