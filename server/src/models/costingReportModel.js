@@ -720,6 +720,22 @@ async function buildDetailFromSeed(seed) {
   const totalBomCost = allRows.reduce((a, r) => a + (Number(r.bom_cost) || 0), 0);
   const totalVariance = totalBomCost - totalActualCost;
 
+  // Latest SAVED standard cost sheet for this plan (or any sibling plan of the
+  // same sales order). Used so the UI shows the real status (e.g. Approved)
+  // instead of always defaulting to Draft. Prefer Approved/Posted, then latest.
+  let savedCostSheet = null;
+  if (planIdList.length) {
+    const idList = planIdList.map(n => Number(n) || 0).join(',');
+    const [[scs]] = await pool.query(
+      `SELECT id, cost_sheet_no, status, effective_from, description, currency
+         FROM standard_cost_sheets
+        WHERE production_plan_id IN (${idList})
+        ORDER BY (status IN ('Approved','Posted')) DESC, id DESC
+        LIMIT 1`
+    );
+    if (scs) savedCostSheet = scs;
+  }
+
   return {
     order: {
       ...seed,
@@ -742,5 +758,6 @@ async function buildDetailFromSeed(seed) {
       total_bom_cost: totalBomCost,
       total_variance: totalVariance,
     },
+    saved_cost_sheet: savedCostSheet,
   };
 }

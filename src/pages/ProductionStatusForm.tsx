@@ -40,6 +40,7 @@ interface TransactionRow {
   rejection_qty: number;
   wip_qty: number;
   remarks: string;
+  created_at?: string;
 }
 
 interface TransactionSummary {
@@ -301,9 +302,31 @@ export default function ProductionStatusForm() {
     return Math.max(0, wip).toFixed(2);
   };
 
+  // Day-wise opening: the opening for a given production date is the closing WIP
+  // of the most recent transaction BEFORE that date — i.e. the previous day's
+  // last WIP carries forward to the next day's opening. The transaction being
+  // edited is excluded from the lookup.
+  const openingForDate = (dateStr: string, excludeId?: number) => {
+    const target = new Date(dateStr).getTime();
+    const prior = transactions
+      .filter(t => (excludeId == null || t.id !== excludeId) && new Date(t.production_date).getTime() < target)
+      .sort((a, b) => {
+        const ta = new Date(a.production_date).getTime();
+        const tb = new Date(b.production_date).getTime();
+        if (tb !== ta) return tb - ta;
+        return b.id - a.id;
+      });
+    return prior.length ? Number(prior[0].wip_qty) || 0 : 0;
+  };
+
   const updateTxnField = (field: string, value: string) => {
     setTxnForm(prev => {
       const updated = { ...prev, [field]: value };
+      // When the production date changes, recompute the opening from the prior
+      // day's closing WIP (day-wise carry-forward).
+      if (field === 'production_date') {
+        updated.opening_qty = openingForDate(value, editingTxn?.id).toFixed(2);
+      }
       updated.wip_qty = calcWip(updated.opening_qty, updated.input_qty, updated.output_qty, updated.rejection_qty);
       return updated;
     });
@@ -312,10 +335,12 @@ export default function ProductionStatusForm() {
   // Transaction CRUD
   const openAddTxn = () => {
     setEditingTxn(null);
-    // Opening carries forward from the LATEST transaction's WIP (running balance),
-    // not the sum of every day's WIP.
-    const lastWip = Number(txnSummary.latest_wip_qty) || 0;
-    const newForm = { production_date: new Date().toISOString().split('T')[0], opening_qty: lastWip > 0 ? lastWip.toFixed(2) : '0', input_qty: '', output_qty: '', rejection_qty: '', wip_qty: '', remarks: '' };
+    // Opening carries forward day-wise: the previous day's closing WIP becomes
+    // today's opening. If there is no earlier day, fall back to the latest WIP.
+    const today = new Date().toISOString().split('T')[0];
+    const dayOpening = openingForDate(today);
+    const lastWip = dayOpening > 0 ? dayOpening : (Number(txnSummary.latest_wip_qty) || 0);
+    const newForm = { production_date: today, opening_qty: lastWip > 0 ? lastWip.toFixed(2) : '0', input_qty: '', output_qty: '', rejection_qty: '', wip_qty: '', remarks: '' };
     newForm.wip_qty = calcWip(newForm.opening_qty, newForm.input_qty, newForm.output_qty, newForm.rejection_qty);
     setTxnForm(newForm);
     setShowTxnForm(true);
@@ -403,6 +428,7 @@ export default function ProductionStatusForm() {
 
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
   const formatDate = (d: string) => { if (!d) return '—'; return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); };
+  const formatTime = (d: string) => { if (!d) return ''; const dt = new Date(d); return isNaN(dt.getTime()) ? '' : dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
 
   if (loading) {
     return (
@@ -655,7 +681,10 @@ export default function ProductionStatusForm() {
                       <tr key={txn.id} className={`${isLatest ? 'bg-amber-50/70' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
                         <td className="px-4 py-2.5 text-gray-700">
                           <span className="inline-flex items-center gap-1.5">
-                            {formatDate(txn.production_date)}
+                            <span className="flex flex-col leading-tight">
+                              <span>{formatDate(txn.production_date)}</span>
+                              {txn.created_at && <span className="text-[10px] text-gray-400">{formatTime(txn.created_at)}</span>}
+                            </span>
                             {isLatest && <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wide">Latest</span>}
                           </span>
                         </td>

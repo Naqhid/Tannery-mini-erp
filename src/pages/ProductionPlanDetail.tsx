@@ -254,6 +254,23 @@ export default function ProductionPlanDetail() {
   const handleSave = async () => {
     if (!plan.plan_date) { toast.error('Plan date is required'); return; }
     if (!plan.article) { toast.error('Article is required'); return; }
+
+    // Stages must be planned strictly in sequence order: a stage can only have a
+    // planned qty if EVERY earlier-sequence stage is also planned. So the planned
+    // stages must form a contiguous block from the first stage — no gaps.
+    const ordered = [...stages].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    const plannedFlags = ordered.map(s => (parseFloat(s.planned_qty) || 0) > 0);
+    const firstUnplanned = plannedFlags.indexOf(false);
+    if (firstUnplanned !== -1) {
+      const laterPlanned = plannedFlags.slice(firstUnplanned + 1).indexOf(true);
+      if (laterPlanned !== -1) {
+        const offending = ordered[firstUnplanned + 1 + laterPlanned];
+        const missing = ordered[firstUnplanned];
+        toast.error(`Plan stages in sequence: "${missing.stage_name || 'a prior stage'}" must be planned before "${offending.stage_name || 'this stage'}"`);
+        return;
+      }
+    }
+
     // Every stage must have a planned qty greater than 0 before saving.
     const zeroQtyStage = stages.find(s => (parseFloat(s.planned_qty) || 0) <= 0);
     if (zeroQtyStage) {
@@ -493,9 +510,20 @@ export default function ProductionPlanDetail() {
                   </td>
                   <td className="py-3 px-3 text-center text-xs text-gray-600 font-medium">{stage.uom || '—'}</td>
                   <td className="py-3 px-3">
-                    <input type="number" value={stage.planned_qty} onChange={(e) => updateStage(stage._key, 'planned_qty', e.target.value)}
-                      disabled={(parseFloat(stage.output_qty) || 0) > 0}
-                      className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${(parseFloat(stage.output_qty) || 0) > 0 ? 'bg-gray-50 cursor-not-allowed' : ''}`} />
+                    {(() => {
+                      // Sequence rule: a stage's Plan Qty can only be entered once
+                      // every earlier stage has a planned qty > 0.
+                      const priorUnplanned = stages.slice(0, idx).some(s => (parseFloat(s.planned_qty) || 0) <= 0);
+                      const lockedByOutput = (parseFloat(stage.output_qty) || 0) > 0;
+                      const disabled = lockedByOutput || priorUnplanned;
+                      return (
+                        <input type="number" value={stage.planned_qty} onChange={(e) => updateStage(stage._key, 'planned_qty', e.target.value)}
+                          disabled={disabled}
+                          title={priorUnplanned ? 'Plan the previous stage(s) first' : undefined}
+                          placeholder={priorUnplanned ? 'Plan prior stage first' : undefined}
+                          className={`w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${disabled ? 'bg-gray-50 cursor-not-allowed' : ''}`} />
+                      );
+                    })()}
                   </td>
                   <td className="py-3 px-3">
                     <input type="number" value={stage.issue_input_qty} readOnly

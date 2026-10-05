@@ -38,7 +38,8 @@ type SummaryStage = {
   total_with_rejection:{ amount:number; cost_per_piece:number };
 };
 type SummaryMeta = { order_qty:number; completed_qty:number; measurement_sqft?:number; excess_shortage:number };
-type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[]; summary?:SummaryStage[]; summary_meta?:SummaryMeta };
+type SavedCostSheet = { id:number; cost_sheet_no:string; status:string; effective_from?:string; description?:string; currency?:string } | null;
+type Detail = { order:{ customer_name:string; article:string; color:string; order_no:string; uom:string; order_qty:number; completed_qty:number; balance_qty:number; production_plan_id?:number }; stages:Stage[]; summary?:SummaryStage[]; summary_meta?:SummaryMeta; saved_cost_sheet?:SavedCostSheet };
 
 const fmt = (n:number) => new Intl.NumberFormat('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0);
 const fmtQty = (n:number) => new Intl.NumberFormat('en-IN',{maximumFractionDigits:2}).format(Number(n)||0);
@@ -90,11 +91,22 @@ export default function ActualStandardCostSheet(){
     const endpoint = planId ? `/costing-report/plan/${planId}/detail` : `/costing-report/${id}/detail`;
     api<{data:Detail}>(endpoint).then(r=>{
       setData(r.data);
-      const cust = r.data?.order?.customer_name || '';
-      const qs = cust ? `?customer_name=${encodeURIComponent(cust)}` : '';
-      api<{data:{cost_sheet_no:string}}>(`/standard-costs/next-no${qs}`)
-        .then(n=>setCostSheetNo(n.data?.cost_sheet_no||''))
-        .catch(()=>{});
+      const saved = r.data?.saved_cost_sheet;
+      if (saved) {
+        // A standard cost sheet already exists for this order — reflect its real
+        // saved status (e.g. Approved) instead of defaulting to Draft.
+        if (saved.status) setStatus(saved.status);
+        if (saved.cost_sheet_no) setCostSheetNo(saved.cost_sheet_no);
+        if (saved.currency) setCurrency(saved.currency);
+        if (saved.effective_from) setEffectiveFrom(saved.effective_from.slice(0,10));
+        if (saved.description) setDescription(saved.description);
+      } else {
+        const cust = r.data?.order?.customer_name || '';
+        const qs = cust ? `?customer_name=${encodeURIComponent(cust)}` : '';
+        api<{data:{cost_sheet_no:string}}>(`/standard-costs/next-no${qs}`)
+          .then(n=>setCostSheetNo(n.data?.cost_sheet_no||''))
+          .catch(()=>{});
+      }
     }).finally(()=>setLoading(false));
   },[id, planId]);
   // Two-level collapse state: stages collapse, and each source WITHIN a stage
@@ -103,6 +115,25 @@ export default function ActualStandardCostSheet(){
   const [collapsedStageSources,setCollapsedStageSources]=useState<Record<string,boolean>>({});
   const toggleStage=(stage:string)=>setCollapsedStages(prev=>({...prev,[stage]:!prev[stage]}));
   const toggleStageSource=(key:string)=>setCollapsedStageSources(prev=>({...prev,[key]:!prev[key]}));
+
+  // Cost Details is collapsed by default: when the sheet loads, mark every
+  // stage (and every stage::source) as collapsed so nothing is expanded until
+  // the user clicks to open it.
+  useEffect(()=>{
+    if(!data) return;
+    const stagesMap:Record<string,boolean>={};
+    const sourcesMap:Record<string,boolean>={};
+    for(const stage of data.stages||[]){
+      stagesMap[stage.process_stage]=true;
+      const seen=new Set<string>();
+      for(const r of stage.rows){
+        const src=normalizeSource(r.data_source || r.cost_group);
+        if(!seen.has(src)){ seen.add(src); sourcesMap[`${stage.process_stage}::${src}`]=true; }
+      }
+    }
+    setCollapsedStages(stagesMap);
+    setCollapsedStageSources(sourcesMap);
+  },[data]);
 
   const totals=useMemo(()=>{
     const rows=data?.stages.flatMap(s=>s.rows)||[];
@@ -273,7 +304,7 @@ export default function ActualStandardCostSheet(){
   if(!data) return <div className="p-8 text-center text-red-500">Production plan not found.</div>;
   return <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 bg-[#fafbfe] min-h-full">
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost Sheet</h1><span className="px-3 py-1 rounded bg-amber-50 text-amber-700 text-sm font-semibold border border-amber-200">Draft</span></div>
+      <div className="flex items-center gap-3"><h1 className="text-2xl font-bold text-slate-800">Standard Cost Sheet</h1><span className={`px-3 py-1 rounded text-sm font-semibold border ${status==='Approved'?'bg-emerald-50 text-emerald-700 border-emerald-200':status==='Posted'?'bg-blue-50 text-blue-700 border-blue-200':'bg-amber-50 text-amber-700 border-amber-200'}`}>{status}</span></div>
       <div className="flex gap-3">
         <div className="relative" ref={exportMenuRef}>
           <button onClick={()=>setExportMenuOpen(o=>!o)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">
