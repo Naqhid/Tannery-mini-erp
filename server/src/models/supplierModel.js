@@ -49,17 +49,21 @@ export async function getById(id) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query("SELECT code FROM suppliers ORDER BY id DESC LIMIT 1");
-  if (!row) return 'SUP-00001';
-  const num = parseInt(row.code.split('-')[1], 10) + 1;
-  return `SUP-${String(num).padStart(5, '0')}`;
+  const [rows] = await pool.query("SELECT code FROM suppliers WHERE code LIKE 'SUP-%'");
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `SUP-${String(maxNum + 1).padStart(5, '0')}`;
 }
 
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
   const [result] = await pool.query(
     `INSERT INTO suppliers (code, name, contact_person, phone, email, alt_phone, city, state, country, address, pincode, website, category, supply_type, gstin, pan, payment_terms, bank_name, bank_account, ifsc_code, notes, status, country_id, state_id, city_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.contact_person, data.phone, data.email, data.alt_phone,
      data.city, data.state, data.country || null, data.address, data.pincode, data.website,
      data.category, data.supply_type, data.gstin, data.pan, data.payment_terms,

@@ -47,3 +47,8 @@ Write-Host "  - price_approval_items" -ForegroundColor White
 Write-Host "  - price_approval_workflow" -ForegroundColor White
 Write-Host "  - physical_stock_entries" -ForegroundColor White
 Write-Host "  - physical_stock_entry_items" -ForegroundColor White
+
+Write-Host "Running migration 028 - material transactions and issue updates..." -ForegroundColor Yellow
+& $mysqlPath -u $dbUser -p$dbPass -h $dbHost -P $dbPort $dbName < server\sql\migrations\028_material_transactions_and_issue_updates.sql
+if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: Migration 028 failed!" -ForegroundColor Red; exit 1 }
+Write-Host "Migration 028 completed successfully!" -ForegroundColor Green

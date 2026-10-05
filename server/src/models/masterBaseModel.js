@@ -83,12 +83,19 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
   }
 
   async function getNextCode() {
-    const [[row]] = await pool.query(
-      `SELECT code FROM ${_tableName} ORDER BY id DESC LIMIT 1`
+    // Find the highest numeric suffix among codes that match this prefix.
+    // This is robust against legacy/malformed codes that would otherwise yield NaN.
+    const [rows] = await pool.query(
+      `SELECT code FROM ${_tableName} WHERE code LIKE ?`,
+      [`${_codePrefix}-%`]
     );
-    if (!row) return `${_codePrefix}-00001`;
-    const num = parseInt(row.code.split('-')[1], 10) + 1;
-    return `${_codePrefix}-${String(num).padStart(5, '0')}`;
+    let maxNum = 0;
+    for (const r of rows) {
+      const parts = String(r.code || '').split('-');
+      const n = parseInt(parts[parts.length - 1], 10);
+      if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+    }
+    return `${_codePrefix}-${String(maxNum + 1).padStart(5, '0')}`;
   }
 
   async function checkDuplicate(data, excludeId = null) {
@@ -119,6 +126,18 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       .map(([field]) => field)
   );
 
+  // Numeric fields: empty strings must become null so they don't fail
+  // strict-mode INT/DECIMAL columns (e.g. seq, gst_rate, *_id, rate_*).
+  const _numericFields = new Set([
+    'seq', 'rank', 'value_mm', 'gst_rate', 'capacity',
+    'rate_indian', 'rate_imported', 'min_value', 'max_value',
+    'category_id', 'company_id', 'country_id', 'state_id',
+    'process_stage_id', 'warehouse_id',
+    ...Object.entries(_extraColumns)
+      .filter(([, type]) => type === 'number')
+      .map(([field]) => field),
+  ]);
+
   function sanitizeValue(field, value) {
     if (_dateFields.has(field)) {
       if (!value || value === '') return null;
@@ -126,6 +145,11 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       const d = new Date(value);
       if (isNaN(d.getTime())) return null;
       return d.toISOString().split('T')[0];
+    }
+    if (_numericFields.has(field)) {
+      if (value === '' || value === null || value === undefined) return null;
+      const n = Number(value);
+      return Number.isNaN(n) ? null : n;
     }
     return value;
   }
@@ -142,7 +166,8 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       'unit', 'default_value', 'min_value', 'max_value', 'required',
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',
       'address', 'city', 'state', 'country', 'phone', 'email', 'gstin',
-      'category_id', 'hsn_code', 'uom_type', 'rate_indian', 'rate_imported',
+      'category_id', 'hsn_code', 'uom_type', 'uom', 'rate_indian', 'rate_imported',
+      'warehouse_id',
       ...Object.keys(_extraColumns),
     ])];
 
@@ -174,7 +199,8 @@ export function createMasterModel(tableName, codePrefix, listFields, searchField
       'unit', 'default_value', 'min_value', 'max_value', 'required',
       'phone_code', 'country_id', 'state_id', 'pincode', 'company_id',
       'address', 'city', 'state', 'country', 'phone', 'email', 'gstin',
-      'category_id', 'hsn_code', 'uom_type', 'rate_indian', 'rate_imported',
+      'category_id', 'hsn_code', 'uom_type', 'uom', 'rate_indian', 'rate_imported',
+      'warehouse_id',
       ...Object.keys(_extraColumns),
     ])];
 

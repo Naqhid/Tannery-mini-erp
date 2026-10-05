@@ -59,24 +59,63 @@ export default function ProductMasterForm() {
   const [filteredGroups, setFilteredGroups] = useState<GroupOption[]>([]);
 
   const fetchProduct = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/products/next-code');
+        if (res.data?.code) setForm((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
-      const res = await api<{ data: ProductData & { group_hsn_code?: string } }>(`/products/${id}`);
-      setForm({ ...empty, ...res.data, hsn_code_display: res.data.group_hsn_code || '' });
+      const res = await api<{ data: any }>(`/products/${id}`);
+      const d = res.data;
+      setForm({
+        ...empty,
+        ...d,
+        category_id: d.category_id ? String(d.category_id) : '',
+        group_id: d.group_id ? String(d.group_id) : '',
+        leather_type_id: d.leather_type_id ? String(d.leather_type_id) : '',
+        primary_uom_id: d.uom_id ? String(d.uom_id) : '',
+        secondary_uom_id: d.secondary_uom_id ? String(d.secondary_uom_id) : '',
+        thickness_id: d.thickness_id ? String(d.thickness_id) : '',
+        standard_size_id: d.standard_size_id ? String(d.standard_size_id) : '',
+        color_id: d.color_id ? String(d.color_id) : '',
+        finish_type_id: d.finish_type_id ? String(d.finish_type_id) : '',
+        grade_id: d.grade_id ? String(d.grade_id) : '',
+        hsn_code_id: d.hsn_code_id ? String(d.hsn_code_id) : '',
+        hsn_code_display: d.group_hsn_code || '',
+      });
     } catch { toast.error('Failed to load product'); navigate('/product-master'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
   useEffect(() => { fetchProduct(); }, [fetchProduct]);
 
-  // Filter groups by selected category
+  // Auto-populate product name = leather type + finish type + color
   useEffect(() => {
-    if (form.category_id && dropdowns['group-master']?.data) {
-      const filtered = dropdowns['group-master'].data.filter(
-        (g: any) => String(g.category_id) === form.category_id
-      );
-      setFilteredGroups(filtered as unknown as GroupOption[]);
+    const leather = dropdowns['leather-types']?.data?.find((o: any) => String(o.id) === form.leather_type_id);
+    const finish = dropdowns['finish-types']?.data?.find((o: any) => String(o.id) === form.finish_type_id);
+    const color = dropdowns['colors']?.data?.find((o: any) => String(o.id) === form.color_id);
+    const parts = [leather?.name, finish?.name, color?.name].filter(Boolean);
+    const autoName = parts.join(' ');
+    setForm(p => (p.name === autoName ? p : { ...p, name: autoName }));
+  }, [
+    form.leather_type_id, form.finish_type_id, form.color_id,
+    dropdowns['leather-types']?.data, dropdowns['finish-types']?.data, dropdowns['colors']?.data,
+  ]);
+
+  // Filter groups by selected category (show all if no category selected)
+  useEffect(() => {
+    if (dropdowns['group-master']?.data) {
+      if (form.category_id) {
+        const filtered = dropdowns['group-master'].data.filter(
+          (g: any) => !g.category_id || String(g.category_id) === form.category_id
+        );
+        setFilteredGroups(filtered as unknown as GroupOption[]);
+      } else {
+        setFilteredGroups(dropdowns['group-master'].data as unknown as GroupOption[]);
+      }
     } else {
       setFilteredGroups([]);
     }
@@ -125,8 +164,11 @@ export default function ProductMasterForm() {
     if (!validate()) { toast.error('Please fix validation errors'); return; }
     setSaving(true);
     try {
-      const payload = { ...form };
-      delete (payload as any).hsn_code_display;
+      const payload: any = { ...form };
+      delete payload.hsn_code_display;
+      // Map frontend field names to backend field names
+      payload.uom_id = payload.primary_uom_id || null;
+      delete payload.primary_uom_id;
       if (isNew) {
         const res = await api<{ message: string }>('/products', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Product created!');
@@ -169,8 +211,8 @@ export default function ProductMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Product Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Input label="Product Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter product name" />
-          <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} />
+          <Input label="Product Name" required value={form.name} disabled readOnly error={errors.name} placeholder="Auto: Leather Type + Finish Type + Color" />
+          <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} addNewPath="/product-category/new" addNewLabel="Add Category" onRefresh={dropdowns['product-categories']?.refetch} />
           <Select
             label="Group"
             options={[
@@ -179,11 +221,14 @@ export default function ProductMasterForm() {
             ]}
             value={form.group_id}
             onChange={(e) => handleGroupChange(e.target.value)}
+            addNewPath="/group-master/new"
+            addNewLabel="Add Group"
+            onRefresh={dropdowns['group-master']?.refetch}
           />
-          <Select label="Leather Type" required options={[{ value: '', label: 'Select leather type' }, ...(dropdowns['leather-types']?.options || [])]} value={form.leather_type_id} onChange={(e) => update('leather_type_id', e.target.value)} error={errors.leather_type_id} />
-          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} />
-          <Select label="Secondary UOM" options={[{ value: '', label: 'Select Secondary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} />
-          <Select label="Thickness" required options={[{ value: '', label: 'Select thickness' }, ...(dropdowns['thickness']?.options || [])]} value={form.thickness_id} onChange={(e) => update('thickness_id', e.target.value)} error={errors.thickness_id} />
+          <Select label="Leather Type" required options={[{ value: '', label: 'Select leather type' }, ...(dropdowns['leather-types']?.options || [])]} value={form.leather_type_id} onChange={(e) => update('leather_type_id', e.target.value)} error={errors.leather_type_id} addNewPath="/leather-type/new" addNewLabel="Add Leather Type" onRefresh={dropdowns['leather-types']?.refetch} />
+          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} addNewPath="/uom/new" addNewLabel="Add UOM" onRefresh={dropdowns['uom']?.refetch} />
+          <Select label="Secondary UOM" options={[{ value: '', label: 'Select Secondary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} addNewPath="/uom/new" addNewLabel="Add UOM" onRefresh={dropdowns['uom']?.refetch} />
+          <Select label="Thickness" required options={[{ value: '', label: 'Select thickness' }, ...(dropdowns['thickness']?.options || [])]} value={form.thickness_id} onChange={(e) => update('thickness_id', e.target.value)} error={errors.thickness_id} addNewPath="/thickness/new" addNewLabel="Add Thickness" onRefresh={dropdowns['thickness']?.refetch} />
         </div>
       </div>
 
@@ -191,10 +236,10 @@ export default function ProductMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">2. Specifications</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Select label="Standard Size" options={[{ value: '', label: 'Select size' }, ...(dropdowns['standard-sizes']?.options || [])]} value={form.standard_size_id} onChange={(e) => update('standard_size_id', e.target.value)} />
-          <Select label="Color" options={[{ value: '', label: 'Select color' }, ...(dropdowns['colors']?.options || [])]} value={form.color_id} onChange={(e) => update('color_id', e.target.value)} />
-          <Select label="Finish Type" options={[{ value: '', label: 'Select finish type' }, ...(dropdowns['finish-types']?.options || [])]} value={form.finish_type_id} onChange={(e) => update('finish_type_id', e.target.value)} />
-          <Select label="Grade" options={[{ value: '', label: 'Select grade' }, ...(dropdowns['grades']?.options || [])]} value={form.grade_id} onChange={(e) => update('grade_id', e.target.value)} />
+          <Select label="Standard Size" options={[{ value: '', label: 'Select size' }, ...(dropdowns['standard-sizes']?.options || [])]} value={form.standard_size_id} onChange={(e) => update('standard_size_id', e.target.value)} addNewPath="/standard-size/new" addNewLabel="Add Standard Size" onRefresh={dropdowns['standard-sizes']?.refetch} />
+          <Select label="Color" options={[{ value: '', label: 'Select color' }, ...(dropdowns['colors']?.options || [])]} value={form.color_id} onChange={(e) => update('color_id', e.target.value)} addNewPath="/color/new" addNewLabel="Add Color" onRefresh={dropdowns['colors']?.refetch} />
+          <Select label="Finish Type" options={[{ value: '', label: 'Select finish type' }, ...(dropdowns['finish-types']?.options || [])]} value={form.finish_type_id} onChange={(e) => update('finish_type_id', e.target.value)} addNewPath="/finish-type/new" addNewLabel="Add Finish Type" onRefresh={dropdowns['finish-types']?.refetch} />
+          <Select label="Grade" options={[{ value: '', label: 'Select grade' }, ...(dropdowns['grades']?.options || [])]} value={form.grade_id} onChange={(e) => update('grade_id', e.target.value)} addNewPath="/grade/new" addNewLabel="Add Grade" onRefresh={dropdowns['grades']?.refetch} />
           {/* HSN auto-populated from group */}
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">HSN Code <span className="text-gray-400">(from Group)</span></label>

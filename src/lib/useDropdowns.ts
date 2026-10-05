@@ -16,6 +16,11 @@ interface DropdownOption {
   // Group master fields
   category_id?: number;
   hsn_code?: string;
+  // Cost component fields
+  group_id?: number;
+  group_name?: string;
+  uom_name?: string;
+  cost_per_uom?: number;
   // Product specific fields
   leather_type?: string;
   thickness?: string;
@@ -46,8 +51,10 @@ type DropdownType =
   | 'process-stages'
   | 'machines'
   | 'group-master'
+  | 'cost-components'
   | 'products'
-  | 'materials';
+  | 'materials'
+  | 'customers';
 
 export function useDropdown(type: DropdownType) {
   const [state, setState] = useState<DropdownState>({
@@ -62,6 +69,7 @@ export function useDropdown(type: DropdownType) {
       let endpoint = `/${type}/dropdown`;
       if (type === 'products') endpoint = '/products/dropdown';
       if (type === 'materials') endpoint = '/materials/dropdown';
+      if (type === 'customers') endpoint = '/customers/dropdown';
       const res = await api<{ data: DropdownOption[] }>(endpoint);
       setState({ data: res.data || [], loading: false, error: null });
     } catch (err) {
@@ -114,6 +122,7 @@ export function useDropdowns(types: DropdownType[]) {
       let endpoint = `/${type}/dropdown`;
       if (type === 'products') endpoint = '/products/dropdown';
       if (type === 'materials') endpoint = '/materials/dropdown';
+      if (type === 'customers') endpoint = '/customers/dropdown';
       const res = await api<{ data: DropdownOption[] }>(endpoint);
       setStates(prev => ({
         ...prev,
@@ -133,7 +142,7 @@ export function useDropdowns(types: DropdownType[]) {
     typesRef.current.forEach(type => fetchData(type));
   }, [typesKey, fetchData]);
 
-  const result: Record<string, { data: DropdownOption[]; options: { value: string; label: string; code: string }[]; loading: boolean; error: string | null }> = {};
+  const result: Record<string, { data: DropdownOption[]; options: { value: string; label: string; code: string }[]; loading: boolean; error: string | null; refetch: () => void }> = {};
 
   types.forEach(type => {
     const state = states[type];
@@ -145,6 +154,7 @@ export function useDropdowns(types: DropdownType[]) {
           label: item.name,
           code: item.code,
         })),
+        refetch: () => fetchData(type),
       };
     } else {
       result[type] = {
@@ -152,6 +162,7 @@ export function useDropdowns(types: DropdownType[]) {
         options: [],
         loading: true,
         error: null,
+        refetch: () => fetchData(type),
       };
     }
   });

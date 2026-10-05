@@ -650,7 +650,8 @@ export default function PhysicalStockEntry() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-blue-100/50">
@@ -732,6 +733,52 @@ export default function PhysicalStockEntry() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-4 space-y-3">{[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          ) : data.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-gray-500">No physical stock entries found</p>
+            </div>
+          ) : (
+            data.map((entry, index) => (
+              <div key={entry.id} onClick={() => handleView(entry.id)} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-mono font-semibold text-blue-600">{entry.entry_no}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {entry.entry_date ? new Date(entry.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                    </p>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[entry.status] || 'bg-gray-100 text-gray-600'}`}>{STATUS_BADGES[entry.status] || entry.status}</span>
+                </div>
+                <p className="text-xs text-gray-600 mb-2.5">{entry.godown_name || '-'}{entry.location_rack ? ` • ${entry.location_rack}` : ''}</p>
+                <div className="grid grid-cols-4 gap-2 pt-2.5 border-t border-gray-100">
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Items</p>
+                    <p className="text-xs font-bold text-gray-900">{entry.total_items}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Matched</p>
+                    <p className="text-xs font-bold text-emerald-700">{entry.matched_items}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Variance</p>
+                    <p className={`text-xs font-bold ${entry.variance_items > 0 ? 'text-rose-600' : 'text-gray-500'}`}>{entry.variance_items}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Value</p>
+                    <p className={`text-xs font-bold ${Number(entry.total_variance_value || 0) < 0 ? 'text-rose-600' : Number(entry.total_variance_value || 0) > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>
+                      {Number(entry.total_variance_value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}

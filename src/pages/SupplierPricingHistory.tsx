@@ -416,8 +416,8 @@ export default function SupplierPricingHistory() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -501,6 +501,51 @@ export default function SupplierPricingHistory() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-4 space-y-3">{[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          ) : displayData.length === 0 ? (
+            <div className="py-12 text-center"><p className="text-sm text-gray-500">No pricing records found</p></div>
+          ) : (
+            displayData.map((row, idx) => (
+              <div key={row.id} onClick={() => navigate(`/supplier-pricing-history/${row.id}`)} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{row.material_name}</p>
+                    <p className="text-xs text-gray-500 font-mono mt-0.5">{row.material_code}</p>
+                  </div>
+                  <div className="shrink-0 ml-2 flex flex-col items-end gap-1">
+                    {row.is_current && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">Current</span>
+                    )}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                      row.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' :
+                      row.status === 'Expired' ? 'bg-red-100 text-red-700' :
+                      row.status === 'Pending' ? 'bg-amber-100 text-amber-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>{row.status}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Unit Price</p>
+                    <p className="text-xs font-bold text-gray-900">{row.currency} {row.unit_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">UOM</p>
+                    <p className="text-xs text-gray-700">{row.uom}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Effective From</p>
+                    <p className="text-xs text-gray-700">{row.valid_from || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}

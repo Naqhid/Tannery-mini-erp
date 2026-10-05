@@ -17,6 +17,9 @@ import {
   roleModel,
   companyModel,
   businessUnitModel,
+  locationRackModel,
+  departmentModel,
+  costComponentModel,
 } from '../models/masterModels.js';
 
 export const productCategoryController = createMasterController(productCategoryModel, 'Product Category', [
@@ -81,3 +84,9 @@ export const companyController = createMasterController(companyModel, 'Company',
 export const businessUnitController = createMasterController(businessUnitModel, 'Business Unit', [
   { table: 'users', field: 'business_unit_id', entityName: 'Users' },
 ]);
+
+export const locationRackController = createMasterController(locationRackModel, 'Location/Rack', []);
+
+export const departmentController = createMasterController(departmentModel, 'Department', []);
+
+export const costComponentController = createMasterController(costComponentModel, 'Cost Component', []);

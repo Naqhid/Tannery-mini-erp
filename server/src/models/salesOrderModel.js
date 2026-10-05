@@ -91,6 +91,44 @@ function calcTotals(items, discount, freight, taxPercent) {
   return { subTotal, taxAmount, grandTotal };
 }
 
+// The company's home state. Intra-state (same state) → CGST + SGST split.
+// Inter-state (any other state) → IGST (full rate, no split).
+const HOME_STATE = 'Tamil Nadu';
+
+function normState(s) {
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Resolve a customer's state (text) so we can decide intra vs inter state.
+ */
+async function getCustomerState(conn, customerId) {
+  if (!customerId) return null;
+  const [[row]] = await conn.query(
+    `SELECT COALESCE(s.name, c.state) AS state_name
+       FROM customers c LEFT JOIN states s ON c.state_id = s.id
+      WHERE c.id = ?`,
+    [customerId]
+  );
+  return row?.state_name || null;
+}
+
+/**
+ * Split a total tax amount into CGST/SGST (intra-state) or IGST (inter-state).
+ * The decision is driven purely by the party's state vs the home state
+ * (Tamil Nadu) — it is not user-overridable.
+ */
+function splitGst(taxAmount, partyState) {
+  const amt = Number(taxAmount) || 0;
+  const isIntra = normState(partyState) === normState(HOME_STATE);
+
+  if (isIntra) {
+    const half = Number((amt / 2).toFixed(2));
+    return { tax_type: 'CGST_SGST', cgst_amount: half, sgst_amount: Number((amt - half).toFixed(2)), igst_amount: 0 };
+  }
+  return { tax_type: 'IGST', cgst_amount: 0, sgst_amount: 0, igst_amount: Number(amt.toFixed(2)) };
+}
+
 export async function create(data, items = [], createdBy = null) {
   const conn = await pool.getConnection();
   try {
@@ -98,13 +136,18 @@ export async function create(data, items = [], createdBy = null) {
     const order_no = data.order_no || await getNextOrderNo();
     const { subTotal, taxAmount, grandTotal } = calcTotals(items, data.discount, data.freight, data.tax_percent);
 
+    // Decide CGST/SGST vs IGST purely from the customer's state.
+    const custState = await getCustomerState(conn, data.customer_id);
+    const gst = splitGst(taxAmount, custState);
+
     const [result] = await conn.query(
       `INSERT INTO sales_orders (
         order_no, customer_id, order_date, delivery_date, customer_po_no, order_type,
         contact_person, delivery_address, payment_terms, currency, price_list,
         sales_person, status, terms_conditions, discount, freight,
-        tax_percent, sub_total, tax_amount, grand_total, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        tax_percent, sub_total, tax_amount, cgst_amount, sgst_amount, igst_amount, tax_type,
+        grand_total, remarks, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         order_no, data.customer_id, data.order_date, data.delivery_date || null,
         data.customer_po_no || null, data.order_type || 'Standard',
@@ -112,7 +155,8 @@ export async function create(data, items = [], createdBy = null) {
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
         data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
-        subTotal, taxAmount, grandTotal, data.remarks || null, createdBy,
+        subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
+        grandTotal, data.remarks || null, createdBy,
       ]
     );
     const orderId = result.insertId;
@@ -121,13 +165,15 @@ export async function create(data, items = [], createdBy = null) {
       await conn.query(
         `INSERT INTO sales_order_items (
           sales_order_id, item_code, item_description, product_id,
-          leather_type, finish_color, thickness, uom, quantity, unit_price, discount_percent, amount
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          leather_type, finish_color, thickness, uom, quantity,
+          delivery_date, unit_price, discount_percent, amount
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           orderId, item.item_code || null, item.item_description || null, item.product_id || null,
           item.leather_type || null, item.finish_color || null, item.thickness || null,
-          item.uom || null, item.quantity || 0, item.unit_price || 0,
-          item.discount_percent || 0, item.amount || 0,
+          item.uom || null, item.quantity || 0,
+          item.delivery_date || null,
+          item.unit_price || 0, item.discount_percent || 0, item.amount || 0,
         ]
       );
     }
@@ -148,12 +194,16 @@ export async function update(id, data, items = [], updatedBy = null) {
     await conn.beginTransaction();
     const { subTotal, taxAmount, grandTotal } = calcTotals(items, data.discount, data.freight, data.tax_percent);
 
+    const custState = await getCustomerState(conn, data.customer_id);
+    const gst = splitGst(taxAmount, custState);
+
     await conn.query(
       `UPDATE sales_orders SET
         customer_id=?, order_date=?, delivery_date=?, customer_po_no=?, order_type=?,
         contact_person=?, delivery_address=?, payment_terms=?, currency=?, price_list=?,
         sales_person=?, status=?, terms_conditions=?, discount=?, freight=?,
-        tax_percent=?, sub_total=?, tax_amount=?, grand_total=?, remarks=?, updated_by=?
+        tax_percent=?, sub_total=?, tax_amount=?, cgst_amount=?, sgst_amount=?, igst_amount=?, tax_type=?,
+        grand_total=?, remarks=?, updated_by=?
        WHERE id=?`,
       [
         data.customer_id, data.order_date, data.delivery_date || null,
@@ -162,7 +212,8 @@ export async function update(id, data, items = [], updatedBy = null) {
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
         data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
-        subTotal, taxAmount, grandTotal, data.remarks || null, updatedBy, id,
+        subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
+        grandTotal, data.remarks || null, updatedBy, id,
       ]
     );
 
@@ -171,13 +222,15 @@ export async function update(id, data, items = [], updatedBy = null) {
       await conn.query(
         `INSERT INTO sales_order_items (
           sales_order_id, item_code, item_description, product_id,
-          leather_type, finish_color, thickness, uom, quantity, unit_price, discount_percent, amount
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          leather_type, finish_color, thickness, uom, quantity,
+          delivery_date, unit_price, discount_percent, amount
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id, item.item_code || null, item.item_description || null, item.product_id || null,
           item.leather_type || null, item.finish_color || null, item.thickness || null,
-          item.uom || null, item.quantity || 0, item.unit_price || 0,
-          item.discount_percent || 0, item.amount || 0,
+          item.uom || null, item.quantity || 0,
+          item.delivery_date || null,
+          item.unit_price || 0, item.discount_percent || 0, item.amount || 0,
         ]
       );
     }
@@ -213,11 +266,80 @@ export async function remove(id) {
   }
 }
 
+/**
+ * Recompute a sales order's status from its linked production plans.
+ *
+ * Hybrid model — the system owns the early lifecycle, the user owns the rest.
+ *
+ * Auto-managed (Draft → Confirmed → Processing):
+ *   - No production plan linked            → Draft
+ *   - Plan linked, zero production output  → Confirmed
+ *   - Some production output               → Processing
+ *
+ * Manual & permanently locked (never auto-changed):
+ *   - Shipped, Delivered, Cancelled — once a user sets any of these,
+ *     production progress will not move the status again.
+ */
+export async function recalcStatusFromProduction(orderId) {
+  if (!orderId) return;
+
+  const [[order]] = await pool.query(
+    'SELECT id, status FROM sales_orders WHERE id = ?',
+    [orderId]
+  );
+  if (!order) return;
+
+  // Manual/terminal statuses are user-controlled and permanently locked.
+  // Once a user marks an order Shipped, Delivered, or Cancelled, production
+  // progress never auto-changes it again.
+  const LOCKED = ['Shipped', 'Delivered', 'Cancelled'];
+  if (LOCKED.includes(order.status)) return;
+
+  // Auto-managed lifecycle covers only Draft → Confirmed → Processing,
+  // driven purely by linked production plans.
+  const [[plan]] = await pool.query(
+    `SELECT
+       COUNT(*) AS plan_count,
+       COALESCE(SUM(output_qty), 0) AS total_output
+     FROM production_plans
+     WHERE sales_order_id = ? AND deleted_at IS NULL`,
+    [orderId]
+  );
+
+  let status = order.status || 'Draft';
+
+  if (plan.plan_count > 0) {
+    status = Number(plan.total_output) > 0 ? 'Processing' : 'Confirmed';
+  } else {
+    // No production plan linked → back to Draft (unless already locked above).
+    status = 'Draft';
+  }
+
+  if (status !== order.status) {
+    await pool.query('UPDATE sales_orders SET status = ? WHERE id = ?', [status, orderId]);
+  }
+}
+
+/** Recompute status for every sales order (one-time backfill / maintenance). */
+export async function resyncAllStatuses() {
+  const [orders] = await pool.query('SELECT id FROM sales_orders');
+  let updated = 0;
+  for (const o of orders) {
+    const [[before]] = await pool.query('SELECT status FROM sales_orders WHERE id = ?', [o.id]);
+    await recalcStatusFromProduction(o.id);
+    const [[after]] = await pool.query('SELECT status FROM sales_orders WHERE id = ?', [o.id]);
+    if (before.status !== after.status) updated++;
+  }
+  return { total: orders.length, updated };
+}
+
 export async function getStats() {
   const [[data]] = await pool.query(
     `SELECT COUNT(*) AS total,
        SUM(status='Draft') AS draft,
        SUM(status='Confirmed') AS confirmed,
+       SUM(status='Processing') AS processing,
+       SUM(status='Shipped') AS shipped,
        SUM(status='Delivered') AS delivered,
        SUM(status='Cancelled') AS cancelled,
        SUM(grand_total) AS total_value

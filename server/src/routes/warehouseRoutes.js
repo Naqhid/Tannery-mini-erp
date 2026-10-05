@@ -7,6 +7,7 @@ const router = Router();
 
 router.get('/', validatePagination, ctrl.list);
 router.get('/dropdown', ctrl.dropdown);
+router.get('/next-code', ctrl.nextCode);
 router.get('/stats', ctrl.stats);
 router.get('/:id/stock', validateId, ctrl.getStock);
 router.get('/:id', validateId, ctrl.getOne);

@@ -152,3 +152,10 @@ export async function deleteUserAccess(req, res, next) {
     res.json({ message: 'User access deleted successfully!' });
   } catch (err) { next(err); }
 }
+
+export async function nextCode(_req, res, next) {
+  try {
+    const code = await model.getNextCode();
+    res.json({ data: { code, next_code: code } });
+  } catch (err) { next(err); }
+}

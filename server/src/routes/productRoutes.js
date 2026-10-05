@@ -7,6 +7,7 @@ const router = Router();
 
 router.get('/', validatePagination, ctrl.list);
 router.get('/dropdown', ctrl.dropdown);
+router.get('/next-code', ctrl.nextCode);
 router.get('/stats', ctrl.stats);
 router.post('/check-duplicate', ctrl.checkDuplicate);
 router.post('/bulk-delete', requireWriteAccess, ctrl.bulkDelete);

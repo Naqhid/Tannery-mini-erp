@@ -1,0 +1,491 @@
+import pool from '../config/db.js';
+import { isOrderCostLocked } from './standardCostModel.js';
+
+
+async function assertProductionQtyWithinPlan(conn, productionPlanId, productionQty, currentId = null, processStage = null) {
+  const [[plan]] = await conn.query('SELECT production_plan_id, issued_qty, process_stage FROM production_status_orders WHERE id=? AND deleted_at IS NULL', [productionPlanId]);
+  if (!plan) throw new Error('Production plan/order not found');
+
+  // The cap is PER STAGE so each stage can be costed independently. Prefer the
+  // stage's planned qty from the plan; fall back to the order's issued qty.
+  const stage = processStage || plan.process_stage || null;
+  let max = Number(plan.issued_qty) || 0;
+  if (stage) {
+    const [[s]] = await conn.query(
+      `SELECT COALESCE(SUM(planned_qty),0) AS planned FROM production_plan_stages
+        WHERE plan_id = ? AND stage_name COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci`,
+      [plan.production_plan_id, stage]
+    );
+    const planned = Number(s?.planned) || 0;
+    if (planned > 0) max = planned;
+  }
+
+  // Only sum cost headers of the SAME order + stage against this cap.
+  const params = [productionPlanId];
+  let stageClause = '';
+  if (stage) { stageClause = ' AND COALESCE(process_stage, \'\') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci'; params.push(stage); }
+  let exclude = '';
+  if (currentId) { exclude = ' AND id <> ?'; params.push(currentId); }
+  const [[used]] = await conn.query(`SELECT COALESCE(SUM(production_qty),0) AS qty FROM general_cost_headers WHERE production_plan_id=?${stageClause}${exclude}`, params);
+  const requested = Number(productionQty) || 0;
+  if (requested > Math.max(0, max - (Number(used.qty) || 0)) + 0.000001) {
+    throw new Error(`Output quantity cannot be greater than planned quantity. Available planned balance: ${Math.max(0, max - (Number(used.qty) || 0))}`);
+  }
+}
+
+/**
+ * Get all production status orders for the General Cost list view.
+ * Data source: production_status_orders grouped by production_plan_id.
+ */
+export async function getOrders({ search, status, process_stage, show_completed, has_entry, page = 1, limit = 10, sortBy, sortOrder }) {
+  const params = [];
+  let where = 'o.deleted_at IS NULL';
+  if (search) {
+    where += ' AND (o.customer_name LIKE ? OR pp.plan_no LIKE ? OR o.article LIKE ? OR o.color LIKE ?)';
+    const t = `%${search}%`; params.push(t, t, t, t);
+  }
+  if (status && status !== 'All') { where += ' AND o.status = ?'; params.push(status); }
+  if (show_completed === 'false' || show_completed === false) { where += " AND o.status != 'Completed'"; }
+  if (process_stage && process_stage !== 'All') { where += ' AND o.process_stage = ?'; params.push(process_stage); }
+  if (has_entry === 'true') { where += ' AND gch.id IS NOT NULL'; }
+  const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+  const offset = (page - 1) * limit;
+  const [rows] = await pool.query(
+    `SELECT pp.id AS plan_id, pp.plan_no, MAX(o.customer_name) AS customer_name, MAX(o.article) AS article, MAX(o.color) AS color,
+       -- Collapsed row shows ONLY the Wet End stage planned qty (the first
+       -- process stage), not the sum across every stage.
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = pp.id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = 'Wet End' COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), 0) AS order_qty, SUM(o.completed_qty) AS completed_qty, SUM(o.balance_qty) AS balance_qty,
+       CASE WHEN SUM(CASE WHEN o.status = 'Completed' THEN 1 ELSE 0 END) = COUNT(o.id) THEN 'Completed'
+         WHEN SUM(CASE WHEN o.status IN ('In Progress', 'In-Process') THEN 1 ELSE 0 END) > 0 THEN 'In Progress'
+         WHEN SUM(CASE WHEN o.status = 'Posted' THEN 1 ELSE 0 END) > 0 THEN 'Posted' ELSE 'Pending' END AS status,
+       MAX(o.uom) AS uom, COUNT(DISTINCT gch.id) AS cost_entry_count
+     FROM production_status_orders o
+     JOIN production_plans pp ON pp.id = o.production_plan_id AND pp.deleted_at IS NULL
+     LEFT JOIN general_cost_headers gch ON gch.production_plan_id = o.id
+     WHERE ${where} GROUP BY pp.id, pp.plan_no ORDER BY pp.plan_no ${ord} LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(DISTINCT pp.id) AS total FROM production_status_orders o
+     JOIN production_plans pp ON pp.id = o.production_plan_id AND pp.deleted_at IS NULL
+     LEFT JOIN general_cost_headers gch ON gch.production_plan_id = o.id WHERE ${where}`, params
+  );
+  return { rows, total };
+}
+
+export async function getOrdersByPlan(planId) {
+  const [rows] = await pool.query(
+    `SELECT o.id, o.order_no, o.customer_name, o.article, o.color, o.process_stage,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS order_qty,
+       o.completed_qty, o.balance_qty, o.status, o.uom, gch.id AS general_cost_id, gch.transaction_no, gch.status AS cost_status
+     FROM production_status_orders o LEFT JOIN general_cost_headers gch ON gch.production_plan_id = o.id
+     WHERE o.production_plan_id = ? AND o.deleted_at IS NULL
+     -- Order stages by their defined production sequence (plan stage seq first,
+     -- then the master process_stages seq), matching how stages are shown
+     -- elsewhere, rather than alphabetically.
+     ORDER BY COALESCE((
+         SELECT s.seq FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), (
+         SELECT ps.seq FROM process_stages ps
+         WHERE ps.name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY (ps.status='Active') DESC, ps.id ASC LIMIT 1
+       ), 999999) ASC, o.id ASC`, [planId]
+  );
+  return rows;
+}
+
+/**
+ * Return the list of STAGES for the production plan behind a status-order, so
+ * the General Cost form can let the user cost each stage separately. For every
+ * stage we include its planned qty (from production_plan_stages), its Daily
+ * Production output qty, and any existing general cost header for that
+ * order + stage (so the form can load/edit it).
+ *
+ * @param orderId  a production_status_orders.id (what the form holds as production_plan_id)
+ */
+export async function getStagesForOrder(orderId) {
+  const [[order]] = await pool.query(
+    `SELECT id, production_plan_id, process_stage FROM production_status_orders WHERE id=? AND deleted_at IS NULL`,
+    [orderId]
+  );
+  if (!order) return [];
+  const planId = order.production_plan_id;
+
+  const [rows] = await pool.query(
+    `SELECT stage_name AS process_stage, planned_qty, seq FROM (
+        SELECT s.stage_name, COALESCE(SUM(s.planned_qty),0) AS planned_qty, MIN(s.seq) AS seq
+          FROM production_plan_stages s
+         WHERE s.plan_id = ?
+         GROUP BY s.stage_name
+        UNION
+        SELECT o.process_stage AS stage_name, 0 AS planned_qty, 999999 AS seq
+          FROM production_status_orders o
+         WHERE o.production_plan_id = ? AND o.deleted_at IS NULL
+           AND o.process_stage IS NOT NULL AND o.process_stage <> ''
+     ) u
+     GROUP BY stage_name
+     ORDER BY MIN(seq)`,
+    [planId, planId]
+  );
+
+  const result = [];
+  for (const r of rows) {
+    const [[out]] = await pool.query(
+      `SELECT COALESCE(SUM(t.output_qty),0) AS output_qty
+         FROM production_status_orders o
+         JOIN production_status_transactions t
+           ON t.production_status_order_id = o.id AND t.deleted_at IS NULL
+        WHERE o.production_plan_id = ? AND o.deleted_at IS NULL
+          AND o.process_stage COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci`,
+      [planId, r.process_stage]
+    );
+    const [[cost]] = await pool.query(
+      `SELECT gch.id AS general_cost_id, gch.transaction_no, gch.status
+         FROM general_cost_headers gch
+        WHERE gch.production_plan_id = ?
+          AND COALESCE(gch.process_stage,'') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+        ORDER BY gch.id DESC LIMIT 1`,
+      [orderId, r.process_stage]
+    );
+    result.push({
+      process_stage: r.process_stage,
+      planned_qty: Number(r.planned_qty) || 0,
+      output_qty: Number(out?.output_qty) || 0,
+      general_cost_id: cost?.general_cost_id || null,
+      transaction_no: cost?.transaction_no || null,
+      cost_status: cost?.status || null,
+    });
+  }
+  return result;
+}
+
+/**
+ * Get general cost TRANSACTION LINES (one row per cost line) for the
+ * Transaction tab. Columns: transaction no, production date, cost category,
+ * uom, amount, cost/piece.
+ */
+export async function getTransactionLines({ search, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
+  const params = [];
+  let where = 'gch.id IS NOT NULL';
+
+  if (search) {
+    where += ' AND (gch.transaction_no LIKE ? OR i.cost_category LIKE ?)';
+    const t = `%${search}%`;
+    params.push(t, t);
+  }
+  if (process_stage && process_stage !== 'All') {
+    where += ' AND gch.process_stage = ?';
+    params.push(process_stage);
+  }
+
+  const allowedSort = { transaction_no: 'gch.transaction_no', production_date: 'gch.production_date', cost_category: 'i.cost_category', amount: 'i.amount', cost_per_piece: 'i.cost_per_piece' };
+  const col = allowedSort[sortBy] || 'gch.production_date';
+  const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+  const offset = (page - 1) * limit;
+
+  const [rows] = await pool.query(
+    `SELECT i.id, gch.id AS general_cost_id, gch.transaction_no, gch.production_date,
+       o.order_no AS plan_no,
+       m.group_name,
+       i.cost_category, i.uom, i.amount, i.cost_per_piece
+     FROM general_cost_items i
+     JOIN general_cost_headers gch ON i.general_cost_id = gch.id
+     LEFT JOIN production_status_orders o ON gch.production_plan_id = o.id
+     LEFT JOIN (
+       SELECT mm.name AS material_name, gm.name AS group_name
+       FROM materials mm
+       LEFT JOIN group_master gm ON mm.group_id = gm.id
+     ) m ON m.material_name COLLATE utf8mb4_0900_ai_ci = i.cost_category COLLATE utf8mb4_0900_ai_ci
+     WHERE ${where}
+     ORDER BY ${col} ${ord}, i.id ASC
+     LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM general_cost_items i
+     JOIN general_cost_headers gch ON i.general_cost_id = gch.id
+     WHERE ${where}`,
+    params
+  );
+
+  return { rows, total };
+}
+
+/**
+ * Get a single general cost entry by ID (with items)
+ */
+export async function getById(id) {
+  const [[header]] = await pool.query(
+    `SELECT gch.*,
+       o.order_no,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS planned_qty,
+       COALESCE((
+         SELECT s.planned_qty FROM production_plan_stages s
+         WHERE s.plan_id = o.production_plan_id
+           AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+         ORDER BY s.seq ASC LIMIT 1
+       ), o.issued_qty, 0) AS order_qty,
+       o.completed_qty AS output_qty,
+       COALESCE((SELECT SUM(g2.production_qty) FROM general_cost_headers g2 WHERE g2.production_plan_id = gch.production_plan_id AND g2.id != gch.id), 0) AS completed_qty,
+       GREATEST(0, o.issued_qty - COALESCE((SELECT SUM(g2.production_qty) FROM general_cost_headers g2 WHERE g2.production_plan_id = gch.production_plan_id), 0)) AS balance_qty,
+       o.article, o.color, o.status AS plan_status, o.uom,
+       o.customer_name,
+       u.full_name AS created_by_name
+     FROM general_cost_headers gch
+     JOIN production_status_orders o ON gch.production_plan_id = o.id
+     LEFT JOIN users u ON gch.created_by = u.id
+     WHERE gch.id = ?`,
+    [id]
+  );
+  if (!header) return null;
+
+  const [items] = await pool.query(
+    `SELECT * FROM general_cost_items WHERE general_cost_id = ? ORDER BY sort_order, id`,
+    [id]
+  );
+
+  return { ...header, items };
+}
+
+/**
+ * Get general cost by production status order ID
+ */
+export async function getByPlanId(planId) {
+  const [[header]] = await pool.query(
+    `SELECT gch.*,
+       o.order_no, o.issued_qty AS order_qty, o.issued_qty AS planned_qty,
+       o.completed_qty AS output_qty,
+       o.completed_qty,
+       o.balance_qty,
+       o.article, o.color, o.status AS plan_status, o.uom,
+       o.customer_name,
+       u.full_name AS created_by_name
+     FROM general_cost_headers gch
+     JOIN production_status_orders o ON gch.production_plan_id = o.id
+     LEFT JOIN users u ON gch.created_by = u.id
+     WHERE gch.production_plan_id = ?`,
+    [planId]
+  );
+  if (!header) return null;
+
+  const [items] = await pool.query(
+    `SELECT * FROM general_cost_items WHERE general_cost_id = ? ORDER BY sort_order, id`,
+    [header.id]
+  );
+
+  return { ...header, items };
+}
+
+/**
+ * Generate next transaction number: GC-YYYY-MM-NNNN
+ */
+/**
+ * Return the general cost items of the most recent entry for the same article
+ * (optionally same process stage), excluding a given entry. Used by the
+ * "Import from Previous Cost" button, mirroring Material Issue's import.
+ */
+export async function getPreviousCostItems({ article, process_stage, exclude_id = null }) {
+  if (!article) return null;
+  const params = [article];
+  let stageClause = '';
+  if (process_stage && process_stage !== 'All') { stageClause = ' AND gch.process_stage = ?'; params.push(process_stage); }
+  let excludeClause = '';
+  if (exclude_id) { excludeClause = ' AND gch.id <> ?'; params.push(exclude_id); }
+
+  const [[header]] = await pool.query(
+    `SELECT gch.id, gch.transaction_no, gch.process_stage
+       FROM general_cost_headers gch
+       JOIN production_status_orders o ON gch.production_plan_id = o.id
+      WHERE o.article COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+        ${stageClause}${excludeClause}
+      ORDER BY gch.id DESC LIMIT 1`,
+    params
+  );
+  if (!header) return null;
+
+  const [items] = await pool.query(
+    `SELECT cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks
+     FROM general_cost_items WHERE general_cost_id = ? ORDER BY sort_order, id`,
+    [header.id]
+  );
+  return { source_transaction_no: header.transaction_no, process_stage: header.process_stage, items };
+}
+
+export async function getNextTransactionNo() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const prefix = `GC-${yyyy}-${mm}-`;
+
+  const [[row]] = await pool.query(
+    `SELECT transaction_no FROM general_cost_headers
+     WHERE transaction_no LIKE ? ORDER BY id DESC LIMIT 1`,
+    [`${prefix}%`]
+  );
+
+  if (!row) return `${prefix}0001`;
+  const seq = parseInt(row.transaction_no.substring(prefix.length), 10) + 1;
+  return `${prefix}${String(seq).padStart(4, '0')}`;
+}
+
+/**
+ * Create a general cost entry
+ */
+export async function create(data, userId = null) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await assertProductionQtyWithinPlan(conn, data.production_plan_id, data.production_qty || 0, null, data.process_stage);
+
+    const transactionNo = await getNextTransactionNo();
+
+    // Calculate totals
+    const items = data.items || [];
+    const orderQty = Number(data.order_qty) || 1;
+    const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalCostPerPiece = items.reduce((sum, item) => sum + (Number(item.cost_per_piece) || 0), 0);
+
+    const [result] = await conn.query(
+      `INSERT INTO general_cost_headers
+       (transaction_no, production_plan_id, production_date, production_qty, process_stage, total_amount, total_cost_per_piece, cost_after_adjustments, status, remarks, created_by, updated_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        transactionNo,
+        data.production_plan_id,
+        data.production_date || new Date().toISOString().split('T')[0],
+        data.production_qty || 0,
+        data.process_stage || 'All',
+        totalAmount,
+        totalCostPerPiece,
+        data.cost_after_adjustments || totalCostPerPiece,
+        data.status || 'Pending',
+        data.remarks || null,
+        userId, userId
+      ]
+    );
+
+    const headerId = result.insertId;
+
+    // Insert items
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      await conn.query(
+        `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [headerId, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+      );
+    }
+
+    await conn.commit();
+    return { id: headerId, transaction_no: transactionNo, total_amount: totalAmount, total_cost_per_piece: totalCostPerPiece };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
+}
+
+/**
+ * Update a general cost entry
+ */
+export async function update(id, data, userId = null) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Check if posted
+    const [[current]] = await conn.query('SELECT status, production_plan_id FROM general_cost_headers WHERE id = ?', [id]);
+    if (!current) throw new Error('General Cost entry not found');
+    if (current.status === 'Posted') throw new Error('Cannot edit a posted entry');
+
+    const planOrderId = data.production_plan_id || current.production_plan_id;
+    if (await isOrderCostLocked(conn, planOrderId)) {
+      throw new Error('Cannot edit: the standard cost for this order is Approved and locked');
+    }
+
+    await assertProductionQtyWithinPlan(conn, planOrderId, data.production_qty || 0, id, data.process_stage);
+
+    const items = data.items || [];
+    const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalCostPerPiece = items.reduce((sum, item) => sum + (Number(item.cost_per_piece) || 0), 0);
+
+    await conn.query(
+      `UPDATE general_cost_headers SET
+         process_stage=?, production_qty=?, total_amount=?, total_cost_per_piece=?, cost_after_adjustments=?, remarks=?, updated_by=?
+       WHERE id=?`,
+      [
+        data.process_stage || 'All',
+        data.production_qty || 0,
+        totalAmount, totalCostPerPiece,
+        data.cost_after_adjustments || totalCostPerPiece,
+        data.remarks || null,
+        userId, id
+      ]
+    );
+
+    // Replace items
+    await conn.query('DELETE FROM general_cost_items WHERE general_cost_id = ?', [id]);
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      await conn.query(
+        `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [id, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+      );
+    }
+
+    await conn.commit();
+    return { id, total_amount: totalAmount, total_cost_per_piece: totalCostPerPiece };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally { conn.release(); }
+}
+
+/**
+ * Post a general cost entry (lock it)
+ */
+export async function post(id, userId = null) {
+  const [[current]] = await pool.query('SELECT status FROM general_cost_headers WHERE id = ?', [id]);
+  if (!current) throw new Error('General Cost entry not found');
+  if (current.status === 'Posted') throw new Error('Already posted');
+  const [result] = await pool.query(
+    'UPDATE general_cost_headers SET status=?, updated_by=? WHERE id=?',
+    ['Posted', userId, id]
+  );
+  return result.affectedRows > 0;
+}
+
+/**
+ * Delete a general cost entry
+ */
+export async function remove(id) {
+  const [[current]] = await pool.query('SELECT status, production_plan_id FROM general_cost_headers WHERE id = ?', [id]);
+  if (!current) return false;
+  if (current.status === 'Posted') throw new Error('Cannot delete a posted entry');
+  if (await isOrderCostLocked(pool, current.production_plan_id)) {
+    throw new Error('Cannot delete: the standard cost for this order is Approved and locked');
+  }
+  const [result] = await pool.query('DELETE FROM general_cost_headers WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}

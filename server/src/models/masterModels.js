@@ -92,7 +92,7 @@ export const taxMasterModel = createMasterModel(
 export const processStageModel = createMasterModel(
   'process_stages',
   'PS',
-  ['id', 'code', 'name', 'description', 'seq', 'status', 'created_at', 'updated_at'],
+  ['id', 'code', 'name', 'description', 'seq', 'uom', 'status', 'created_at', 'updated_at'],
   ['name', 'code'],
   { uniqueFields: [{ fields: ['name'] }] }
 );
@@ -116,7 +116,7 @@ export const groupMasterModel = createMasterModel(
 export const machineModel = createMasterModel(
   'machines',
   'MAC',
-  ['id', 'code', 'name', 'machine_type', 'uom_type', 'rate_indian', 'description', 'status', 'created_at', 'updated_at'],
+  ['id', 'code', 'name', 'machine_type', 'uom_type', 'rate_indian', 'rate_imported', 'supplier_id', 'description', 'status', 'created_at', 'updated_at'],
   ['name', 'code'],
   {
     uniqueFields: [{ fields: ['name'] }],
@@ -124,6 +124,7 @@ export const machineModel = createMasterModel(
       uom_type: 'string',
       rate_indian: 'number',
       rate_imported: 'number',
+      supplier_id: 'number',
     },
   }
 );
@@ -175,5 +176,40 @@ export const businessUnitModel = createMasterModel(
   {
     uniqueFields: [{ fields: ['name'] }],
     filterableFields: ['city', 'state', 'company_id'],
+  }
+);
+
+export const locationRackModel = createMasterModel(
+  'location_racks',
+  'LOC',
+  ['id', 'code', 'name', 'warehouse_id', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code'],
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    filterableFields: ['warehouse_id'],
+  }
+);
+
+export const departmentModel = createMasterModel(
+  'departments',
+  'DEPT',
+  ['id', 'code', 'name', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code'],
+  { uniqueFields: [{ fields: ['name'] }] }
+);
+
+export const costComponentModel = createMasterModel(
+  'cost_components',
+  'CC',
+  ['id', 'code', 'name', 'group_id', 'uom_id', 'cost_per_uom', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code'],
+  {
+    uniqueFields: [{ fields: ['name'] }],
+    extraColumns: {
+      group_id: 'number',
+      uom_id: 'number',
+      cost_per_uom: 'number',
+    },
+    filterableFields: ['group_id', 'uom_id'],
   }
 );

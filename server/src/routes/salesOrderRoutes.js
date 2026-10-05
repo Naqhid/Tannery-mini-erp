@@ -6,6 +6,8 @@ import { requireWriteAccess } from '../middleware/auth.js';
 const router = Router();
 
 router.get('/stats', ctrl.stats);
+router.post('/resync-statuses', requireWriteAccess, ctrl.resyncStatuses);
+router.get('/next-no', ctrl.nextNo);
 router.get('/', ctrl.list);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', requireWriteAccess, ctrl.create);

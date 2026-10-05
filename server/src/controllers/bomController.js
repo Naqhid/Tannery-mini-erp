@@ -14,8 +14,25 @@ export async function getOne(req, res, next) {
   try {
     const bom = await model.getById(req.params.id);
     if (!bom) return res.status(404).json({ error: 'BOM not found' });
-    const items = await model.getItems(req.params.id);
-    res.json({ data: { ...bom, items } });
+    const [items, versions] = await Promise.all([
+      model.getItems(req.params.id),
+      model.getVersions(req.params.id),
+    ]);
+    let attachments = [];
+    try { attachments = await model.getAttachments(req.params.id); } catch {}
+    res.json({ data: { ...bom, items, versions, attachments } });
+  } catch (err) { next(err); }
+}
+
+export async function listVersions(req, res, next) {
+  try { res.json({ data: await model.getVersions(req.params.id) }); }
+  catch (err) { next(err); }
+}
+
+export async function createRevision(req, res, next) {
+  try {
+    await model.createRevision(req.params.id, req.user?.id || null, req.body.change_reason || 'Manual revision');
+    res.status(201).json({ data: await model.getVersions(req.params.id), message: 'BOM revision created successfully!' });
   } catch (err) { next(err); }
 }
 
@@ -53,6 +70,17 @@ export async function stats(_req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function generateCode(req, res, next) {
+  try {
+    const customerName = req.params.customerName;
+    if (!customerName) return res.status(400).json({ error: 'Customer name is required' });
+    const prefix = customerName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+    if (prefix.length < 3) return res.status(400).json({ error: 'Customer name must have at least 3 alphabetic characters for BOM code prefix' });
+    const code = await model.getNextCode(customerName);
+    res.json({ data: { code } });
+  } catch (err) { next(err); }
+}
+
 // --- BOM Items ---
 export async function listItems(req, res, next) {
   try {
@@ -84,5 +112,69 @@ export async function removeItem(req, res, next) {
     const ok = await model.removeItem(req.params.itemId);
     if (!ok) return res.status(404).json({ error: 'BOM item not found' });
     res.json({ data: { id: req.params.itemId, deleted: true }, message: 'Item deleted successfully!' });
+  } catch (err) { next(err); }
+}
+
+// --- BOM Import ---
+export async function importBom(req, res, next) {
+  try {
+    const sourceBomId = req.body.source_bom_id;
+    if (!sourceBomId) return res.status(400).json({ error: 'source_bom_id is required' });
+    const createdBy = req.user?.id || null;
+    const result = await model.importBom(sourceBomId, createdBy);
+    res.status(201).json({ data: result, message: 'BOM imported successfully! New version created.' });
+  } catch (err) { next(err); }
+}
+
+// --- Get BOMs by Product ---
+export async function listByProduct(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    const rows = await model.getByProduct(productId);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+// --- Get Latest BOM by Product ---
+export async function getLatestByProduct(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    if (!productId) return res.status(400).json({ error: 'productId is required' });
+    const bom = await model.getLatestByProduct(productId);
+    if (!bom) return res.status(404).json({ error: 'No active BOM found for this product' });
+    const items = await model.getItems(bom.id);
+    res.json({ data: { ...bom, items } });
+  } catch (err) { next(err); }
+}
+
+// --- BOM Attachments ---
+export async function listAttachments(req, res, next) {
+  try {
+    const rows = await model.getAttachments(req.params.id);
+    res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+export async function addAttachment(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const uploadedBy = req.user?.id || null;
+    const data = {
+      file_name: req.file.originalname,
+      file_path: `/uploads/boms/${req.file.filename}`,
+      file_type: req.file.mimetype,
+      file_size: req.file.size,
+    };
+    const result = await model.addAttachment(req.params.id, data, uploadedBy);
+    res.status(201).json({ data: { id: result.id, ...data }, message: 'Attachment uploaded!' });
+  } catch (err) { next(err); }
+}
+
+export async function removeAttachment(req, res, next) {
+  try {
+    const ok = await model.removeAttachment(req.params.attachmentId);
+    if (!ok) return res.status(404).json({ error: 'Attachment not found' });
+    res.json({ data: { id: req.params.attachmentId, deleted: true }, message: 'Attachment removed!' });
   } catch (err) { next(err); }
 }

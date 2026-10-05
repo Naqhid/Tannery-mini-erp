@@ -16,10 +16,10 @@ export const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } })
 
 export async function list(req, res, next) {
   try {
-    const { search, type, category, status, sortBy, sortOrder } = req.query;
+    const { search, type, category, status, supplier, sortBy, sortOrder } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const { rows, total } = await model.getAll({ search, type, category, status, page, limit, sortBy, sortOrder });
+    const { rows, total } = await model.getAll({ search, type, category, status, supplier, page, limit, sortBy, sortOrder });
     const totalPages = Math.ceil(total / limit);
     res.json({ data: rows, total, page, limit, totalPages });
   } catch (err) { next(err); }
@@ -71,6 +71,13 @@ export async function dropdown(_req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function latestCost(req, res, next) {
+  try {
+    const data = await model.getMaterialLatestCost(req.params.id);
+    res.json({ data });
+  } catch (err) { next(err); }
+}
+
 export async function stats(_req, res, next) {
   try {
     const data = await model.getStats();
@@ -84,5 +91,12 @@ export async function uploadAttachment(req, res, next) {
     const filePath = `/uploads/materials/${req.file.filename}`;
     await model.updateAttachment(req.params.id, filePath);
     res.json({ data: { file_path: filePath, file_name: req.file.originalname }, message: 'Attachment uploaded successfully!' });
+  } catch (err) { next(err); }
+}
+
+export async function nextCode(_req, res, next) {
+  try {
+    const code = await model.getNextCode();
+    res.json({ data: { code, next_code: code } });
   } catch (err) { next(err); }
 }

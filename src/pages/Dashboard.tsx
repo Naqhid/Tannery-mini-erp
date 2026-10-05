@@ -3,59 +3,58 @@ import {
   ShoppingCart,
   Package,
   Factory,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
   AlertTriangle,
   Clock,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Activity,
   BarChart3,
   Eye,
+  X,
+  ClipboardList,
+  Boxes,
+  Users,
+  TrendingUp,
+  Truck,
+  CalendarClock,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import api from '../lib/api';
+import LineChart from '../components/charts/LineChart';
+import DonutChart from '../components/charts/DonutChart';
 
-interface DashboardStat {
-  label: string;
-  value: string;
-  change: string;
-  up: boolean;
-  icon: React.ReactNode;
-  color: string;
-  bgLight: string;
-  textColor: string;
+interface KpiCounts {
+  salesOrdersNotShipped: number;
+  openOrders: number;
+  customersTotal: number;
+  productsTotal: number;
+  materialsActive: number;
+  suppliersActive: number;
+}
+interface SalesTrendPoint { label: string; value: number; orderCount: number; }
+interface InventoryValue { total: number; breakdown: { category: string; value: number }[]; }
+interface TopProduct { product: string; value: number; }
+interface RecentReceipt { id: number; receipt_no: string; receipt_date: string; supplier_name: string; amount: number; status: string; }
+interface QuickSummary {
+  nearestDeliveryOrders: number;
+  pendingSalesOrders: number;
+  pendingGoodsReceipt: number;
+  pendingMaterialIssues: number;
+  lowStockItems: number;
+  openProductionPlans: number;
 }
 
-const defaultStats: DashboardStat[] = [
-  { label: 'Total Customers', value: '--', change: '+12%', up: true, icon: <ShoppingCart size={22} />, color: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50', textColor: 'text-blue-600' },
-  { label: 'Active Products', value: '--', change: '+5%', up: true, icon: <Package size={22} />, color: 'from-emerald-500 to-emerald-600', bgLight: 'bg-emerald-50', textColor: 'text-emerald-600' },
-  { label: 'Total Suppliers', value: '--', change: '+3%', up: true, icon: <Factory size={22} />, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
-  { label: 'Active Recipes', value: '--', change: '+8%', up: true, icon: <TrendingUp size={22} />, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
-];
+const fmtMoney = (n: number) => '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
 
-const recentOrders = [
-  { id: 'SO-2024-001', customer: 'ABC Leather Pvt Ltd', product: 'Full Grain Cowhide', qty: '500', status: 'Completed', date: '15 Jun 2024' },
-  { id: 'SO-2024-002', customer: 'XYZ Tannery Co', product: 'Semi-Aniline Leather', qty: '300', status: 'In Production', date: '14 Jun 2024' },
-  { id: 'SO-2024-003', customer: 'Global Leather Inc', product: 'Nappa Leather', qty: '200', status: 'Pending', date: '13 Jun 2024' },
-  { id: 'SO-2024-004', customer: 'Premium Hides Ltd', product: 'Pull-Up Leather', qty: '450', status: 'Completed', date: '12 Jun 2024' },
-  { id: 'SO-2024-005', customer: 'Euro Leather Corp', product: 'Suede Leather', qty: '350', status: 'In Production', date: '11 Jun 2024' },
-];
+interface RecentOrder { id: number; order_no: string; customer_name: string; product: string; total_quantity: number; status: string; order_date: string; }
+interface LowStockItem { id: number; item: string; qty: string; threshold: string; status: string; percent: number; }
+interface ProductionPlanRow { id: number; plan_no: string; article: string; color: string; plan_date: string; planned_qty: number; uom: string; customer_name: string; sales_order_no: string; status: string; }
+interface WipStage { stage: string; wip_qty: number; planned_qty: number; order_count: number; }
 
-const lowStock = [
-  { item: 'Chrome Tanning Agent', qty: '25 kg', threshold: '50 kg', status: 'Critical', percent: 50 },
-  { item: 'Vegetable Tanning Extract', qty: '40 kg', threshold: '60 kg', status: 'Low', percent: 67 },
-  { item: 'Aniline Dye - Brown', qty: '15 L', threshold: '30 L', status: 'Critical', percent: 50 },
-  { item: 'Wax Emulsion', qty: '80 L', threshold: '100 L', status: 'Low', percent: 80 },
-];
-
-const productionSchedule = [
-  { batch: 'B-2024-042', recipe: 'Full Grain Finish', stage: 'Dyeing', progress: 65, eta: '2 days', stageColor: 'bg-purple-100 text-purple-700' },
-  { batch: 'B-2024-043', recipe: 'Semi-Aniline Finish', stage: 'Tanning', progress: 30, eta: '5 days', stageColor: 'bg-amber-100 text-amber-700' },
-  { batch: 'B-2024-044', recipe: 'Nappa Finish', stage: 'Finishing', progress: 90, eta: '1 day', stageColor: 'bg-emerald-100 text-emerald-700' },
-];
+const fmtDate = (d?: string) => {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 const statusBadge = (status: string) => {
   const styles: Record<string, string> = {
@@ -76,213 +75,291 @@ const statusBadge = (status: string) => {
 };
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStat[]>(defaultStats);
+  const navigate = useNavigate();
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [lowStock, setLowStock] = useState<LowStockItem[]>([]);
+  const [productionOrders, setProductionOrders] = useState<{ counts: { pendingOrInProgress: number; completed: number }; orders: { pendingOrInProgress: ProductionPlanRow[]; completed: ProductionPlanRow[] } }>({ counts: { pendingOrInProgress: 0, completed: 0 }, orders: { pendingOrInProgress: [], completed: [] } });
+  const [highestWipStages, setHighestWipStages] = useState<WipStage[]>([]);
+  const [selectedOrderGroup, setSelectedOrderGroup] = useState<'pendingOrInProgress' | 'completed' | null>(null);
+  // Default to zero-valued objects (not null) so the KPI cards and Quick Summary
+  // always render — they fill with live values once the API responds.
+  const [kpiCounts, setKpiCounts] = useState<KpiCounts>({ salesOrdersNotShipped: 0, openOrders: 0, customersTotal: 0, productsTotal: 0, materialsActive: 0, suppliersActive: 0 });
+  const [salesTrend, setSalesTrend] = useState<SalesTrendPoint[]>([]);
+  const [inventoryValue, setInventoryValue] = useState<InventoryValue>({ total: 0, breakdown: [] });
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
+  const [quickSummary, setQuickSummary] = useState<QuickSummary>({ nearestDeliveryOrders: 0, pendingSalesOrders: 0, pendingGoodsReceipt: 0, pendingMaterialIssues: 0, lowStockItems: 0, openProductionPlans: 0 });
 
   useEffect(() => {
-    api<{ data: { stats: DashboardStat[] } }>('/dashboard/stats')
+    api<{ data: {
+      recentOrders: RecentOrder[]; lowStock: LowStockItem[];
+      productionOrders: typeof productionOrders; highestWipStages: WipStage[];
+      kpiCounts: KpiCounts; salesTrend: SalesTrendPoint[]; inventoryValue: InventoryValue;
+      topProducts: TopProduct[]; recentReceipts: RecentReceipt[]; quickSummary: QuickSummary;
+    } }>('/dashboard/stats')
       .then((res) => {
-        const s = res.data.stats;
-        setStats([
-          { label: 'Total Customers', value: s[0].value, change: '+12%', up: true, icon: <ShoppingCart size={22} />, color: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50', textColor: 'text-blue-600' },
-          { label: 'Active Products', value: s[1].value, change: '+5%', up: true, icon: <Package size={22} />, color: 'from-emerald-500 to-emerald-600', bgLight: 'bg-emerald-50', textColor: 'text-emerald-600' },
-          { label: 'Total Suppliers', value: s[2].value, change: '+3%', up: true, icon: <Factory size={22} />, color: 'from-amber-500 to-amber-600', bgLight: 'bg-amber-50', textColor: 'text-amber-600' },
-          { label: 'Active Recipes', value: s[3].value, change: '+8%', up: true, icon: <TrendingUp size={22} />, color: 'from-violet-500 to-violet-600', bgLight: 'bg-violet-50', textColor: 'text-violet-600' },
-        ]);
+        setRecentOrders(res.data.recentOrders || []);
+        setLowStock(res.data.lowStock || []);
+        setProductionOrders(res.data.productionOrders || { counts: { pendingOrInProgress: 0, completed: 0 }, orders: { pendingOrInProgress: [], completed: [] } });
+        setHighestWipStages(res.data.highestWipStages || []);
+        if (res.data.kpiCounts) setKpiCounts(res.data.kpiCounts);
+        setSalesTrend(res.data.salesTrend || []);
+        setInventoryValue(res.data.inventoryValue || { total: 0, breakdown: [] });
+        setTopProducts(res.data.topProducts || []);
+        setRecentReceipts(res.data.recentReceipts || []);
+        if (res.data.quickSummary) setQuickSummary(res.data.quickSummary);
       })
       .catch(() => {});
   }, []);
 
+  const kpiCards = [
+    { label: 'Sales Orders', sub: 'Not shipped', value: kpiCounts.salesOrdersNotShipped, icon: <ClipboardList size={20} />, tint: 'bg-indigo-50 text-indigo-600', to: '/sales-orders' },
+    { label: 'Open Orders', sub: 'In process', value: kpiCounts.openOrders, icon: <Clock size={20} />, tint: 'bg-sky-50 text-sky-600', to: '/sales-orders' },
+    { label: 'Customers', sub: 'Active', value: kpiCounts.customersTotal, icon: <Users size={20} />, tint: 'bg-teal-50 text-teal-600', to: '/customer-master' },
+    { label: 'Total Products', sub: 'Active', value: kpiCounts.productsTotal, icon: <Boxes size={20} />, tint: 'bg-emerald-50 text-emerald-600', to: '/product-master' },
+    { label: 'Materials', sub: 'Active', value: kpiCounts.materialsActive, icon: <Package size={20} />, tint: 'bg-amber-50 text-amber-600', to: '/chemical-master' },
+    { label: 'Suppliers', sub: 'Active', value: kpiCounts.suppliersActive, icon: <Factory size={20} />, tint: 'bg-slate-100 text-slate-600', to: '/supplier-master' },
+  ];
+
   return (
     <div className="space-y-5 sm:space-y-6">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="group relative bg-white rounded-xl border border-gray-100 p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-300 overflow-hidden"
+      {/* KPI cards (live counts) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+        {kpiCards.map((k) => (
+          <button
+            key={k.label}
+            onClick={() => navigate(k.to)}
+            className="group flex items-center gap-3 bg-white rounded-xl border border-gray-100 p-3 sm:p-4 shadow-sm hover:shadow-md hover:border-gray-200 transition-all text-left"
           >
-            {/* Subtle gradient accent on top */}
-            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${s.color} opacity-80`} />
-            
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-xs sm:text-sm text-gray-500 font-medium">{s.label}</p>
-                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{s.value}</p>
-                <div className="flex items-center gap-1.5 pt-1">
-                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${
-                    s.up ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
-                  }`}>
-                    {s.up ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-                    {s.change}
-                  </span>
-                  <span className="text-[11px] text-gray-400">vs last month</span>
-                </div>
-              </div>
-              <div className={`p-2.5 sm:p-3 rounded-xl ${s.bgLight} ${s.textColor} group-hover:scale-110 transition-transform duration-300`}>
-                {s.icon}
-              </div>
-            </div>
-          </div>
+            <span className={`p-2.5 rounded-xl ${k.tint} group-hover:scale-110 transition-transform`}>{k.icon}</span>
+            <span className="min-w-0">
+              <span className="block text-[11px] text-gray-500 font-medium truncate">{k.label}</span>
+              <span className="block text-xl font-bold text-gray-900 leading-tight">{new Intl.NumberFormat('en-IN').format(k.value)}</span>
+              <span className="block text-[10px] text-gray-400">{k.sub}</span>
+            </span>
+          </button>
         ))}
       </div>
 
-      {/* Main content grid */}
+      {/* Charts row: Sales trend · Inventory value · Top products */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-        {/* Recent Orders */}
+        <Card className="xl:col-span-1" title="Sales Order Value" subtitle="All orders by month">
+          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtMoney} color="#4f46e5" />
+        </Card>
+
+        <Card title="Inventory Value" subtitle="Live stock valuation by type"
+          action={<span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full"><TrendingUp size={11} />{fmtMoney(inventoryValue.total)}</span>}>
+          <div className="space-y-2.5">
+            <p className="text-2xl font-bold text-gray-900">{fmtMoney(inventoryValue.total)}</p>
+            <p className="text-[11px] text-gray-400 -mt-1 mb-2">Total Stock Value</p>
+            {inventoryValue.breakdown.length === 0 ? (
+              <p className="py-4 text-center text-xs text-gray-400">No stock value available</p>
+            ) : inventoryValue.breakdown.map((b, i) => {
+              const pct = inventoryValue.total > 0 ? Math.round((b.value / inventoryValue.total) * 100) : 0;
+              const colors = ['bg-indigo-400', 'bg-emerald-400', 'bg-amber-400', 'bg-violet-400', 'bg-sky-400', 'bg-teal-400', 'bg-slate-400'];
+              return (
+                <div key={b.category}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="flex items-center gap-2 text-gray-700"><span className={`inline-block w-2.5 h-2.5 rounded-sm ${colors[i % colors.length]}`} />{b.category}</span>
+                    <span className="font-semibold text-gray-900">{fmtMoney(b.value)}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${colors[i % colors.length]}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card title="Top 5 Products" subtitle="By sales order value">
+          <DonutChart data={topProducts.map((p) => ({ label: p.product, value: p.value }))} formatValue={fmtMoney} />
+        </Card>
+      </div>
+
+      {/* Bottom tables: Recent Sales Orders · Low Stock Alerts · Recent Goods Receipt */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
+        {/* Recent Sales Orders */}
         <Card
-          className="xl:col-span-2"
           title="Recent Sales Orders"
-          subtitle="Last 5 orders placed"
+          subtitle="Latest orders placed"
           action={
-            <button className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
-              <Eye size={13} />
-              View All
+            <button onClick={() => navigate('/sales-orders')} className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+              <Eye size={13} /> View All
             </button>
           }
         >
-          {/* Desktop table */}
-          <div className="hidden sm:block overflow-x-auto -mx-4 px-4">
+          <div className="overflow-x-auto -mx-4 px-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Order ID</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Customer</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">Product</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Qty</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="text-left py-3 px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider hidden lg:table-cell">Date</th>
+                  <th className="text-left py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Order No.</th>
+                  <th className="text-left py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Customer</th>
+                  <th className="text-right py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Qty</th>
+                  <th className="text-left py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {recentOrders.map((o) => (
-                  <tr key={o.id} className="hover:bg-gray-50/80 transition-colors cursor-pointer group">
-                    <td className="py-3 px-3 font-semibold text-gray-900 text-xs">{o.id}</td>
-                    <td className="py-3 px-3 text-gray-600 text-xs">{o.customer}</td>
-                    <td className="py-3 px-3 text-gray-600 text-xs hidden md:table-cell">{o.product}</td>
-                    <td className="py-3 px-3 text-gray-700 font-medium text-xs">{o.qty}</td>
-                    <td className="py-3 px-3">{statusBadge(o.status)}</td>
-                    <td className="py-3 px-3 text-gray-400 text-xs hidden lg:table-cell">{o.date}</td>
+                {recentOrders.length === 0 ? (
+                  <tr><td colSpan={4} className="py-6 text-center text-xs text-gray-400">No recent orders</td></tr>
+                ) : recentOrders.map((o) => (
+                  <tr key={o.id} onClick={() => navigate(`/sales-orders/${o.id}`)} className="hover:bg-gray-50/80 transition-colors cursor-pointer">
+                    <td className="py-2.5 px-2 font-semibold text-gray-900 text-xs">{o.order_no}</td>
+                    <td className="py-2.5 px-2 text-gray-600 text-xs truncate max-w-[120px]">{o.customer_name || '—'}</td>
+                    <td className="py-2.5 px-2 text-gray-700 font-medium text-xs text-right tabular-nums">{o.total_quantity}</td>
+                    <td className="py-2.5 px-2">{statusBadge(o.status)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
-          {/* Mobile card view */}
-          <div className="sm:hidden space-y-3">
-            {recentOrders.map((o) => (
-              <div key={o.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-900">{o.id}</span>
-                  {statusBadge(o.status)}
-                </div>
-                <div className="text-xs text-gray-600">{o.customer}</div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">{o.product}</span>
-                  <span className="font-medium text-gray-700">Qty: {o.qty}</span>
-                </div>
-                <div className="text-[11px] text-gray-400">{o.date}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 pt-4 border-t border-gray-100">
-            <span className="text-xs text-gray-400">Showing 1-5 of 124 orders</span>
-            <div className="flex items-center gap-1">
-              <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"><ChevronLeft size={14} /></button>
-              <button className="w-7 h-7 text-xs rounded-lg bg-blue-600 text-white font-medium shadow-sm shadow-blue-200">1</button>
-              <button className="w-7 h-7 text-xs rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">2</button>
-              <button className="w-7 h-7 text-xs rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">3</button>
-              <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"><ChevronRight size={14} /></button>
-            </div>
-          </div>
+          <p className="pt-3 text-[11px] text-gray-400">Showing {recentOrders.length} recent {recentOrders.length === 1 ? 'order' : 'orders'}</p>
         </Card>
 
         {/* Low Stock Alerts */}
         <Card
           title="Low Stock Alerts"
-          subtitle="Items below reorder threshold"
+          subtitle="Materials at or below minimum stock"
           action={
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-full">
-              <AlertTriangle size={11} />
-              {lowStock.filter(i => i.status === 'Critical').length} Critical
+              <AlertTriangle size={11} /> {lowStock.length} Items
             </span>
           }
         >
-          <div className="space-y-3">
-            {lowStock.map((item) => (
-              <div key={item.item} className="p-3 rounded-xl bg-gradient-to-r from-gray-50/80 to-white border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all duration-200">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-sm font-semibold text-gray-900 leading-tight">{item.item}</p>
-                  {statusBadge(item.status)}
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-gray-500 mb-2">
-                  <span>Current: <strong className="text-gray-700">{item.qty}</strong></span>
-                  <span>Threshold: {item.threshold}</span>
-                </div>
-                {/* Progress bar showing stock level */}
-                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      item.status === 'Critical' ? 'bg-red-500' : 'bg-amber-400'
-                    }`}
-                    style={{ width: `${item.percent}%` }}
-                  />
-                </div>
+          <div className="overflow-x-auto -mx-4 px-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Material</th>
+                  <th className="text-right py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Available Qty</th>
+                  <th className="text-left py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {lowStock.length === 0 ? (
+                  <tr><td colSpan={3} className="py-6 text-center text-xs text-gray-400">No low stock items</td></tr>
+                ) : lowStock.slice(0, 5).map((item) => (
+                  <tr key={item.item} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="py-2.5 px-2 text-gray-800 text-xs font-medium truncate max-w-[140px]">{item.item}</td>
+                    <td className="py-2.5 px-2 text-right text-xs font-semibold text-amber-700 tabular-nums">{item.qty}</td>
+                    <td className="py-2.5 px-2">{statusBadge(item.status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="pt-3 text-[11px] text-gray-400">Showing {Math.min(5, lowStock.length)} of {lowStock.length} {lowStock.length === 1 ? 'item' : 'items'}</p>
+        </Card>
+
+        {/* Recent Goods Receipt */}
+        <Card
+          title="Recent Goods Receipt"
+          subtitle="Latest material receipts"
+          action={
+            <button onClick={() => navigate('/material-receipt')} className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+              <Eye size={13} /> View All
+            </button>
+          }
+        >
+          <div className="overflow-x-auto -mx-4 px-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">GR No.</th>
+                  <th className="text-left py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Supplier</th>
+                  <th className="text-right py-2.5 px-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {recentReceipts.length === 0 ? (
+                  <tr><td colSpan={3} className="py-6 text-center text-xs text-gray-400">No goods receipts</td></tr>
+                ) : recentReceipts.map((r) => (
+                  <tr key={r.id} onClick={() => navigate(`/material-receipt/${r.id}`)} className="hover:bg-gray-50/80 transition-colors cursor-pointer">
+                    <td className="py-2.5 px-2 font-semibold text-gray-900 text-xs">{r.receipt_no}</td>
+                    <td className="py-2.5 px-2 text-gray-600 text-xs truncate max-w-[120px]">{r.supplier_name}</td>
+                    <td className="py-2.5 px-2 text-right text-xs font-medium text-gray-800 tabular-nums">{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2 }).format(r.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="pt-3 text-[11px] text-gray-400">Showing {recentReceipts.length} recent {recentReceipts.length === 1 ? 'receipt' : 'receipts'}</p>
+        </Card>
+      </div>
+
+      {/* Quick Summary (live) */}
+      {quickSummary && (
+        <Card title="Quick Summary" subtitle="Items needing attention">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Nearest Delivery Orders', value: quickSummary.nearestDeliveryOrders, icon: <CalendarClock size={16} />, tint: 'text-indigo-600 bg-indigo-50', to: '/sales-orders' },
+              { label: 'Pending Sales Orders', value: quickSummary.pendingSalesOrders, icon: <ShoppingCart size={16} />, tint: 'text-sky-600 bg-sky-50', to: '/sales-orders' },
+              { label: 'Pending Goods Receipt', value: quickSummary.pendingGoodsReceipt, icon: <Truck size={16} />, tint: 'text-teal-600 bg-teal-50', to: '/material-receipt' },
+              { label: 'Pending Material Issues', value: quickSummary.pendingMaterialIssues, icon: <ClipboardList size={16} />, tint: 'text-amber-600 bg-amber-50', to: '/material-issue' },
+              { label: 'Low Stock Items', value: quickSummary.lowStockItems, icon: <AlertTriangle size={16} />, tint: 'text-rose-600 bg-rose-50', to: '/chemical-master' },
+              { label: 'Open Production Plans', value: quickSummary.openProductionPlans, icon: <Factory size={16} />, tint: 'text-slate-600 bg-slate-100', to: '/production-plan' },
+            ].map((q) => (
+              <button key={q.label} onClick={() => navigate(q.to)} className="flex items-center gap-3 rounded-xl border border-gray-100 p-3 text-left hover:border-gray-200 hover:shadow-sm transition-all">
+                <span className={`p-2 rounded-lg ${q.tint}`}>{q.icon}</span>
+                <span className="min-w-0">
+                  <span className="block text-lg font-bold text-gray-900 leading-tight">{new Intl.NumberFormat('en-IN').format(q.value)}</span>
+                  <span className="block text-[11px] text-gray-500 leading-tight">{q.label}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Production Orders & WIP (extra live insight) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
+        <Card title="Production Orders" subtitle="Click a count to view order details" action={<button onClick={() => navigate('/production-plan')} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"><BarChart3 size={13} /> All Plans</button>}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button onClick={() => setSelectedOrderGroup('pendingOrInProgress')} className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-300 hover:shadow-sm">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-amber-700">Pending / In Progress</span>
+              <span className="mt-2 block text-3xl font-extrabold text-amber-900">{productionOrders.counts.pendingOrInProgress}</span>
+              <span className="mt-1 block text-xs text-amber-700">View order details →</span>
+            </button>
+            <button onClick={() => setSelectedOrderGroup('completed')} className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-300 hover:shadow-sm">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-emerald-700">Completed Orders</span>
+              <span className="mt-2 block text-3xl font-extrabold text-emerald-900">{productionOrders.counts.completed}</span>
+              <span className="mt-1 block text-xs text-emerald-700">View order details →</span>
+            </button>
+          </div>
+        </Card>
+
+        <Card title="Highest WIP Stages" subtitle="Stages with the most remaining work in progress">
+          <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+            {highestWipStages.length === 0 ? <p className="py-6 text-center text-xs text-gray-400">No work in progress</p> : highestWipStages.map((stage) => (
+              <div key={stage.stage} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+                <div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-800">{stage.stage}</p><p className="text-[11px] text-gray-500">{stage.order_count} active {stage.order_count === 1 ? 'order' : 'orders'}</p></div>
+                <div className="shrink-0 text-right"><p className="text-sm font-bold text-indigo-700">{stage.wip_qty.toLocaleString('en-IN')} units</p><p className="text-[10px] text-gray-400">of {stage.planned_qty.toLocaleString('en-IN')} planned</p></div>
               </div>
             ))}
           </div>
         </Card>
       </div>
 
-      {/* Production Schedule */}
-      <Card
-        title="Production Schedule"
-        subtitle="Active batches in progress"
-        action={
-          <button className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors">
-            <BarChart3 size={13} />
-            Details
-          </button>
-        }
-      >
-        <div className="space-y-4">
-          {productionSchedule.map((batch) => (
-            <div key={batch.batch} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-gray-50/50 border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all duration-200">
-              <div className="sm:w-36 shrink-0">
-                <p className="text-sm font-bold text-gray-900">{batch.batch}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{batch.recipe}</p>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${batch.stageColor}`}>
-                    <Activity size={10} />
-                    {batch.stage}
-                  </span>
-                  <span className="text-xs font-bold text-gray-700">{batch.progress}%</span>
-                </div>
-                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      batch.progress >= 80 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
-                      batch.progress >= 50 ? 'bg-gradient-to-r from-blue-400 to-blue-500' :
-                      'bg-gradient-to-r from-amber-400 to-amber-500'
-                    }`}
-                    style={{ width: `${batch.progress}%` }}
-                  />
-                </div>
-              </div>
-              <div className="sm:w-24 sm:text-right shrink-0">
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-100">
-                  <Clock size={11} />
-                  ETA: {batch.eta}
-                </span>
-              </div>
+      {selectedOrderGroup && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={() => setSelectedOrderGroup(null)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="production-orders-title" onClick={(event) => event.stopPropagation()} className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <header className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div><h2 id="production-orders-title" className="text-lg font-bold text-gray-900">{selectedOrderGroup === 'completed' ? 'Completed Orders' : 'Pending / In Progress Orders'}</h2><p className="text-xs text-gray-500">Click an order to open its production plan.</p></div>
+              <button onClick={() => setSelectedOrderGroup(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" aria-label="Close"><X size={18} /></button>
+            </header>
+            <div className="overflow-y-auto p-4">
+              {productionOrders.orders[selectedOrderGroup].length === 0 ? <p className="py-10 text-center text-sm text-gray-400">No orders in this category.</p> : (
+                <div className="space-y-2">{productionOrders.orders[selectedOrderGroup].map((order) => (
+                  <button key={order.id} onClick={() => navigate(`/production-plan/${order.id}`)} className="flex w-full flex-col gap-1 rounded-xl border border-gray-100 p-3 text-left hover:border-blue-200 hover:bg-blue-50/40 sm:flex-row sm:items-center sm:justify-between">
+                    <span><strong className="text-sm text-gray-900">{order.plan_no}</strong><span className="ml-2 text-xs text-gray-500">{order.article || '—'}{order.color ? ` / ${order.color}` : ''}</span><span className="block text-[11px] text-gray-500">{order.customer_name || 'No customer'}{order.sales_order_no ? ` · ${order.sales_order_no}` : ''}</span></span>
+                    <span className="flex items-center gap-3 text-xs"><span className="text-gray-500">{Number(order.planned_qty).toLocaleString('en-IN')} {order.uom || ''}</span>{statusBadge(order.status)}<span className="text-gray-400">{fmtDate(order.plan_date)}</span></span>
+                  </button>
+                ))}</div>
+              )}
             </div>
-          ))}
+          </section>
         </div>
-      </Card>
+      )}
     </div>
   );
 }

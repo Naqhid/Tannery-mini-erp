@@ -1,0 +1,11 @@
+mysql: [Warning] Using a password on the command line interface can be insecure.
+code	name	grp	uom	cost_per_uom	status
+CC-00001	Inspection Table	NULL	NULL	0.0000	Active
+CC-00002	Buffing Machine	NULL	NULL	0.0000	Active
+CC-00003	Spray Booth A	NULL	NULL	0.0000	Active
+CC-00004	Spray Booth B	NULL	NULL	0.0000	Active
+CC-00005	Tunnel Dryer	NULL	NULL	0.0000	Active
+CC-00006	Ironing Machine	NULL	NULL	0.0000	Active
+CC-00007	Rotary Dryer	NULL	NULL	0.0000	Active
+CC-00008	QC Table	Wet End	Piece	20.0000	Active
+CC-00009	Packing Station	Wet End	NULL	20.0000	Active

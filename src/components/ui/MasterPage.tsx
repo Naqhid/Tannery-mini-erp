@@ -52,6 +52,10 @@ interface MasterPageProps {
   icon: React.ReactNode;
   iconColor: string;
   apiEndpoint: string;
+  /** Optional endpoint used only for the list/table fetch. Defaults to apiEndpoint.
+   *  Use this when the list needs a specialized route (e.g. joined data) while
+   *  CRUD operations (create/update/delete/stats) still target apiEndpoint. */
+  listEndpoint?: string;
   columns: Column[];
   formFields: FormField[];
   emptyData?: Record<string, any>;
@@ -63,6 +67,8 @@ interface MasterPageProps {
   enableArchive?: boolean;
   modalSize?: string;
   formRoute?: string;
+  defaultSortBy?: string;
+  defaultSortOrder?: 'asc' | 'desc';
   renderForm?: (props: { formData: any; setFormData: (d: any) => void; formErrors: Record<string, string>; selectedItem: any; statusToggle: boolean; setStatusToggle: (v: boolean) => void; setFormDirty: (v: boolean) => void }) => React.ReactNode;
 }
 
@@ -75,6 +81,7 @@ export default function MasterPage({
   icon,
   iconColor,
   apiEndpoint,
+  listEndpoint,
   columns,
   formFields,
   emptyData = {},
@@ -85,6 +92,8 @@ export default function MasterPage({
   enableArchive = true,
   modalSize,
   formRoute,
+  defaultSortBy,
+  defaultSortOrder = 'asc',
   renderForm,
 }: MasterPageProps) {
   const { canWrite, isReadOnly } = usePermission();
@@ -115,8 +124,8 @@ export default function MasterPage({
   const [totalPages, setTotalPages] = useState(0);
 
   // Sorting
-  const [sortBy, setSortBy] = useState<SortField | ''>('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [sortBy, setSortBy] = useState<SortField | ''>(defaultSortBy || '');
+  const [sortOrder, setSortOrder] = useState<SortOrder>(defaultSortBy ? defaultSortOrder : 'desc');
 
   // Row selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -153,7 +162,7 @@ export default function MasterPage({
       for (const [k, v] of Object.entries(activeFilters)) {
         if (v) params.set(k, v);
       }
-      const res = await api<{ data: any[]; total: number; page: number; totalPages: number }>(`${apiEndpoint}?${params.toString()}`);
+      const res = await api<{ data: any[]; total: number; page: number; totalPages: number }>(`${listEndpoint || apiEndpoint}?${params.toString()}`);
       setData(res.data || []);
       setTotalRecords(res.total || 0);
       setTotalPages(res.totalPages || 0);
@@ -164,7 +173,7 @@ export default function MasterPage({
     } finally {
       setLoading(false);
     }
-  }, [apiEndpoint, debouncedSearch, currentPage, pageSize, sortBy, sortOrder, showArchived, JSON.stringify(activeFilters)]);
+  }, [apiEndpoint, listEndpoint, debouncedSearch, currentPage, pageSize, sortBy, sortOrder, showArchived, JSON.stringify(activeFilters)]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -262,6 +271,15 @@ export default function MasterPage({
       setStatusToggle(true);
       setAuditInfo(null);
       setShowAudit(false);
+      // Preview the auto-generated code so it shows immediately on "New"
+      if ('code' in (emptyData || {})) {
+        api<{ data: { code?: string; next_code?: string } }>(`${apiEndpoint}/next-code`)
+          .then((res) => {
+            const code = res.data?.code || res.data?.next_code;
+            if (code) setFormData((prev: any) => ({ ...prev, code }));
+          })
+          .catch(() => { /* ignore preview failure */ });
+      }
     }
     setFormErrors({});
     setFormDirty(false);
@@ -353,6 +371,10 @@ export default function MasterPage({
       const res = await api<{ message?: string }>(`${apiEndpoint}/${id}`, { method: 'DELETE' });
       toast.success(res.message || `${title} archived successfully!`);
       setShowPanel(false);
+      // Return to the active list so the remaining records show immediately
+      // (a soft-deleted row leaves the current view, which can otherwise look empty).
+      setShowArchived(false);
+      setCurrentPage(1);
       fetchData();
       fetchStats();
     } catch (err) {
@@ -1001,12 +1023,14 @@ export default function MasterPage({
             <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-lg bg-white hover:bg-blue-50 text-gray-400 hover:text-blue-600 border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page">
               <ChevronLeft size={16} />
             </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let page: number;
-              if (totalPages <= 5) { page = i + 1; }
-              else { page = currentPage - 2 + i; if (page < 1) page = i + 1; if (page > totalPages) page = totalPages - 4 + i; }
-              return page;
-            }).map(page => (
+            {(() => {
+              const windowSize = Math.min(5, totalPages);
+              // Center the window on the current page, then clamp so it stays
+              // within [1, totalPages]. This guarantees consecutive, unique pages.
+              let start = currentPage - Math.floor(windowSize / 2);
+              start = Math.max(1, Math.min(start, totalPages - windowSize + 1));
+              return Array.from({ length: windowSize }, (_, i) => start + i);
+            })().map(page => (
               <button
                 key={page}
                 onClick={() => setCurrentPage(page)}

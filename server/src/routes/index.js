@@ -13,7 +13,9 @@ import warehouseRoutes from './warehouseRoutes.js';
 import stockOpeningRoutes from './stockOpeningRoutes.js';
 import materialReceiptRoutes from './materialReceiptRoutes.js';
 import stockTransferRoutes from './stockTransferRoutes.js';
+import outboundDeliveryRoutes from './outboundDeliveryRoutes.js';
 import materialIssueRoutes from './materialIssueRoutes.js';
+import stockMaintenanceRoutes from './stockMaintenanceRoutes.js';
 import productionPlanRoutes from './productionPlanRoutes.js';
 import {
   productCategoryRoutes,
@@ -33,6 +35,9 @@ import {
   roleRoutes,
   companyRoutes,
   businessUnitRoutes,
+  locationRackRoutes,
+  departmentRoutes,
+  costComponentRoutes,
 } from './masterRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
 // New module routes
@@ -41,6 +46,13 @@ import supplierPricingRoutes from './supplierPricingRoutes.js';
 import priceApprovalRoutes from './priceApprovalRoutes.js';
 import physicalStockEntryRoutes from './physicalStockEntryRoutes.js';
 import backupRoutes from './backupRoutes.js';
+import exportRoutes from './exportRoutes.js';
+import standardCostRoutes from './standardCostRoutes.js';
+import generalCostRoutes from './generalCostRoutes.js';
+import machineCostRoutes from './machineCostRoutes.js';
+import productionStatusRoutes from './productionStatusRoutes.js';
+import costingReportRoutes from './costingReportRoutes.js';
+import reportsRoutes from './reportsRoutes.js';
 
 const router = Router();
 
@@ -64,7 +76,9 @@ router.use('/warehouses', warehouseRoutes);
 router.use('/stock-opening', stockOpeningRoutes);
 router.use('/material-receipts', materialReceiptRoutes);
 router.use('/stock-transfers', stockTransferRoutes);
+router.use('/outbound-deliveries', outboundDeliveryRoutes);
 router.use('/material-issues', materialIssueRoutes);
+router.use('/stock-maintenance', stockMaintenanceRoutes);
 
 // Production routes
 router.use('/production-plans', productionPlanRoutes);
@@ -87,6 +101,13 @@ router.use('/process-stages', processStageRoutes);
 router.use('/group-master', groupMasterRoutes);
 router.use('/machines', machineRoutes);
 router.use('/rate-master', rateMasterRoutes);
+router.use('/location-racks', locationRackRoutes);
+
+// Department Master routes
+router.use('/departments', departmentRoutes);
+
+// Cost Component Master routes
+router.use('/cost-components', costComponentRoutes);
 
 // Settings routes
 router.use('/roles', roleRoutes);
@@ -108,6 +129,27 @@ router.use('/physical-stock-entries', physicalStockEntryRoutes);
 
 // Database Backup routes
 router.use('/backups', backupRoutes);
+
+// Excel Export routes
+router.use('/export', exportRoutes);
+
+// Standard Costing routes
+router.use('/standard-costs', standardCostRoutes);
+
+// General Cost routes
+router.use('/general-costs', generalCostRoutes);
+
+// Machine Cost routes
+router.use('/machine-costs', machineCostRoutes);
+
+// Production Status routes
+router.use('/production-status', productionStatusRoutes);
+
+// Costing Report routes
+router.use('/costing-report', costingReportRoutes);
+
+// New consolidated Reports module (Inventory / Production / Sales / Costing)
+router.use('/reports', reportsRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);

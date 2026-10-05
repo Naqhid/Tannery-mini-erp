@@ -2,20 +2,21 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Plus, Trash2, Save, X, Edit2, Printer, Copy, Upload, Paperclip,
+  Plus, Trash2, Save, X, Printer, Copy, Upload, Paperclip,
   Eye, Download, ChevronDown, Package, Truck, CreditCard, FileText,
   MessageSquare, Calendar, IndianRupee, AlertCircle, CheckCircle2,
   Clock, Ban, Send, MoreVertical,
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import api, { API_BASE } from '../lib/api';
 
 // ---- Types ----
-interface Customer { id: number; code: string; name: string; contact_person?: string; address?: string; }
-interface TaxOption { id: number; name: string; gst_percent: number; cess_percent: number; }
+interface Customer { id: number; code: string; name: string; contact_person?: string; address?: string; billing_address?: string; shipping_address?: string; payment_terms?: string; city?: string; state?: string; state_name?: string; }
 interface SalesOrderItem {
   _key?: string;
+  product_id?: number | null;
   item_code: string;
   item_description: string;
   leather_type: string;
@@ -26,11 +27,13 @@ interface SalesOrderItem {
   unit_price: number;
   discount_percent: number;
   amount: number;
+  delivery_date: string;
 }
 interface DeliveryNote { id?: number; delivery_no?: string; delivery_date: string; delivery_from: string; transporter: string; vehicle_no: string; lr_no: string; no_of_packages: number | string; delivery_to: string; delivery_instructions: string; status: string; }
 interface PaymentReceipt { id?: number; receipt_no?: string; receipt_date: string; payment_mode: string; amount: number; remarks: string; }
 interface Invoice { id?: number; invoice_no?: string; invoice_date?: string; invoice_amount: number; paid_amount: number; balance: number; status: string; due_date?: string; }
 interface Attachment { id?: number; file_name: string; file_path?: string; file_type?: string; category: string; uploaded_at?: string; remarks?: string; }
+interface ProductDropdown { id: number; code: string; name: string; leather_type: string; thickness: string; uom: string; leather_type_name?: string; uom_name?: string; thickness_name?: string; color_name?: string; finish_type_name?: string; display_name?: string; group_gst_rate?: number | string; }
 
 interface SalesOrderFull {
   id?: number;
@@ -52,8 +55,12 @@ interface SalesOrderFull {
   discount: number;
   freight: number;
   tax_percent: number;
+  tax_type: string;
   sub_total: number;
   tax_amount: number;
+  cgst_amount: number;
+  sgst_amount: number;
+  igst_amount: number;
   grand_total: number;
   remarks: string;
   items: SalesOrderItem[];
@@ -68,13 +75,15 @@ const emptyOrder: SalesOrderFull = {
   delivery_date: '', customer_po_no: '', order_type: 'Standard', contact_person: '',
   delivery_address: '', payment_terms: '', currency: 'INR', price_list: '',
   sales_person: '', status: 'Draft', terms_conditions: '', discount: 0, freight: 0,
-  tax_percent: 18, sub_total: 0, tax_amount: 0, grand_total: 0, remarks: '',
+  tax_percent: 18, tax_type: 'IGST', sub_total: 0, tax_amount: 0,
+  cgst_amount: 0, sgst_amount: 0, igst_amount: 0, grand_total: 0, remarks: '',
   items: [], deliveries: [], receipts: [], invoices: [], attachments: [],
 };
 
 const emptyItem: SalesOrderItem = {
-  _key: '', item_code: '', item_description: '', leather_type: '', finish_color: '',
+  _key: '', product_id: null, item_code: '', item_description: '', leather_type: '', finish_color: '',
   thickness: '', uom: 'Sq.Ft.', quantity: 0, unit_price: 0, discount_percent: 0, amount: 0,
+  delivery_date: '',
 };
 
 const STATUS_CONFIG: Record<string, { color: string; icon: any; bg: string }> = {
@@ -97,12 +106,34 @@ function calcItem(item: SalesOrderItem): SalesOrderItem {
   return { ...item, amount };
 }
 
-function calcTotals(items: SalesOrderItem[], discount: number, freight: number, taxPercent: number) {
+// Older records stored the color as "<finish> / <color>". Show only the color
+// part (the segment after the last "/") so the Color column matches the master.
+function colorOnly(value: string): string {
+  if (!value) return '';
+  const parts = value.split('/');
+  return parts[parts.length - 1].trim();
+}
+
+function calcTotals(items: SalesOrderItem[], discount: number, freight: number, taxPercent: number, taxType: string) {
   const subTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
   const taxable = subTotal - discount + freight;
   const taxAmount = parseFloat(((taxable * taxPercent) / 100).toFixed(2));
   const grandTotal = parseFloat((taxable + taxAmount).toFixed(2));
-  return { sub_total: parseFloat(subTotal.toFixed(2)), tax_amount: taxAmount, grand_total: grandTotal };
+
+  // Intra-state (CGST_SGST) → split 50/50; inter-state (IGST) → full into IGST.
+  let cgst = 0, sgst = 0, igst = 0;
+  if (taxType === 'CGST_SGST') {
+    cgst = parseFloat((taxAmount / 2).toFixed(2));
+    sgst = parseFloat((taxAmount - cgst).toFixed(2));
+  } else {
+    igst = taxAmount;
+  }
+  return {
+    sub_total: parseFloat(subTotal.toFixed(2)),
+    tax_amount: taxAmount,
+    cgst_amount: cgst, sgst_amount: sgst, igst_amount: igst,
+    grand_total: grandTotal,
+  };
 }
 
 
@@ -113,8 +144,7 @@ export default function SalesOrderDetail() {
 
   const [order, setOrder] = useState<SalesOrderFull>(emptyOrder);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [taxOptions, setTaxOptions] = useState<TaxOption[]>([]);
-  const [activeTab, setActiveTab] = useState<'items' | 'delivery' | 'payment' | 'attachments' | 'remarks'>('items');
+  const [activeTab, setActiveTab] = useState<'items' | 'payment' | 'attachments' | 'remarks'>('items');
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<SalesOrderItem | null>(null);
@@ -140,11 +170,12 @@ export default function SalesOrderDetail() {
     } catch { setCustomers([]); }
   }, []);
 
-  const fetchTaxOptions = useCallback(async () => {
+  const [products, setProducts] = useState<ProductDropdown[]>([]);
+  const fetchProducts = useCallback(async () => {
     try {
-      const res = await api<{ data: TaxOption[] }>('/tax-master/dropdown');
-      setTaxOptions(res.data || []);
-    } catch { setTaxOptions([]); }
+      const res = await api<{ data: ProductDropdown[] }>('/products/dropdown');
+      setProducts(res.data || []);
+    } catch { setProducts([]); }
   }, []);
 
   const fetchOrder = useCallback(async () => {
@@ -161,10 +192,14 @@ export default function SalesOrderDetail() {
         discount: Number(d.discount) || 0,
         freight: Number(d.freight) || 0,
         tax_percent: Number(d.tax_percent) || 18,
+        tax_type: d.tax_type || 'IGST',
         sub_total: Number(d.sub_total) || 0,
         tax_amount: Number(d.tax_amount) || 0,
+        cgst_amount: Number(d.cgst_amount) || 0,
+        sgst_amount: Number(d.sgst_amount) || 0,
+        igst_amount: Number(d.igst_amount) || 0,
         grand_total: Number(d.grand_total) || 0,
-        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0 })),
+        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, delivery_date: i.delivery_date?.split('T')[0] || '' })),
         deliveries: d.deliveries || [],
         receipts: d.receipts || [],
         invoices: d.invoices || [],
@@ -174,23 +209,49 @@ export default function SalesOrderDetail() {
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
-  useEffect(() => { fetchCustomers(); fetchTaxOptions(); fetchOrder(); }, [fetchCustomers, fetchTaxOptions, fetchOrder]);
+  const fetchNextOrderNo = useCallback(async () => {
+    if (!isNew) return;
+    try {
+      const res = await api<{ data: { order_no: string } }>('/sales-orders/next-no');
+      if (res.data?.order_no) {
+        setOrder(prev => ({ ...prev, order_no: res.data.order_no }));
+      }
+    } catch { /* ignore preview failure */ }
+  }, [isNew]);
+
+  useEffect(() => { fetchCustomers(); fetchProducts(); fetchOrder(); fetchNextOrderNo(); }, [fetchCustomers, fetchProducts, fetchOrder, fetchNextOrderNo]);
 
   const updateField = (field: keyof SalesOrderFull, value: any) => {
     setOrder(prev => {
       const updated = { ...prev, [field]: value };
-      const tots = calcTotals(updated.items, Number(updated.discount), Number(updated.freight), Number(updated.tax_percent));
+      const tots = calcTotals(updated.items, Number(updated.discount), Number(updated.freight), Number(updated.tax_percent), updated.tax_type);
       return { ...updated, ...tots };
     });
   };
 
+  const HOME_STATE = 'tamil nadu';
+  const stateIsIntra = (s?: string) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ') === HOME_STATE;
+
   const handleCustomerChange = (customerId: string) => {
     const customer = customers.find(c => c.id === Number(customerId));
+    // Auto-populate delivery & shipping details based on customer selection
+    const shipping = customer?.shipping_address || customer?.billing_address || customer?.address || '';
+    // Intra-state (Tamil Nadu) → CGST + SGST; inter-state → IGST.
+    const custState = customer?.state_name || customer?.state || '';
+    const taxType = stateIsIntra(custState) ? 'CGST_SGST' : 'IGST';
     setOrder(prev => ({
       ...prev,
       customer_id: customer ? customer.id : null,
+      tax_type: taxType,
+      ...calcTotals(prev.items, Number(prev.discount), Number(prev.freight), Number(prev.tax_percent), taxType),
       contact_person: customer?.contact_person || prev.contact_person,
-      delivery_address: customer?.address || prev.delivery_address,
+      delivery_address: shipping || prev.delivery_address,
+      payment_terms: customer?.payment_terms || prev.payment_terms,
+    }));
+    // Pre-fill delivery note defaults for the delivery tab
+    setDeliveryForm(prev => ({
+      ...prev,
+      delivery_to: shipping || prev.delivery_to,
     }));
   };
 
@@ -208,7 +269,7 @@ export default function SalesOrderDetail() {
     } else {
       newItems = [...order.items, computed];
     }
-    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
     const updatedOrder = { ...order, items: newItems, ...tots };
 
     // For new orders that haven't been saved yet, just update local state
@@ -230,7 +291,7 @@ export default function SalesOrderDetail() {
 
   const handleDeleteItem = async (key: string) => {
     const newItems = order.items.filter(i => i._key !== key);
-    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
+    const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
     const updatedOrder = { ...order, items: newItems, ...tots };
 
     if (isNew) {
@@ -253,6 +314,8 @@ export default function SalesOrderDetail() {
     try {
       const payload = { ...order, items: order.items.map(({ _key, ...rest }) => rest) };
       if (isNew) {
+        // Let the backend generate a fresh order number to avoid duplicates
+        delete (payload as any).order_no;
         const res = await api<any>('/sales-orders', { method: 'POST', body: JSON.stringify(payload) });
         toast.success(res.message || 'Sales order created!');
         navigate('/sales-orders');
@@ -376,10 +439,7 @@ export default function SalesOrderDetail() {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(n || 0);
 
-  const customerOptions = [{ value: '', label: 'Select customer *' }, ...customers.map(c => ({ value: String(c.id), label: c.name }))];
   const totalReceived = order.receipts.reduce((s, r) => s + Number(r.amount || 0), 0);
-  const totalInvoiced = order.invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
-  const balance = order.grand_total - totalReceived;
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -393,9 +453,22 @@ export default function SalesOrderDetail() {
   const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.Draft;
   const StatusIcon = statusConfig.icon;
 
+  // Hybrid status control:
+  //   - Draft / Confirmed / Processing are auto-managed by production progress
+  //     and are NOT user-selectable (they'd just get recomputed).
+  //   - Shipped / Delivered / Cancelled are the user's to set.
+  //   - The current auto status is always shown so the user can see where it is.
+  const AUTO_STATUSES = ['Draft', 'Confirmed', 'Processing'];
+  const MANUAL_STATUSES = ['Shipped', 'Delivered', 'Cancelled'];
+  const statusOptions = [
+    ...(AUTO_STATUSES.includes(order.status)
+      ? [{ value: order.status, label: `${order.status} (auto)` }]
+      : []),
+    ...MANUAL_STATUSES.map((s) => ({ value: s, label: s })),
+  ];
+
   const tabs = [
     { id: 'items' as const, label: 'Items', icon: Package, count: order.items.length },
-    { id: 'delivery' as const, label: 'Delivery & Shipping', icon: Truck, count: order.deliveries.length },
     { id: 'payment' as const, label: 'Payment Details', icon: CreditCard, count: order.receipts.length },
     { id: 'attachments' as const, label: 'Attachments', icon: Paperclip, count: order.attachments.length },
     { id: 'remarks' as const, label: 'Remarks', icon: MessageSquare },
@@ -416,9 +489,6 @@ export default function SalesOrderDetail() {
                 <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
                   {isNew ? 'New Sales Order' : `Sales Order`}
                 </h1>
-                {order.order_no && (
-                  <span className="text-lg font-bold text-blue-600 font-mono bg-blue-50 px-3 py-1 rounded-lg">{order.order_no}</span>
-                )}
                 {!isNew && (
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border ${statusConfig.bg} ${statusConfig.color} shadow-sm`}>
                     <StatusIcon size={14} />
@@ -458,27 +528,50 @@ export default function SalesOrderDetail() {
         <div className="p-6 space-y-5">
           {/* Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Select label="Customer" required options={customerOptions} value={String(order.customer_id || '')} onChange={(e) => handleCustomerChange(e.target.value)} />
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Order No.</label>
+              <div className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600 font-mono font-bold min-h-[38px] flex items-center">
+                {order.order_no || <span className="italic text-gray-400 font-normal">Generating...</span>}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Customer <span className="text-red-500">*</span></label>
+              <SearchableSelect
+                options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                value={String(order.customer_id || '')}
+                onChange={(v) => handleCustomerChange(v)}
+                placeholder="Select customer *"
+                addNewPath="/customer-master/new"
+                addNewLabel="Add Customer"
+              />
+            </div>
             <Input label="Order Date" required type="date" value={order.order_date} onChange={(e) => updateField('order_date', e.target.value)} />
             <Input label="Customer PO No." value={order.customer_po_no} placeholder="PO reference number" onChange={(e) => updateField('customer_po_no', e.target.value)} />
-            <Select label="Order Type" options={ORDER_TYPE_OPTS.map(o => ({ value: o, label: o }))} value={order.order_type} onChange={(e) => updateField('order_type', e.target.value)} />
           </div>
           {/* Row 2 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Select label="Order Type" options={ORDER_TYPE_OPTS.map(o => ({ value: o, label: o }))} value={order.order_type} onChange={(e) => updateField('order_type', e.target.value)} />
             <Input label="Contact Person" value={order.contact_person} placeholder="Contact name" onChange={(e) => updateField('contact_person', e.target.value)} />
-            <Input label="Delivery Date" type="date" value={order.delivery_date} onChange={(e) => updateField('delivery_date', e.target.value)} />
-            <div className="lg:col-span-1">
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
-              <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
-            </div>
-            <Select label="Price List" options={[{ value: '', label: 'Select price list' }, { value: 'Standard Export Price List', label: 'Standard Export Price List' }, { value: 'Standard Domestic Price List', label: 'Standard Domestic Price List' }]} value={order.price_list} onChange={(e) => updateField('price_list', e.target.value)} />
+            <Select label="Payment Terms" options={[{ value: '', label: 'Select terms' }, ...PAYMENT_TERMS_OPTS.map(o => ({ value: o, label: o }))]} value={order.payment_terms} onChange={(e) => updateField('payment_terms', e.target.value)} />
+            <Select label="Currency" options={CURRENCY_OPTS.map(o => ({ value: o.split(' - ')[0], label: o }))} value={order.currency} onChange={(e) => updateField('currency', e.target.value)} />
           </div>
           {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Select label="Payment Terms" options={[{ value: '', label: 'Select terms' }, ...PAYMENT_TERMS_OPTS.map(o => ({ value: o, label: o }))]} value={order.payment_terms} onChange={(e) => updateField('payment_terms', e.target.value)} />
-            <Select label="Currency" options={CURRENCY_OPTS.map(o => ({ value: o.split(' - ')[0], label: o }))} value={order.currency} onChange={(e) => updateField('currency', e.target.value)} />
-            <Input label="Sales Person" value={order.sales_person} placeholder="Sales person name" onChange={(e) => updateField('sales_person', e.target.value)} />
-            <Select label="Status" options={['Draft', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'].map(s => ({ value: s, label: s }))} value={order.status} onChange={(e) => updateField('status', e.target.value)} />
+            <div className="lg:col-span-3">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
+              <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
+            </div>
+            <div>
+              <Select
+                label="Status"
+                options={statusOptions}
+                value={order.status}
+                onChange={(e) => updateField('status', e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-gray-400 leading-tight">
+                Draft, Confirmed &amp; Processing are set automatically from production progress. You control Shipped, Delivered &amp; Cancelled.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -512,24 +605,15 @@ export default function SalesOrderDetail() {
             </div>
             <div>
               {activeTab === 'items' && (
-                <button onClick={openAddItem} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm">
+                <button onClick={() => {
+                  const newItem: SalesOrderItem = { ...emptyItem, _key: String(Math.random()) };
+                  setOrder(prev => ({ ...prev, items: [...prev.items, newItem] }));
+                }} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm">
                   <Plus size={13} /> Add Item
                 </button>
               )}
-              {activeTab === 'delivery' && !isNew && (
-                <button onClick={() => setShowDeliveryModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm">
-                  <Plus size={13} /> Create Delivery Note
-                </button>
-              )}
               {activeTab === 'payment' && !isNew && (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setShowReceiptModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-sm">
-                    <Plus size={13} /> Add Receipt
-                  </button>
-                  <button onClick={() => setShowInvoiceModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm">
-                    <Plus size={13} /> Create Invoice
-                  </button>
-                </div>
+                null
               )}
               {activeTab === 'attachments' && !isNew && (
                 <button onClick={() => setShowUploadModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm">
@@ -548,7 +632,7 @@ export default function SalesOrderDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                        {['#', 'Item Code', 'Description', 'Leather Type', 'Finish / Color', 'Thickness', 'UOM', 'Qty', 'Rate (₹)', 'Discount %', 'Amount (₹)', ''].map(h => (
+                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Delivery Date', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
                           <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -558,39 +642,91 @@ export default function SalesOrderDetail() {
                         <tr><td colSpan={12} className="py-12 text-center">
                           <Package size={32} className="mx-auto text-gray-300 mb-3" />
                           <p className="text-sm font-medium text-gray-500">No items added yet</p>
-                          <p className="text-xs text-gray-400 mt-1">Click "Add Item" to get started</p>
+                          <p className="text-xs text-gray-400 mt-1">Click "Add Item" to add a row</p>
                         </td></tr>
                       ) : order.items.map((item, i) => (
                         <tr key={item._key || i} className="hover:bg-blue-50/40 transition-colors">
-                          <td className="py-3 px-3.5 text-gray-400 font-medium">{i + 1}</td>
-                          <td className="py-3 px-3.5 font-mono text-xs text-gray-700 font-medium">{item.item_code || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-900 font-medium max-w-[180px] truncate">{item.item_description || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.leather_type || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.finish_color || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.thickness || '—'}</td>
-                          <td className="py-3 px-3.5 text-gray-600 text-xs">{item.uom}</td>
-                          <td className="py-3 px-3.5 text-gray-900 font-medium">{Number(item.quantity).toLocaleString('en-IN')}</td>
-                          <td className="py-3 px-3.5 text-gray-900">{Number(item.unit_price).toFixed(2)}</td>
-                          <td className="py-3 px-3.5">
-                            <input
-                              type="number"
-                              value={item.discount_percent}
-                              onChange={(e) => {
-                                const updated = calcItem({ ...item, discount_percent: Number(e.target.value) });
-                                const newItems = order.items.map(i2 => i2._key === item._key ? updated : i2);
-                                const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent));
-                                setOrder(prev => ({ ...prev, items: newItems, ...tots }));
+                          <td className="py-2.5 px-3.5 text-gray-400 font-medium">{i + 1}</td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.item_code} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[90px] cursor-not-allowed" placeholder="Code" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <SearchableSelect
+                              options={[{ value: '', label: '-- Select Article --' }, ...products.map(p => ({ value: String(p.id), label: p.name }))]}
+                              value={item.product_id ? String(item.product_id) : ''}
+                              addNewPath="/product-master/new"
+                              addNewLabel="Add Product"
+                              onChange={(val) => {
+                                const productId = Number(val);
+                                const product = products.find(p => p.id === productId);
+                                const newItems = order.items.map(it => it._key === item._key ? {
+                                  ...it,
+                                  product_id: productId || null,
+                                  item_code: product?.code || '',
+                                  item_description: product?.name || '',
+                                  leather_type: product?.leather_type_name || product?.leather_type || '',
+                                  finish_color: product?.color_name || '',
+                                  thickness: product?.thickness_name || product?.thickness || '',
+                                  uom: product?.uom_name || product?.uom || '',
+                                } : it);
+                                // Auto-fill GST% from the selected article's group (editable afterwards).
+                                const gstRate = product?.group_gst_rate != null && product.group_gst_rate !== ''
+                                  ? Number(product.group_gst_rate) : null;
+                                setOrder(prev => {
+                                  const nextTaxPercent = gstRate != null ? gstRate : prev.tax_percent;
+                                  return {
+                                    ...prev,
+                                    items: newItems,
+                                    tax_percent: nextTaxPercent,
+                                    ...calcTotals(newItems, Number(prev.discount), Number(prev.freight), Number(nextTaxPercent), prev.tax_type),
+                                  };
+                                });
                               }}
-                              min={0} max={100} step={0.01}
-                              className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-all"
+                              placeholder="Search article..."
                             />
                           </td>
-                          <td className="py-3 px-3.5 font-bold text-gray-900">{formatCurrency(item.amount)}</td>
-                          <td className="py-3 px-3.5">
-                            <div className="flex items-center gap-0.5">
-                              <button onClick={() => openEditItem(item)} className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"><Edit2 size={13} /></button>
-                              <button onClick={() => handleDeleteItem(item._key!)} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
-                            </div>
+                          <td className="py-2.5 px-3.5">
+                            <input value={colorOnly(item.finish_color)} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Color" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.thickness} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="mm" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input value={item.uom} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[110px] cursor-not-allowed" placeholder="UOM" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.quantity} onChange={(e) => {
+                              const updated = calcItem({ ...item, quantity: Number(e.target.value) });
+                              const newItems = order.items.map(it => it._key === item._key ? updated : it);
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
+                              setOrder(prev => ({ ...prev, items: newItems, ...tots }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="0" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="date" value={item.delivery_date} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, delivery_date: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.unit_price} onChange={(e) => {
+                              const updated = calcItem({ ...item, unit_price: Number(e.target.value) });
+                              const newItems = order.items.map(it => it._key === item._key ? updated : it);
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
+                              setOrder(prev => ({ ...prev, items: newItems, ...tots }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[70px]" placeholder="0.00" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.discount_percent} onChange={(e) => {
+                              const updated = calcItem({ ...item, discount_percent: Number(e.target.value) });
+                              const newItems = order.items.map(it => it._key === item._key ? updated : it);
+                              const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
+                              setOrder(prev => ({ ...prev, items: newItems, ...tots }));
+                            }} min={0} max={100} className="w-16 px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-400/30" placeholder="0" />
+                          </td>
+                          <td className="py-2.5 px-3.5 font-bold text-gray-900 text-right">{formatCurrency(item.amount)}</td>
+                          <td className="py-2.5 px-3.5">
+                            <button onClick={() => handleDeleteItem(item._key!)} className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
                           </td>
                         </tr>
                       ))}
@@ -629,34 +765,64 @@ export default function SalesOrderDetail() {
                       <div className="flex items-center justify-between py-1">
                         <span className="text-sm text-gray-600">Additional Discount</span>
                         <div className="flex items-center gap-2">
-                          <input type="number" value={order.discount} onChange={(e) => updateField('discount', Number(e.target.value))} min={0} className="w-20 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
+                          <input type="number" value={order.discount || ''} onChange={(e) => updateField('discount', e.target.value === '' ? 0 : Number(e.target.value))} min={0} placeholder="0" className="w-20 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                           <span className="text-xs text-gray-500 w-20 text-right">-{formatCurrency(order.discount)}</span>
                         </div>
                       </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-sm text-gray-600">Freight</span>
-                        <input type="number" value={order.freight} onChange={(e) => updateField('freight', Number(e.target.value))} min={0} className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
+                        <input type="number" value={order.freight || ''} onChange={(e) => updateField('freight', e.target.value === '' ? 0 : Number(e.target.value))} min={0} placeholder="0" className="w-28 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all" />
                       </div>
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-sm text-gray-600">Tax</span>
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={order.tax_percent}
-                            onChange={(e) => {
-                              const selectedPercent = Number(e.target.value);
-                              updateField('tax_percent', selectedPercent);
-                            }}
-                            className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
-                          >
-                            <option value={0}>No Tax</option>
-                            {taxOptions.map(t => {
-                              const pct = parseFloat(String(t.gst_percent));
-                              return <option key={t.id} value={pct}>{t.name} ({pct}%)</option>;
-                            })}
-                          </select>
-                          <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.tax_amount)}</span>
+                      {order.tax_type === 'CGST_SGST' ? (
+                        <>
+                          <div className="flex items-center justify-between py-1">
+                            <span className="text-sm text-gray-600 flex items-center gap-1">
+                              GST
+                              <input
+                                type="number"
+                                value={order.tax_percent || ''}
+                                onChange={(e) => updateField('tax_percent', e.target.value === '' ? 0 : Number(e.target.value))}
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                placeholder="0"
+                                className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
+                              />
+                              %
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between py-1 pl-3">
+                            <span className="text-sm text-gray-600">CGST ({(Number(order.tax_percent) / 2).toFixed(2)}%)</span>
+                            <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.cgst_amount)}</span>
+                          </div>
+                          <div className="flex items-center justify-between py-1 pl-3">
+                            <span className="text-sm text-gray-600">SGST ({(Number(order.tax_percent) / 2).toFixed(2)}%)</span>
+                            <span className="text-sm text-gray-800 w-24 text-right">{formatCurrency(order.sgst_amount)}</span>
+                          </div>
+                          <div className="flex items-center justify-between py-1">
+                            <span className="text-sm font-medium text-gray-700">Total GST</span>
+                            <span className="text-sm font-semibold text-gray-900 w-24 text-right">{formatCurrency(Number(order.cgst_amount) + Number(order.sgst_amount))}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-sm text-gray-600 flex items-center gap-1">
+                            IGST
+                            <input
+                              type="number"
+                              value={order.tax_percent || ''}
+                              onChange={(e) => updateField('tax_percent', e.target.value === '' ? 0 : Number(e.target.value))}
+                              min={0}
+                              max={100}
+                              step="0.01"
+                              placeholder="0"
+                              className="w-16 px-2 py-1 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 transition-all"
+                            />
+                            %
+                          </span>
+                          <span className="text-sm font-semibold text-gray-900 w-24 text-right">{formatCurrency(order.igst_amount)}</span>
                         </div>
-                      </div>
+                      )}
                       <div className="border-t border-gray-200 pt-3 mt-2">
                         <div className="flex items-center justify-between">
                           <span className="text-base font-bold text-gray-900">Grand Total</span>
@@ -670,106 +836,13 @@ export default function SalesOrderDetail() {
             )}
 
 
-            {/* ==================== DELIVERY & SHIPPING TAB ==================== */}
-            {activeTab === 'delivery' && (
-              <div className="space-y-5">
-                {order.deliveries.length === 0 ? (
-                  <div className="py-14 text-center border-2 border-dashed border-gray-200 rounded-xl">
-                    <Truck size={36} className="mx-auto text-gray-300 mb-3" />
-                    <p className="text-sm font-medium text-gray-500">No delivery notes created yet</p>
-                    <p className="text-xs text-gray-400 mt-1">Create a delivery note to track shipments</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {order.deliveries.map((dn: any) => (
-                      <div key={dn.id} className="border border-gray-200 rounded-xl overflow-hidden hover:border-blue-200 transition-colors shadow-sm">
-                        <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-blue-100">
-                              <Truck size={14} className="text-blue-600" />
-                            </div>
-                            <div>
-                              <span className="font-mono text-sm font-semibold text-gray-800">{dn.delivery_no}</span>
-                              <p className="text-[11px] text-gray-500 mt-0.5">{dn.delivery_date ? new Date(dn.delivery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date'}</p>
-                            </div>
-                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide ${dn.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' : dn.status === 'Dispatched' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{dn.status}</span>
-                          </div>
-                          <button onClick={() => handleDeleteDelivery(dn.id)} className="p-2 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-5 py-4">
-                          {[
-                            { label: 'Transporter', value: dn.transporter },
-                            { label: 'Vehicle No.', value: dn.vehicle_no },
-                            { label: 'LR / AWB No.', value: dn.lr_no },
-                            { label: 'Packages', value: dn.no_of_packages },
-                          ].map(f => (
-                            <div key={f.label}>
-                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{f.label}</p>
-                              <p className="text-sm font-medium text-gray-800 mt-0.5">{f.value || '—'}</p>
-                            </div>
-                          ))}
-                        </div>
-                        {dn.delivery_instructions && (
-                          <div className="px-5 pb-4 text-xs text-gray-600 bg-amber-50/50 mx-5 mb-4 rounded-lg p-3 border border-amber-100">
-                            <span className="font-semibold text-amber-700">Instructions:</span> {dn.delivery_instructions}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Item Shipping Summary */}
-                {order.items.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider flex items-center gap-2">
-                      <Package size={13} />
-                      Item Shipping Summary
-                    </h3>
-                    <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                            {['#', 'Item Code', 'Description', 'UOM', 'Ordered', 'Shipped', 'Pending'].map(h => (
-                              <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {order.items.map((item, i) => (
-                            <tr key={item._key || i} className="hover:bg-gray-50/50">
-                              <td className="py-2.5 px-3.5 text-gray-400">{i + 1}</td>
-                              <td className="py-2.5 px-3.5 font-mono text-xs">{item.item_code || '—'}</td>
-                              <td className="py-2.5 px-3.5 font-medium text-gray-800">{item.item_description}</td>
-                              <td className="py-2.5 px-3.5 text-gray-600">{item.uom}</td>
-                              <td className="py-2.5 px-3.5 font-medium">{Number(item.quantity).toLocaleString('en-IN')}</td>
-                              <td className="py-2.5 px-3.5 text-emerald-700 font-semibold">{Number(item.quantity).toLocaleString('en-IN')}</td>
-                              <td className="py-2.5 px-3.5">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">0</span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-
             {/* ==================== PAYMENT DETAILS TAB ==================== */}
             {activeTab === 'payment' && (
               <div className="space-y-6">
                 {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
                   {[
                     { label: 'Order Amount', value: formatCurrency(order.grand_total), icon: IndianRupee, color: 'from-blue-500 to-indigo-600' },
-                    { label: 'Received', value: formatCurrency(totalReceived), icon: CheckCircle2, color: 'from-emerald-500 to-green-600' },
-                    { label: 'Invoiced', value: formatCurrency(totalInvoiced), icon: FileText, color: 'from-amber-500 to-orange-600' },
-                    { label: 'Balance', value: formatCurrency(balance), icon: AlertCircle, color: balance > 0 ? 'from-red-500 to-rose-600' : 'from-emerald-500 to-green-600' },
                   ].map(card => {
                     const CardIcon = card.icon;
                     return (
@@ -789,99 +862,6 @@ export default function SalesOrderDetail() {
 
                 {/* Payment Info Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  <div className="lg:col-span-2 space-y-5">
-                    {/* Payment History */}
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                        <CreditCard size={14} className="text-blue-600" />
-                        Payment History
-                      </h3>
-                      {order.receipts.length === 0 ? (
-                        <div className="py-8 text-center border border-dashed border-gray-200 rounded-xl">
-                          <CreditCard size={28} className="mx-auto text-gray-300 mb-2" />
-                          <p className="text-xs text-gray-400">No payments recorded yet</p>
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                                {['#', 'Receipt No.', 'Date', 'Mode', 'Amount (₹)', 'Remarks', ''].map(h => (
-                                  <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {order.receipts.map((r: any, i) => (
-                                <tr key={r.id || i} className="hover:bg-green-50/30 transition-colors">
-                                  <td className="py-3 px-3.5 text-gray-400">{i + 1}</td>
-                                  <td className="py-3 px-3.5 font-mono text-xs font-semibold text-blue-700">{r.receipt_no}</td>
-                                  <td className="py-3 px-3.5 text-gray-700">{r.receipt_date ? new Date(r.receipt_date).toLocaleDateString('en-IN') : '—'}</td>
-                                  <td className="py-3 px-3.5">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-700">{r.payment_mode}</span>
-                                  </td>
-                                  <td className="py-3 px-3.5 font-bold text-emerald-700">{formatCurrency(r.amount)}</td>
-                                  <td className="py-3 px-3.5 text-gray-500 text-xs max-w-[140px] truncate">{r.remarks || '—'}</td>
-                                  <td className="py-3 px-3.5">
-                                    <button onClick={() => r.id && handleDeleteReceipt(r.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
-                                  </td>
-                                </tr>
-                              ))}
-                              <tr className="bg-emerald-50/50 font-semibold border-t border-gray-200">
-                                <td colSpan={4} className="py-3 px-3.5 text-gray-700">Total Received</td>
-                                <td className="py-3 px-3.5 text-emerald-700 font-bold">{formatCurrency(totalReceived)}</td>
-                                <td colSpan={2} />
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Invoices */}
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                        <FileText size={14} className="text-amber-600" />
-                        Invoices
-                      </h3>
-                      {order.invoices.length === 0 ? (
-                        <div className="py-8 text-center border border-dashed border-gray-200 rounded-xl">
-                          <FileText size={28} className="mx-auto text-gray-300 mb-2" />
-                          <p className="text-xs text-gray-400">No invoices generated yet</p>
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                                {['Invoice No.', 'Date', 'Amount (₹)', 'Paid (₹)', 'Balance (₹)', 'Status', ''].map(h => (
-                                  <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {order.invoices.map((inv: any, i) => (
-                                <tr key={inv.id || i} className="hover:bg-amber-50/30 transition-colors">
-                                  <td className="py-3 px-3.5 font-mono text-xs font-semibold text-blue-700">{inv.invoice_no}</td>
-                                  <td className="py-3 px-3.5 text-gray-700">{inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('en-IN') : '—'}</td>
-                                  <td className="py-3 px-3.5 font-semibold text-gray-900">{formatCurrency(inv.invoice_amount)}</td>
-                                  <td className="py-3 px-3.5 text-emerald-700">{formatCurrency(inv.paid_amount)}</td>
-                                  <td className="py-3 px-3.5 font-bold text-blue-700">{formatCurrency(inv.balance)}</td>
-                                  <td className="py-3 px-3.5">
-                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide ${inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : inv.status === 'Partially Paid' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>{inv.status}</span>
-                                  </td>
-                                  <td className="py-3 px-3.5">
-                                    <button onClick={() => inv.id && handleDeleteInvoice(inv.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-all"><Trash2 size={13} /></button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Payment Terms Sidebar */}
                   <div className="space-y-4">
                     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200/60 p-5 space-y-4">
@@ -902,15 +882,6 @@ export default function SalesOrderDetail() {
                           <p className="text-sm font-semibold text-blue-900 mt-0.5">{order.customer_name || customers.find(c => c.id === order.customer_id)?.name || '—'}</p>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Payment Progress */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-5">
-                      <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3">Collection Progress</h4>
-                      <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-green-500 rounded-full transition-all duration-500" style={{ width: `${Math.min((totalReceived / (order.grand_total || 1)) * 100, 100)}%` }} />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">{((totalReceived / (order.grand_total || 1)) * 100).toFixed(1)}% collected</p>
                     </div>
                   </div>
                 </div>
@@ -1009,42 +980,6 @@ export default function SalesOrderDetail() {
 
 
       {/* ==================== MODALS ==================== */}
-
-      {/* Item Modal */}
-      {showItemModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setShowItemModal(false)}>
-          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-blue-100"><Package size={14} className="text-blue-600" /></div>
-                <h3 className="text-sm font-bold text-gray-900">{editingItem ? 'Edit Item' : 'Add Item'}</h3>
-              </div>
-              <button onClick={() => setShowItemModal(false)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"><X size={16} /></button>
-            </div>
-            <div className="p-6 grid grid-cols-2 gap-4">
-              <Input label="Item Code" value={itemForm.item_code} placeholder="e.g. ITM-00045" onChange={(e) => setItemForm(p => ({ ...p, item_code: e.target.value }))} />
-              <Input label="Item Description" required value={itemForm.item_description} placeholder="e.g. Finished Leather" onChange={(e) => setItemForm(p => ({ ...p, item_description: e.target.value }))} />
-              <Input label="Leather Type" value={itemForm.leather_type} placeholder="e.g. Cow, Buffalo" onChange={(e) => setItemForm(p => ({ ...p, leather_type: e.target.value }))} />
-              <Input label="Finish / Color" value={itemForm.finish_color} placeholder="e.g. Black Finish" onChange={(e) => setItemForm(p => ({ ...p, finish_color: e.target.value }))} />
-              <Input label="Thickness (mm)" value={itemForm.thickness} placeholder="e.g. 1.2 - 1.4" onChange={(e) => setItemForm(p => ({ ...p, thickness: e.target.value }))} />
-              <Input label="UOM" value={itemForm.uom} placeholder="e.g. Sq.Ft." onChange={(e) => setItemForm(p => ({ ...p, uom: e.target.value }))} />
-              <Input label="Quantity" required type="number" value={String(itemForm.quantity)} onChange={(e) => setItemForm(p => ({ ...p, quantity: Number(e.target.value) }))} />
-              <Input label="Unit Price (₹)" required type="number" value={String(itemForm.unit_price)} onChange={(e) => setItemForm(p => ({ ...p, unit_price: Number(e.target.value) }))} />
-              <Input label="Discount (%)" type="number" value={String(itemForm.discount_percent)} onChange={(e) => setItemForm(p => ({ ...p, discount_percent: Number(e.target.value) }))} />
-              <div className="flex flex-col justify-end">
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Calculated Amount</label>
-                <div className="px-3.5 py-2.5 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg font-bold">
-                  {formatCurrency(calcItem(itemForm).amount)}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl">
-              <button onClick={() => setShowItemModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all">Cancel</button>
-              <button onClick={handleSaveItem} className="px-5 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 shadow-sm transition-all">{editingItem ? 'Update Item' : 'Add Item'}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delivery Modal */}
       {showDeliveryModal && (

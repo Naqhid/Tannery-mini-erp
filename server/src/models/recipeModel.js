@@ -62,21 +62,36 @@ export async function getByCode(code) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query("SELECT code FROM recipes ORDER BY id DESC LIMIT 1");
-  if (!row) return 'RC-00001';
-  const num = parseInt(row.code.split('-')[1], 10) + 1;
-  return `RC-${String(num).padStart(5, '0')}`;
+  const [rows] = await pool.query("SELECT code FROM recipes WHERE code LIKE 'RC-%'");
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `RC-${String(maxNum + 1).padStart(5, '0')}`;
 }
 
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
+  // If product_id is actually a BOM id, resolve the real product_id
+  let productId = data.product_id || null;
+  let bomId = data.bom_id || null;
+  if (productId && !bomId) {
+    // Check if product_id is actually a BOM
+    const [[bomCheck]] = await pool.query('SELECT id, product_id FROM boms WHERE id = ?', [productId]);
+    if (bomCheck) {
+      bomId = bomCheck.id;
+      productId = bomCheck.product_id || null;
+    }
+  }
   const [result] = await pool.query(
-    `INSERT INTO recipes (code, name, leather_type, thickness, process_type, color, finish_type, uom, status, valid_from, valid_to, version, description, product_id, leather_type_id, finish_type_id, color_id, uom_id, thickness_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO recipes (code, name, leather_type, thickness, process_type, color, finish_type, uom, status, valid_from, valid_to, version, description, product_id, bom_id, leather_type_id, finish_type_id, color_id, uom_id, thickness_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [code, data.name, data.leather_type, data.thickness, data.process_type,
      data.color, data.finish_type, data.uom, data.status || 'draft',
      data.valid_from, data.valid_to, data.version || 1, data.description,
-     data.product_id || null, data.leather_type_id || null, data.finish_type_id || null,
+     productId, bomId, data.leather_type_id || null, data.finish_type_id || null,
      data.color_id || null, data.uom_id || null, data.thickness_id || null,
      createdBy]
   );
@@ -84,12 +99,22 @@ export async function create(data, createdBy = null) {
 }
 
 export async function update(id, data, updatedBy = null) {
+  // If product_id is actually a BOM id, resolve the real product_id
+  let productId = data.product_id || null;
+  let bomId = data.bom_id || null;
+  if (productId && !bomId) {
+    const [[bomCheck]] = await pool.query('SELECT id, product_id FROM boms WHERE id = ?', [productId]);
+    if (bomCheck) {
+      bomId = bomCheck.id;
+      productId = bomCheck.product_id || null;
+    }
+  }
   const [result] = await pool.query(
-    `UPDATE recipes SET code=?, name=?, leather_type=?, thickness=?, process_type=?, color=?, finish_type=?, uom=?, status=?, valid_from=?, valid_to=?, version=?, description=?, product_id=?, leather_type_id=?, finish_type_id=?, color_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
+    `UPDATE recipes SET code=?, name=?, leather_type=?, thickness=?, process_type=?, color=?, finish_type=?, uom=?, status=?, valid_from=?, valid_to=?, version=?, description=?, product_id=?, bom_id=?, leather_type_id=?, finish_type_id=?, color_id=?, uom_id=?, thickness_id=?, updated_by=? WHERE id=?`,
     [data.code, data.name, data.leather_type, data.thickness, data.process_type,
      data.color, data.finish_type, data.uom, data.status,
      data.valid_from, data.valid_to, data.version, data.description,
-     data.product_id || null, data.leather_type_id || null, data.finish_type_id || null,
+     productId, bomId, data.leather_type_id || null, data.finish_type_id || null,
      data.color_id || null, data.uom_id || null, data.thickness_id || null,
      updatedBy, id]
   );

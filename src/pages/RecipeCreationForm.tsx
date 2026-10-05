@@ -4,12 +4,12 @@ import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import {
   Plus, Save, X, Edit2, Trash2, ArrowLeft, FlaskConical, RotateCcw,
-  ClipboardList, Settings, Paperclip, MessageSquare,
+  ClipboardList, Settings, Paperclip, MessageSquare, Send,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import Select from '../components/ui/Select';
-import Table from '../components/ui/Table';
 import { useDropdowns } from '../lib/useDropdowns';
 import { usePermission } from '../lib/usePermission';
 import api from '../lib/api';
@@ -121,8 +121,10 @@ export default function RecipeCreationForm() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [originalVersion, setOriginalVersion] = useState<number>(1);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isPosted, setIsPosted] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [showPostConfirm, setShowPostConfirm] = useState(false);
 
-  // Item/Stage modals
   const [showItemModal, setShowItemModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RecipeItem | null>(null);
   const [itemForm, setItemForm] = useState({ material_id: '', qty: '' });
@@ -138,6 +140,23 @@ export default function RecipeCreationForm() {
 
   const dropdowns = useDropdowns(['products', 'leather-types', 'uom', 'thickness', 'colors', 'finish-types', 'process-stages', 'machines']);
 
+  const [bomList, setBomList] = useState<{ id: number; code: string; name: string; product_id: number | null; product_name: string; leather_type: string; leather_type_name: string; process_type: string; thickness: string; thickness_name: string; uom: string; uom_name: string; version: number }[]>([]);
+
+  const fetchBomList = useCallback(async () => {
+    try {
+      const res = await api<{ data: any[] }>('/boms?limit=500&status=Active');
+      setBomList((res.data || []).map((b: any) => ({
+        id: b.id, code: b.code, name: b.name, product_id: b.product_id,
+        product_name: b.product_name || '', leather_type: b.leather_type || '',
+        leather_type_name: b.leather_type_name || b.leather_type || '',
+        process_type: b.process_type || '', thickness: b.thickness || '',
+        thickness_name: b.thickness_name || b.thickness || '',
+        uom: b.uom || '', uom_name: b.uom_name || b.uom || '',
+        version: b.version || 1,
+      })));
+    } catch { setBomList([]); }
+  }, []);
+
   const fetchMaterials = useCallback(async () => {
     try {
       const res = await api<{ data: Material[] }>('/materials?limit=500');
@@ -145,7 +164,7 @@ export default function RecipeCreationForm() {
     } catch { setMaterials([]); }
   }, []);
 
-  useEffect(() => { fetchMaterials(); }, [fetchMaterials]);
+  useEffect(() => { fetchMaterials(); fetchBomList(); }, [fetchMaterials, fetchBomList]);
 
   const formatDate = (dateStr: string | undefined | null): string => {
     if (!dateStr) return '';
@@ -155,7 +174,13 @@ export default function RecipeCreationForm() {
   };
 
   const fetchRecipe = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/recipes/next-code');
+        if (res.data?.code) setFormData((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const detail = await api<{ data: Recipe & { items: RecipeItem[]; stages: ProcessStage[]; attachments: RecipeAttachment[] } }>(`/recipes/${id}`);
@@ -168,7 +193,8 @@ export default function RecipeCreationForm() {
       });
       setOriginalVersion(recipe.version || 1);
       setHasChanges(false);
-      setStatusToggle(recipe.status === 'active' || recipe.status === 'Active');
+      setIsPosted(recipe.status === 'posted' || recipe.status === 'Posted');
+      setStatusToggle(recipe.status === 'active' || recipe.status === 'Active' || recipe.status === 'posted' || recipe.status === 'Posted');
       setRecipeItems(detail.data.items || []);
       setStages(detail.data.stages || []);
       setAttachments(detail.data.attachments || []);
@@ -188,36 +214,42 @@ export default function RecipeCreationForm() {
     }
   };
 
-  const handleProductChange = async (productId: string) => {
-    const product = dropdowns['products']?.data.find((p: any) => p.id === Number(productId));
-    if (product) {
+  const handleProductChange = async (bomId: string) => {
+    const bom = bomList.find(b => b.id === Number(bomId));
+    if (bom) {
       setFormData(prev => ({
         ...prev,
-        product_id: product.id,
-        name: prev.name || product.name,
-        leather_type: product.leather_type || prev.leather_type,
-        leather_type_id: product.leather_type_id || prev.leather_type_id,
-        thickness: product.thickness || prev.thickness,
-        thickness_id: product.thickness_id || prev.thickness_id,
-        finish_type: product.finish_type || prev.finish_type,
-        finish_type_id: product.finish_type_id || prev.finish_type_id,
-        uom: product.uom || prev.uom,
-        uom_id: product.uom_id || prev.uom_id,
-        color: product.color || prev.color,
-        color_id: product.color_id || prev.color_id,
+        product_id: bom.id,
+        name: prev.name || bom.name,
+        leather_type: bom.leather_type_name || bom.leather_type || prev.leather_type,
+        thickness: bom.thickness_name || bom.thickness || prev.thickness,
+        process_type: bom.process_type || prev.process_type,
+        uom: bom.uom_name || bom.uom || prev.uom,
       }));
+      // Load BOM items as recipe items
       try {
-        const res = await api<{ data: any[] }>(`/recipes/bom-items/${product.id}`);
-        if (res.data && res.data.length > 0) {
-          const bomItems = res.data.map((item: any) => ({
+        const res = await api<{ data: any }>(`/boms/${bom.id}`);
+        const bomData = res.data;
+        // Also populate from the detail response which has more complete data
+        setFormData(prev => ({
+          ...prev,
+          leather_type: bomData.leather_type_name || bom.leather_type_name || prev.leather_type,
+          thickness: bomData.thickness_name || bom.thickness_name || prev.thickness,
+          uom: bomData.uom_name || bom.uom_name || prev.uom,
+          finish_type: bomData.finish_type_name || prev.finish_type,
+          color: bomData.color_name || prev.color,
+        }));
+        const bomItems = bomData?.items || [];
+        if (bomItems.length > 0) {
+          const items: RecipeItem[] = bomItems.map((item: any) => ({
             id: Date.now() + Math.random(),
-            material_id: item.material_id,
-            material_code: item.material_code,
-            material_name: item.material_name,
-            uom: item.uom,
-            qty: item.qty,
+            material_id: item.material_id || item.machine_id,
+            material_code: item.material_code || '',
+            material_name: item.material_name || '',
+            uom: item.uom || '',
+            qty: Number(item.qty) || 0,
           }));
-          setRecipeItems(bomItems);
+          setRecipeItems(items);
         }
       } catch {}
     } else {
@@ -241,6 +273,19 @@ export default function RecipeCreationForm() {
     } catch (err) {
       toast.error('Failed to save recipe: ' + (err as Error).message);
     } finally { setSaving(false); }
+  };
+
+  const handlePost = async () => {
+    if (!formData.id) return;
+    setPosting(true);
+    try {
+      await api(`/recipes/${formData.id}`, { method: 'PUT', body: JSON.stringify({ ...formData, status: 'posted' }) });
+      toast.success('Recipe posted successfully!');
+      setIsPosted(true);
+      setShowPostConfirm(false);
+    } catch (err) {
+      toast.error('Failed to post recipe: ' + (err as Error).message);
+    } finally { setPosting(false); }
   };
 
   // Item CRUD
@@ -517,10 +562,10 @@ export default function RecipeCreationForm() {
           </div>
           <Input label="Recipe Name" required value={formData.name || ''} placeholder="Enter name" onChange={(e) => updateField('name', e.target.value)} />
           <Select
-            label="Product"
+            label="BOM Name"
             options={[
-              { value: '', label: dropdowns['products']?.loading ? 'Loading...' : 'Select product' },
-              ...(dropdowns['products']?.options || []),
+              { value: '', label: bomList.length === 0 ? 'Loading...' : 'Select BOM' },
+              ...bomList.map(b => ({ value: String(b.id), label: `${b.code} - ${b.name} (V${b.version})` })),
             ]}
             value={String(formData.product_id || '')}
             onChange={(e) => handleProductChange(e.target.value)}
@@ -617,9 +662,54 @@ export default function RecipeCreationForm() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs text-gray-500">Total Qty: <strong>{totalQty.toFixed(3)}</strong></span>
-              <Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={openAddItem}>Add Item</Button>
+              <button onClick={() => setRecipeItems(prev => [...prev, { id: Date.now(), material_id: 0, material_code: '', material_name: '', uom: '', qty: 0 }])}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
+                <Plus size={12} /> Add Row
+              </button>
             </div>
-            <Table columns={recipeItemColumns} data={recipeItems} />
+            <div className="border border-gray-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-200">
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[220px]">Material</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">UOM</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-24">Qty / Sq.Ft.</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-12"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {recipeItems.length === 0 ? (
+                    <tr><td colSpan={5} className="py-8 text-center text-gray-400">No items. Click "Add Row" to start or select a BOM.</td></tr>
+                  ) : recipeItems.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-blue-50/20">
+                      <td className="py-1.5 px-2 text-gray-500">{idx + 1}</td>
+                      <td className="py-1.5 px-2">
+                        <SearchableSelect
+                          options={materials.map(m => ({ value: String(m.id), label: `${m.code} - ${m.name}` }))}
+                          value={String(item.material_id || '')}
+                          onChange={(val) => {
+                            const mat = materials.find(m => m.id === Number(val));
+                            setRecipeItems(prev => prev.map(i => i.id === item.id ? { ...i, material_id: Number(val), material_code: mat?.code || '', material_name: mat?.name || '', uom: mat?.uom || i.uom } : i));
+                          }}
+                          placeholder="Search material..."
+                          addNewPath="/chemical-master/new"
+                          addNewLabel="Add Material"
+                        />
+                      </td>
+                      <td className="py-1.5 px-2 text-gray-600">{item.uom || '-'}</td>
+                      <td className="py-1.5 px-2">
+                        <input type="number" step="0.001" value={item.qty || ''} onChange={(e) => setRecipeItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i))}
+                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <button onClick={() => handleDeleteItem(item.id!)} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -627,23 +717,107 @@ export default function RecipeCreationForm() {
         {activeDetailTab === 'stages' && (
           <div>
             <div className="flex items-center justify-end mb-3">
-              <Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={openAddStage}>Add Stage</Button>
+              <button onClick={openAddStage} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
+                <Plus size={12} /> Add Stage
+              </button>
             </div>
-            <Table columns={processStagesColumns} data={stages} />
+            <div className="border border-gray-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-200">
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-8">#</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-12">Seq</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[140px]">Process Stage</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 min-w-[140px]">Machine</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-20">Duration</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-16">Temp</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-16">Speed</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-12">QC</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-gray-600 w-16"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {stages.length === 0 ? (
+                    <tr><td colSpan={9} className="py-8 text-center text-gray-400">No stages. Click "Add Stage" to define process steps.</td></tr>
+                  ) : stages.map((stage, idx) => (
+                    <tr key={stage.id} className="hover:bg-blue-50/20">
+                      <td className="py-1.5 px-2 text-gray-500">{idx + 1}</td>
+                      <td className="py-1.5 px-2 text-gray-700">{stage.seq}</td>
+                      <td className="py-1.5 px-2 text-gray-700 font-medium">{stage.process_stage || stage.process_stage_name || '-'}</td>
+                      <td className="py-1.5 px-2 text-gray-600">{stage.machine || stage.machine_name || '-'}</td>
+                      <td className="py-1.5 px-2 text-gray-600">{stage.duration} min</td>
+                      <td className="py-1.5 px-2 text-gray-600">{stage.temperature || '-'}</td>
+                      <td className="py-1.5 px-2 text-gray-600">{stage.speed || '-'}</td>
+                      <td className="py-1.5 px-2">
+                        <input type="checkbox" checked={stage.qc_check} readOnly className="w-3.5 h-3.5 rounded border-gray-300" />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openEditStage(stage)} className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
+                          <button onClick={() => handleDeleteStage(stage.id!)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {/* Tab Content: Attachments */}
         {activeDetailTab === 'attachments' && (
           <div>
+            {!isNew && formData.id && (
+              <div className="flex items-center justify-end mb-3">
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all cursor-pointer">
+                  <Paperclip size={12} /> Upload File
+                  <input type="file" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !formData.id) return;
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    try {
+                      const token = localStorage.getItem('tannery_token');
+                      const apiBase = import.meta.env.VITE_API_BASE || '/api';
+                      const res = await fetch(`${apiBase}/recipes/${formData.id}/attachments`, {
+                        method: 'POST',
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        body: fd,
+                      });
+                      if (!res.ok) throw new Error('Upload failed');
+                      toast.success('File uploaded!');
+                      const detail = await api<{ data: Recipe & { attachments: RecipeAttachment[] } }>(`/recipes/${formData.id}`);
+                      setAttachments(detail.data.attachments || []);
+                    } catch (err) { toast.error('Upload failed: ' + (err as Error).message); }
+                    e.target.value = '';
+                  }} />
+                </label>
+              </div>
+            )}
+            {isNew && <p className="text-xs text-amber-600 mb-3">Save the recipe first to upload attachments.</p>}
             {attachments.length === 0 ? (
               <p className="text-xs text-gray-400 py-6 text-center">No attachments uploaded yet.</p>
             ) : (
               <div className="space-y-2">
                 {attachments.map(att => (
-                  <div key={att.id} className="flex items-center justify-between p-2 border border-gray-100 rounded-lg">
-                    <span className="text-xs text-gray-700">{att.file_name}</span>
-                    <span className="text-[10px] text-gray-400">{att.uploaded_at}</span>
+                  <div key={att.id} className="flex items-center justify-between p-2.5 border border-gray-100 rounded-lg hover:bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <Paperclip size={14} className="text-gray-400" />
+                      <span className="text-xs text-gray-700 font-medium">{att.file_name}</span>
+                      <span className="text-[10px] text-gray-400">{(att.file_size / 1024).toFixed(1)} KB</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400">{att.uploaded_at?.split('T')[0]}</span>
+                      <button onClick={async () => {
+                        if (!formData.id) return;
+                        try {
+                          await api(`/recipes/${formData.id}/attachments/${att.id}`, { method: 'DELETE' });
+                          setAttachments(prev => prev.filter(a => a.id !== att.id));
+                          toast.success('Attachment removed');
+                        } catch { toast.error('Failed to remove'); }
+                      }} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -687,41 +861,23 @@ export default function RecipeCreationForm() {
         <button onClick={() => navigate('/recipe-creation')} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all">
           <RotateCcw size={13} /> Cancel
         </button>
-        <button
-          onClick={canWrite ? handleSave : undefined}
-          disabled={saving || isReadOnly}
-          className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${isReadOnly ? 'cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg active:scale-95'}`}
-        >
-          <Save size={13} /> {saving ? 'Saving...' : isNew ? 'Save Recipe' : 'Update'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={canWrite && !isPosted ? () => setShowPostConfirm(true) : undefined}
+            disabled={isNew || isPosted || posting || isReadOnly}
+            className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-medium text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${(isNew || isPosted || isReadOnly) ? 'cursor-not-allowed' : 'shadow-emerald-200 hover:shadow-lg active:scale-95'}`}
+          >
+            <Send size={13} /> {posting ? 'Posting...' : isPosted ? 'Posted' : 'Post'}
+          </button>
+          <button
+            onClick={canWrite && !isPosted ? handleSave : undefined}
+            disabled={saving || isReadOnly || isPosted}
+            className={`inline-flex items-center gap-1.5 px-5 py-2 text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md transition-all disabled:opacity-50 ${(isReadOnly || isPosted) ? 'cursor-not-allowed' : 'shadow-blue-200 hover:shadow-lg active:scale-95'}`}
+          >
+            <Save size={13} /> {saving ? 'Saving...' : isNew ? 'Save Recipe' : 'Update'}
+          </button>
+        </div>
       </div>
-
-      {/* Item Modal */}
-      {showItemModal && createPortal(
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[70] flex items-center justify-center" onClick={() => setShowItemModal(false)}>
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl mx-3 p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-bold text-gray-900 mb-4">{selectedItem ? 'Edit Item' : 'Add Item'}</h3>
-            <div className="space-y-3">
-              <Select
-                label="Material"
-                required
-                options={[
-                  { value: '', label: 'Select material' },
-                  ...materials.map(m => ({ value: String(m.id), label: `${m.code} - ${m.name}` })),
-                ]}
-                value={itemForm.material_id}
-                onChange={(e) => setItemForm(prev => ({ ...prev, material_id: e.target.value }))}
-              />
-              <Input label="Qty" required type="number" value={itemForm.qty} onChange={(e) => setItemForm(prev => ({ ...prev, qty: e.target.value }))} />
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-5">
-              <button onClick={() => setShowItemModal(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
-              <button onClick={handleSaveItem} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">{selectedItem ? 'Update' : 'Add'}</button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Stage Modal */}
       {showStageModal && createPortal(
@@ -765,6 +921,39 @@ export default function RecipeCreationForm() {
             <div className="flex items-center justify-end gap-2 mt-5">
               <button onClick={() => setShowStageModal(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
               <button onClick={handleSaveStage} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">{selectedStage ? 'Update' : 'Add'}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Post Confirmation Dialog */}
+      {showPostConfirm && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80] flex items-center justify-center">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl mx-4 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg className="w-7 h-7 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Post</h3>
+              <p className="text-sm text-gray-600">Once posted, this recipe cannot be edited or deleted. Are you sure you want to continue?</p>
+            </div>
+            <div className="flex border-t border-gray-200">
+              <button
+                onClick={() => setShowPostConfirm(false)}
+                className="flex-1 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePost}
+                disabled={posting}
+                className="flex-1 py-3 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {posting ? 'Posting...' : 'Yes, Post'}
+              </button>
             </div>
           </div>
         </div>,

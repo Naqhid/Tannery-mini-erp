@@ -1,10 +1,11 @@
 import * as model from '../models/materialIssueModel.js';
+import { getIssueItemInfo } from '../models/materialTransactionModel.js';
 
 export async function list(req, res, next) {
   try {
-    const { search, status, warehouse_id, sortBy, sortOrder } = req.query;
+    const { search, status, warehouse_id, process_stage, sortBy, sortOrder } = req.query;
     const { page, limit } = req;
-    const { rows, total } = await model.getAll({ search, status, warehouse_id, page, limit, sortBy, sortOrder });
+    const { rows, total } = await model.getAll({ search, status, warehouse_id, process_stage, page, limit, sortBy, sortOrder });
     res.json({ data: rows, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (err) { next(err); }
 }
@@ -79,5 +80,34 @@ export async function getBOMItems(req, res, next) {
     const productId = req.params.productId;
     const rows = await model.getBOMItemsByProduct(productId);
     res.json({ data: rows });
+  } catch (err) { next(err); }
+}
+
+
+export async function itemInfo(req, res, next) {
+  try {
+    const warehouseId = Number(req.query.warehouse_id);
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    if (!warehouseId) return res.status(400).json({ error: 'warehouse_id is required' });
+    const data = await getIssueItemInfo({ warehouseId, itemId: Number(req.params.itemId), date });
+    res.json({ data });
+  } catch (err) { next(err); }
+}
+
+export async function planStages(req, res, next) {
+  try {
+    const planNo = req.query.plan_no;
+    if (!planNo) return res.status(400).json({ error: 'plan_no is required' });
+    const data = await model.getPlanWithStagesByNo(planNo);
+    if (!data) return res.status(404).json({ error: 'Production plan not found' });
+    res.json({ data });
+  } catch (err) { next(err); }
+}
+
+export async function previousIssue(req, res, next) {
+  try {
+    const data = await model.getPreviousIssueByArticle(req.query.article, req.query.exclude_id || null);
+    if (!data) return res.status(404).json({ error: 'No previous issue found for this article' });
+    res.json({ data });
   } catch (err) { next(err); }
 }

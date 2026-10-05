@@ -226,7 +226,7 @@ export default function StockOpeningEntryDetail() {
           <Input label="Opening Date" type="date" required value={entry.opening_date} onChange={(e) => update('opening_date', e.target.value)} />
           {/* Row 2: Financial Year, Warehouse/Store*, Remarks, Costing Method */}
           <Select label="Financial Year" options={FINANCIAL_YEARS} value={entry.financial_year} onChange={(e) => update('financial_year', e.target.value)} />
-          <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={entry.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} />
+          <Select label="Warehouse / Store" required options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map((w) => ({ value: String(w.id), label: `${w.name} (${w.code})` }))]} value={entry.warehouse_id} onChange={(e) => update('warehouse_id', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">Remarks</label>
             <textarea

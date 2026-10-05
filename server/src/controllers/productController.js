@@ -63,6 +63,13 @@ export async function dropdown(_req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function nextCode(_req, res, next) {
+  try {
+    const code = await model.getNextCode();
+    res.json({ data: { code, next_code: code } });
+  } catch (err) { next(err); }
+}
+
 export async function restore(req, res, next) {
   try {
     const ok = await model.restore(req.params.id);

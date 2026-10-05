@@ -309,8 +309,9 @@ export default function SupplierPriceApproval() {
             <h1 className="text-lg font-bold text-blue-700">Pending Price Approvals</h1>
           </div>
 
-          {/* Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+          {/* Filters — 3 per row so they wrap onto multiple lines and the
+              action buttons remain fully visible. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Supplier</label>
               <select value={filters.supplier} onChange={e => setFilters(p => ({ ...p, supplier: e.target.value }))} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
@@ -351,19 +352,19 @@ export default function SupplierPriceApproval() {
                 <option value="Rejected">Rejected</option>
               </select>
             </div>
-            <div className="flex items-end gap-2">
+            <div className="flex items-end justify-end gap-2 sm:col-span-2 lg:col-span-3">
               <button onClick={clearFilters} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                 <X className="w-4 h-4" /> Clear
               </button>
-              <button onClick={handleSearch} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+              <button onClick={handleSearch} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-md shadow-blue-600/30 border border-blue-700 transition-all">
                 <Search className="w-4 h-4" /> Search
               </button>
             </div>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -425,6 +426,48 @@ export default function SupplierPriceApproval() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-4 space-y-3">{[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          ) : data.length === 0 ? (
+            <div className="py-12 text-center"><p className="text-sm text-gray-500">No pending approvals found</p></div>
+          ) : (
+            data.map(req => (
+              <div
+                key={req.id}
+                onClick={() => handleRowClick(req)}
+                className={`p-4 transition-colors cursor-pointer ${selectedRequest?.id === req.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'active:bg-gray-50'}`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{req.material_name}</p>
+                    <p className="text-xs text-blue-600 font-mono mt-0.5">{req.request_no}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 shrink-0 ml-2">{req.status}</span>
+                </div>
+                <p className="text-xs text-gray-600 mb-2 truncate">{req.supplier_name}</p>
+                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Current</p>
+                    <p className="text-xs font-bold text-gray-900">₹{Number(req.current_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Requested</p>
+                    <p className="text-xs font-bold text-gray-900">₹{Number(req.requested_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Change</p>
+                    <p className={`text-xs font-bold ${(req.change_percent || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {(req.change_percent || 0) > 0 ? '+' : ''}{Number(req.change_percent || 0).toFixed(2)}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Selection actions */}

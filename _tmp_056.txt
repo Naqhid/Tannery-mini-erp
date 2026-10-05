@@ -1,0 +1,3 @@
+mysql: [Warning] Using a password on the command line interface can be insecure.
+materials_seeded	total_qty	total_value
+0	0.000	0.00

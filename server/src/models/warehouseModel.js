@@ -60,12 +60,16 @@ export async function getById(id) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query(
-    `SELECT code FROM warehouses ORDER BY id DESC LIMIT 1`
+  const [rows] = await pool.query(
+    `SELECT code FROM warehouses WHERE code LIKE 'WH-%'`
   );
-  if (!row) return 'WH-001';
-  const num = parseInt((row.code.split('-')[1] || '0'), 10) + 1;
-  return `WH-${String(num).padStart(3, '0')}`;
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `WH-${String(maxNum + 1).padStart(3, '0')}`;
 }
 
 export async function getDropdown() {

@@ -1,0 +1,235 @@
+import { useState, useRef, useEffect, useCallback, forwardRef } from 'react';
+import { createPortal } from 'react-dom';
+import { Search, ChevronDown, X, Plus, RefreshCw } from 'lucide-react';
+
+interface Option {
+  value: string;
+  label: string;
+  searchText?: string;
+}
+
+interface SearchableSelectProps {
+  options: Option[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  /** When set, shows a "+ Add New" action that opens this master form in a new tab. */
+  addNewPath?: string;
+  /** Label for the add-new action (e.g. "Add Customer"). */
+  addNewLabel?: string;
+  /** When set, shows a refresh button that re-fetches the dropdown's options. */
+  onRefresh?: () => void | Promise<void>;
+  /** Focus the closed select after it is mounted (useful for fast row entry). */
+  autoFocus?: boolean;
+  /** Optional identifier used by parent grids to move focus programmatically. */
+  dataGridField?: string;
+}
+
+const SearchableSelect = forwardRef<HTMLButtonElement, SearchableSelectProps>(function SearchableSelect({ options, value, onChange, placeholder = 'Search...', disabled = false, addNewPath, addNewLabel = 'Add New', onRefresh, autoFocus = false, dataGridField }, forwardedRef) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number; openAbove: boolean }>({ top: 0, left: 0, width: 0, openAbove: false });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const selectedOption = options.find(o => o.value === value);
+
+  const filtered = search.trim()
+    ? options.filter(o => `${o.label} ${o.searchText || ''}`.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  const DROPDOWN_HEIGHT = 240; // max-h-60 = 240px
+
+  const updatePosition = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const openAbove = spaceBelow < DROPDOWN_HEIGHT && spaceAbove > spaceBelow;
+
+      setDropdownPos({
+        top: openAbove ? rect.top - DROPDOWN_HEIGHT - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        openAbove,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        containerRef.current && !containerRef.current.contains(e.target as Node) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      updatePosition();
+      if (inputRef.current) inputRef.current.focus();
+      // Reposition on scroll/resize
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (autoFocus && !disabled) {
+      requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }, [autoFocus, disabled]);
+
+  const setTriggerRef = (node: HTMLButtonElement | null) => {
+    triggerRef.current = node;
+    if (typeof forwardedRef === 'function') forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  };
+
+  const selectFirstMatch = () => {
+    if (filtered.length === 1) {
+      onChange(filtered[0].value);
+      setOpen(false);
+      setSearch('');
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Display / trigger */}
+      <button
+        ref={setTriggerRef}
+        data-grid-field={dataGridField}
+        type="button"
+        disabled={disabled}
+        onClick={() => { if (!disabled) { setOpen(!open); setSearch(''); } }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSearch('');
+            setOpen(true);
+          }
+        }}
+        className={`w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white flex items-center justify-between cursor-pointer hover:border-blue-300 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${open ? 'ring-2 ring-blue-500/20 border-blue-500' : ''}`}
+      >
+        <span className={`truncate ${selectedOption ? 'text-gray-900' : 'text-gray-400'}`}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {value && !disabled && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onChange(''); }}
+              className="p-0.5 hover:bg-gray-100 rounded"
+            >
+              <X size={12} className="text-gray-400" />
+            </button>
+          )}
+          <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {/* Dropdown rendered via portal to avoid nested scroll issues */}
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: Math.max(dropdownPos.width, 220),
+            zIndex: 9999,
+            maxHeight: DROPDOWN_HEIGHT,
+          }}
+          className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+        >
+          {/* Search input */}
+          <div className="p-2 border-b border-gray-100">
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); selectFirstMatch(); }
+                    if (e.key === 'Escape') { e.preventDefault(); setOpen(false); triggerRef.current?.focus(); }
+                  }}
+                  placeholder="Type to search..."
+                  className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:border-blue-400"
+                />
+              </div>
+              {onRefresh && (
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (refreshing) return;
+                    try { setRefreshing(true); await onRefresh(); } finally { setRefreshing(false); }
+                  }}
+                  disabled={refreshing}
+                  title="Refresh list"
+                  className="shrink-0 p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                >
+                  <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Add New action — opens the master form in a new tab so the
+              in-progress form isn't lost. */}
+          {addNewPath && (
+            <a
+              href={addNewPath}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 border-b border-gray-100 transition-colors"
+            >
+              <Plus size={13} /> {addNewLabel}
+            </a>
+          )}
+          {/* Options list */}
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-xs text-gray-400 text-center">No results found</div>
+            ) : (
+              filtered.slice(0, 100).map((opt) => (
+                <div
+                  key={opt.value}
+                  onClick={() => { onChange(opt.value); setOpen(false); setSearch(''); }}
+                  className={`px-3 py-2 text-xs cursor-pointer hover:bg-blue-50 transition-colors ${opt.value === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                >
+                  {opt.label}
+                </div>
+              ))
+            )}
+            {filtered.length > 100 && (
+              <div className="px-3 py-2 text-[10px] text-gray-400 text-center border-t">Showing first 100 results. Type to narrow down.</div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+});
+
+SearchableSelect.displayName = 'SearchableSelect';
+
+export default SearchableSelect;

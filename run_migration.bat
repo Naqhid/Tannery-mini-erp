@@ -8,3 +8,4 @@ set DB_NAME=tannery_mini_erp
 
 %MYSQL_PATH% -u %DB_USER% -p%DB_PASS% -h %DB_HOST% -P %DB_PORT% %DB_NAME% < server\sql\migrations\007_new_modules_batch_pricing_stock.sql
 pause
+%MYSQL_PATH% -u %DB_USER% -p%DB_PASS% -h %DB_HOST% -P %DB_PORT% %DB_NAME% < server\sql\migrations\028_material_transactions_and_issue_updates.sql

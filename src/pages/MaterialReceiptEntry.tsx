@@ -4,6 +4,8 @@ import { Truck } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 
 const STATUS_COLORS: Record<string, string> = {
   Posted: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
@@ -48,6 +50,78 @@ export default function MaterialReceiptEntry() {
     toast.success(res.message || 'Receipt deleted!');
   };
 
+  const fetchAllReceipts = async () => {
+    const res = await api<{ data: any[] }>('/material-receipts?page=1&limit=99999');
+    return res.data || [];
+  };
+
+  const exportColumns = [
+    { key: 'id', header: 'ID' },
+    { key: 'receipt_no', header: 'Receipt No' },
+    { key: 'receipt_date', header: 'Receipt Date' },
+    { key: 'receipt_type', header: 'Receipt Type' },
+    { key: 'supplier_id', header: 'Supplier ID' },
+    { key: 'supplier_name', header: 'Supplier Name' },
+    { key: 'purchase_order_no', header: 'Purchase Order No' },
+    { key: 'po_date', header: 'PO Date' },
+    { key: 'challan_no', header: 'Challan No' },
+    { key: 'challan_date', header: 'Challan Date' },
+    { key: 'lr_grn_no', header: 'LR/GRN No' },
+    { key: 'lr_grn_date', header: 'LR/GRN Date' },
+    { key: 'transporter', header: 'Transporter' },
+    { key: 'gate_entry_no', header: 'Gate Entry No' },
+    { key: 'warehouse_id', header: 'Warehouse ID' },
+    { key: 'warehouse_name', header: 'Warehouse Name' },
+    { key: 'freight', header: 'Freight' },
+    { key: 'loading_charges', header: 'Loading Charges' },
+    { key: 'other_charges', header: 'Other Charges' },
+    { key: 'gst_percent', header: 'GST %' },
+    { key: 'cgst_amount', header: 'CGST Amount' },
+    { key: 'sgst_amount', header: 'SGST Amount' },
+    { key: 'total_gst_amount', header: 'Total GST Amount' },
+    { key: 'total_other_charges', header: 'Total Other Charges' },
+    { key: 'total_amount', header: 'Total Amount' },
+    { key: 'grand_total', header: 'Grand Total' },
+    { key: 'remarks', header: 'Remarks' },
+    { key: 'status', header: 'Status' },
+    { key: 'created_by', header: 'Created By' },
+    { key: 'updated_by', header: 'Updated By' },
+    { key: 'created_at', header: 'Created At' },
+  ];
+
+  const handlePreviewPDF = async () => {
+    try {
+      const data = await fetchAllReceipts();
+      const pdfColumns = ['Receipt No', 'Date', 'Supplier', 'Warehouse', 'Amount', 'Status'];
+      const rows = data.map((r: any) => [
+        r.receipt_no || '', formatDate(r.receipt_date), r.supplier_name || '—',
+        r.warehouse_name || '—', formatCurrency(r.grand_total), r.status || '',
+      ]);
+      previewPDF({ title: 'Material Receipts', columns: pdfColumns, rows, fileName: 'Material_Receipts' });
+    } catch { toast.error('Failed to generate PDF preview'); }
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      const data = await fetchAllReceipts();
+      const pdfColumns = ['Receipt No', 'Date', 'Supplier', 'Warehouse', 'Amount', 'Status'];
+      const rows = data.map((r: any) => [
+        r.receipt_no || '', formatDate(r.receipt_date), r.supplier_name || '—',
+        r.warehouse_name || '—', formatCurrency(r.grand_total), r.status || '',
+      ]);
+      downloadPDF({ title: 'Material Receipts', columns: pdfColumns, rows, fileName: 'Material_Receipts' });
+      toast.success('PDF downloaded!');
+    } catch { toast.error('Failed to download PDF'); }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const data = await fetchAllReceipts();
+      exportToExcel({ data, columns: exportColumns, fileName: 'Material_Receipts' });
+      toast.success('Excel downloaded!');
+    } catch { toast.error('Failed to download Excel'); }
+  };
+
   return (
     <TransactionListPage
       title="Material Receipts"
@@ -67,6 +141,7 @@ export default function MaterialReceiptEntry() {
       deleteMessage="Are you sure? This will remove the receipt entry."
       searchPlaceholder="Search receipts..."
       enableBulkDelete={true}
+      exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />
   );
 }

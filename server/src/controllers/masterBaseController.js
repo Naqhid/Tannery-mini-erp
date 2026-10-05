@@ -233,6 +233,15 @@ export function createMasterController(model, entityName, referenceChecks = []) 
     }
   }
 
+  async function nextCode(_req, res, next) {
+    try {
+      const code = await model.getNextCode();
+      res.json({ data: { code, next_code: code } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async function audit(req, res, next) {
     try {
       const data = await model.getAuditInfo(req.params.id);
@@ -260,6 +269,7 @@ export function createMasterController(model, entityName, referenceChecks = []) 
     checkDuplicate,
     stats,
     dropdown,
+    nextCode,
     audit,
   };
 }

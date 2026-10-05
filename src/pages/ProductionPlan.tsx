@@ -1,16 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Factory, Plus, Search, Filter, ChevronLeft, ChevronRight,
-  ChevronsLeft, ChevronsRight, Trash2, Edit2, RefreshCw, X,
-  FileSpreadsheet, Download,
+  Factory, Search, Filter, ChevronLeft, ChevronRight,
+  ChevronsLeft, ChevronsRight, RefreshCw,
+  FileSpreadsheet, Plus, ChevronDown, Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import SearchableSelect from '../components/ui/SearchableSelect';
 import { usePermission } from '../lib/usePermission';
 
 const STATUS_COLORS: Record<string, string> = {
+  Pending: 'bg-slate-100 text-slate-700',
   Draft: 'bg-slate-100 text-slate-700',
   Planned: 'bg-blue-100 text-blue-700',
   'In Progress': 'bg-amber-100 text-amber-700',
@@ -30,7 +32,7 @@ interface Customer { id: number; name: string; }
 
 export default function ProductionPlan() {
   const navigate = useNavigate();
-  const { canWrite, isReadOnly } = usePermission();
+  const { canWrite } = usePermission();
 
   // Data
   const [data, setData] = useState<any[]>([]);
@@ -41,8 +43,6 @@ export default function ProductionPlan() {
   const [pageSize, setPageSize] = useState(10);
 
   // Filters
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [status, setStatus] = useState('');
   const [article, setArticle] = useState('');
@@ -50,6 +50,7 @@ export default function ProductionPlan() {
   const [finish, setFinish] = useState('');
   const [salesOrderNo, setSalesOrderNo] = useState('');
   const [customerOrderNo, setCustomerOrderNo] = useState('');
+  const [planNo, setPlanNo] = useState('');
 
   // Filter options
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({ articles: [], colors: [], finishes: [] });
@@ -59,7 +60,79 @@ export default function ProductionPlan() {
   const [activeParams, setActiveParams] = useState<Record<string, string>>({});
 
   // Delete
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; itemId?: number; plan_row?: any }>({ open: false, id: null });
+
+  // Accordion
+  const [expandedRow, setExpandedRow] = useState<number | null>(() => {
+    const saved = sessionStorage.getItem('productionPlan_expandedRow');
+    return saved ? Number(saved) : null;
+  });
+  const [rowPlans, setRowPlans] = useState<Record<number, any[]>>({});
+  const [rowPlansLoading, setRowPlansLoading] = useState<Record<number, boolean>>({});
+
+  // Persist expandedRow to sessionStorage
+  useEffect(() => {
+    if (expandedRow !== null) {
+      sessionStorage.setItem('productionPlan_expandedRow', String(expandedRow));
+    } else {
+      sessionStorage.removeItem('productionPlan_expandedRow');
+    }
+  }, [expandedRow]);
+
+  // Fetch all plans created for a given sales-order-item row (there can be multiple)
+  // Declared before the effects that depend on it to avoid a temporal-dead-zone
+  // "Cannot access before initialization" crash in the minified build.
+  const fetchRowPlans = useCallback(async (row: any) => {
+    setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: true }));
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', '100');
+      // Prefer the exact plan_id the sales-order-item already resolved — this
+      // avoids fragile article-name matching (e.g. "Sheep  Softy Black" on the
+      // order item vs "Sheep Softy" on the plan). Fall back to article/color.
+      if (row.plan_id) {
+        params.set('plan_id', String(row.plan_id));
+      } else {
+        if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
+        if (row.article) params.set('article', row.article);
+        if (row.color) params.set('color', row.color);
+      }
+      const res = await api<{ data: any[] }>(`/production-plans?${params}`);
+      setRowPlans((prev) => ({ ...prev, [row.item_id]: res.data || [] }));
+    } catch {
+      setRowPlans((prev) => ({ ...prev, [row.item_id]: [] }));
+    } finally {
+      setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: false }));
+    }
+  }, []);
+
+  // When data finishes loading and there's a restored expandedRow, fetch its plans
+  useEffect(() => {
+    if (!loading && expandedRow !== null && data.length > 0) {
+      const row = data.find((r) => r.item_id === expandedRow);
+      if (row && !rowPlans[expandedRow]) {
+        fetchRowPlans(row);
+      }
+    }
+  }, [loading, expandedRow, data, rowPlans, fetchRowPlans]);
+
+  const createNewPlan = (row: any) => {
+    navigate(`/production-plan/new?sales_order_id=${row.sales_order_id}&article=${encodeURIComponent(row.article || '')}&color=${encodeURIComponent(row.color || '')}&customer_id=${row.customer_id || ''}&order_qty=${row.order_qty || 0}`);
+  };
+
+  const goToPlan = (row: any) => {
+    if (row.plan_id) {
+      navigate(`/production-plan/${row.plan_id}`);
+    } else {
+      createNewPlan(row);
+    }
+  };
+
+  const toggleRow = (row: any) => {
+    const willExpand = expandedRow !== row.item_id;
+    setExpandedRow(willExpand ? row.item_id : null);
+    if (willExpand) fetchRowPlans(row);
+  };
 
   // Fetch filter options and customers
   useEffect(() => {
@@ -81,12 +154,10 @@ export default function ProductionPlan() {
       const params = new URLSearchParams();
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
-      params.set('sortBy', 'id');
-      params.set('sortOrder', 'desc');
       for (const [k, v] of Object.entries(activeParams)) {
         if (v) params.set(k, v);
       }
-      const res = await api<{ data: any[]; total: number; totalPages: number }>(`/production-plans?${params}`);
+      const res = await api<{ data: any[]; total: number; totalPages: number }>(`/production-plans/sales-order-items?${params}`);
       setData(res.data || []);
       setTotalRecords(res.total || 0);
       setTotalPages(res.totalPages || 0);
@@ -103,8 +174,6 @@ export default function ProductionPlan() {
 
   const handleSearch = () => {
     const params: Record<string, string> = {};
-    if (fromDate) params.from_date = fromDate;
-    if (toDate) params.to_date = toDate;
     if (customerId) params.customer_id = customerId;
     if (status) params.status = status;
     if (article) params.article = article;
@@ -112,13 +181,12 @@ export default function ProductionPlan() {
     if (finish) params.finish = finish;
     if (salesOrderNo) params.sales_order_no = salesOrderNo;
     if (customerOrderNo) params.customer_order_no = customerOrderNo;
+    if (planNo) params.plan_no = planNo;
     setActiveParams(params);
     setCurrentPage(1);
   };
 
   const handleClear = () => {
-    setFromDate('');
-    setToDate('');
     setCustomerId('');
     setStatus('');
     setArticle('');
@@ -126,6 +194,7 @@ export default function ProductionPlan() {
     setFinish('');
     setSalesOrderNo('');
     setCustomerOrderNo('');
+    setPlanNo('');
     setActiveParams({});
     setCurrentPage(1);
   };
@@ -135,6 +204,8 @@ export default function ProductionPlan() {
     try {
       await api(`/production-plans/${deleteConfirm.id}`, { method: 'DELETE' });
       toast.success('Production plan deleted!');
+      // Refresh the accordion plans for the affected row, and the main list
+      if (deleteConfirm.plan_row) fetchRowPlans(deleteConfirm.plan_row);
       fetchData();
     } catch (err) {
       toast.error('Failed to delete: ' + (err as Error).message);
@@ -153,124 +224,58 @@ export default function ProductionPlan() {
             <Filter size={16} />
             <span className="text-sm font-bold">Filters</span>
           </div>
-          <button
-            onClick={canWrite ? () => navigate('/production-plan/new') : undefined}
-            disabled={isReadOnly}
-            title={isReadOnly ? 'You have read-only access. Contact admin for write permissions.' : undefined}
-            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg transition-all shadow-sm ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
-          >
-            <Plus size={14} /> New Production Plan
+          <button onClick={fetchData} className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all">
+            <RefreshCw size={14} /> Refresh
           </button>
         </div>
 
         {/* Filter Row 1 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-              placeholder="dd-mm-yyyy"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">To Date</label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            />
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Customer</label>
-            <select
+            <SearchableSelect
+              options={[{ value: '', label: 'All' }, ...customers.map((c) => ({ value: String(c.id), label: c.name }))]}
               value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-              <option value="">All</option>
-              {customers.map((c) => (
-                <option key={c.id} value={String(c.id)}>{c.name}</option>
-              ))}
-            </select>
+              onChange={setCustomerId}
+              placeholder="All"
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-            <select
+            <SearchableSelect
+              options={[{ value: '', label: 'All' }, ...['Pending', 'In Progress', 'Completed'].map((s) => ({ value: s, label: s }))]}
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-              <option value="">All</option>
-              {['Draft', 'Planned', 'In Progress', 'Completed', 'On Hold', 'Cancelled'].map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Article</label>
-            <select
-              value={article}
-              onChange={(e) => setArticle(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-              <option value="">All</option>
-              {filterOptions.articles.map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Filter Row 2 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Color</label>
-            <select
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-              <option value="">All</option>
-              {filterOptions.colors.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Finish</label>
-            <select
-              value={finish}
-              onChange={(e) => setFinish(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-              <option value="">All</option>
-              {filterOptions.finishes.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Sales Order No.</label>
-            <input
-              type="text"
-              value={salesOrderNo}
-              onChange={(e) => setSalesOrderNo(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-              placeholder="Search SO No."
+              onChange={setStatus}
+              placeholder="All"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Customer Order No.</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Article</label>
+            <SearchableSelect
+              options={[{ value: '', label: 'All' }, ...filterOptions.articles.map((a) => ({ value: a, label: a }))]}
+              value={article}
+              onChange={setArticle}
+              placeholder="All"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Color</label>
+            <SearchableSelect
+              options={[{ value: '', label: 'All' }, ...filterOptions.colors.map((c) => ({ value: c, label: c }))]}
+              value={color}
+              onChange={setColor}
+              placeholder="All"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Plan No.</label>
             <input
               type="text"
-              value={customerOrderNo}
-              onChange={(e) => setCustomerOrderNo(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-              placeholder="Search Customer Order No."
+              value={planNo}
+              onChange={(e) => setPlanNo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+              placeholder="e.g. PP-2026-00001"
+              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />
           </div>
           <div className="flex items-end gap-2">
@@ -288,6 +293,7 @@ export default function ProductionPlan() {
             </button>
           </div>
         </div>
+
       </div>
 
       {/* Table Section */}
@@ -295,10 +301,18 @@ export default function ProductionPlan() {
         {/* Table Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-blue-800">Production Plans</h2>
+            <h2 className="text-sm font-bold text-blue-800">Production Requirement Plans</h2>
             <span className="text-xs text-gray-500">[Total: {totalRecords}]</span>
           </div>
           <div className="flex items-center gap-2">
+            {canWrite && (
+              <button
+                onClick={() => navigate('/production-plan/new')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all"
+              >
+                <Plus size={13} /> New Plan
+              </button>
+            )}
             <button
               onClick={() => { /* Export functionality */ }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
@@ -311,20 +325,33 @@ export default function ProductionPlan() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-8" />
+              <col className="w-8" />
+              <col className="w-[12%]" />
+              <col className="w-[16%]" />
+              <col className="w-[14%]" />
+              <col className="w-[16%]" />
+              <col className="w-[10%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+            </colgroup>
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase w-10">#</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase" />
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sale Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Article</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Color</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Finish</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty<br />(Sq.Ft.)</th>
-                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Planned Qty<br />(Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Completed Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Balance Qty<br />(Sq.Ft.)</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Status</th>
               </tr>
@@ -349,21 +376,25 @@ export default function ProductionPlan() {
                   </td>
                 </tr>
               ) : (
-                data.map((row, i) => (
+                data.map((row, i) => {
+                  const isExpanded = expandedRow === row.item_id;
+                  return (
+                  <Fragment key={row.item_id}>
                   <tr
-                    key={row.id}
-                    className="hover:bg-blue-50/40 transition-all cursor-pointer"
-                    onClick={() => navigate(`/production-plan/${row.id}`)}
+                    className={`hover:bg-blue-50/40 transition-all cursor-pointer ${isExpanded ? 'bg-blue-50/60' : ''}`}
+                    onClick={() => toggleRow(row)}
                   >
+                    <td className="py-2.5 px-3 text-gray-400">
+                      <ChevronDown size={14} className={`transition-transform ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                    </td>
                     <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
                     <td className="py-2.5 px-3 text-xs font-medium text-blue-700">{row.sales_order_no || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-800">{row.customer_name || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.customer_order_no || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.article || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.color || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.finish || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.order_qty)}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.planned_qty)}</td>
+                    <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.completed_qty)}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.balance_qty)}</td>
                     <td className="py-2.5 px-3 text-center">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>
@@ -371,10 +402,143 @@ export default function ProductionPlan() {
                       </span>
                     </td>
                   </tr>
-                ))
+                  {isExpanded && (
+                    <tr className="bg-blue-50/30">
+                      <td colSpan={11} className="px-6 py-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Sale Order</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.sales_order_no || '—'}</p></div>
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Article Code</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.article_code || '—'}</p></div>
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">UOM</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.uom || '—'}</p></div>
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Total Planned Qty</p><p className="text-xs font-medium text-gray-800 mt-0.5">{formatQty(row.planned_qty)}</p></div>
+                        </div>
+
+                        {/* Plans created for this row */}
+                        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-slate-50">
+                            <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                              Plans ({(rowPlans[row.item_id] || []).length})
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all"
+                            >
+                              <Plus size={12} /> Create New Plan
+                            </button>
+                          </div>
+                          {rowPlansLoading[row.item_id] ? (
+                            <div className="p-4 space-y-2">
+                              {[1, 2].map((k) => <div key={k} className="h-8 bg-gray-100 rounded animate-pulse" />)}
+                            </div>
+                          ) : (rowPlans[row.item_id] || []).length === 0 ? (
+                            <div className="px-4 py-6 text-center text-xs text-gray-400">
+                              No plans created yet for this item.
+                            </div>
+                          ) : (
+                            <table className="w-full text-sm table-fixed">
+                              <colgroup>
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[20%]" />
+                              </colgroup>
+                              <thead>
+                                <tr className="border-b border-gray-100">
+                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan No.</th>
+                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan Date</th>
+                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
+                                  <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Status</th>
+                                  <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {(rowPlans[row.item_id] || []).map((plan: any) => (
+                                  <tr key={plan.id} className="hover:bg-blue-50/40">
+                                    <td className="py-2 px-4 text-xs font-medium text-blue-700">{plan.plan_no || '—'}</td>
+                                    <td className="py-2 px-4 text-xs text-gray-700">{plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN') : '—'}</td>
+                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-left">{formatQty(plan.planned_qty)}</td>
+                                    <td className="py-2 px-4 text-center">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_COLORS[plan.status] || 'bg-gray-100 text-gray-700'}`}>
+                                        {plan.status}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-4 text-center">
+                                      <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${plan.id}`); }}
+                                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-all"
+                                        >
+                                          Open
+                                        </button>
+                                        {canWrite && (plan.status === 'Pending' || plan.status === 'Planned') && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, id: plan.id, itemId: row.item_id, plan_row: row }); }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-rose-600 bg-white border border-rose-200 rounded-md hover:bg-rose-50 transition-all"
+                                            title="Delete plan (available before production starts)"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-4 space-y-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
+            </div>
+          ) : data.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm text-gray-500">No production plans found</p>
+            </div>
+          ) : (
+            data.map((row) => (
+              <div key={row.item_id} onClick={() => goToPlan(row)} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
+                    <p className="text-xs text-blue-700 font-mono mt-0.5">{row.sales_order_no || '—'}</p>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ml-2 ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>{row.status}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-600 mb-2.5">
+                  <span className="truncate">{row.article || '—'}</span>
+                  {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
+                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.order_qty)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Completed</p>
+                    <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.completed_qty)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
+                    <p className="text-xs font-bold text-amber-700 tabular-nums">{formatQty(row.balance_qty)}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}

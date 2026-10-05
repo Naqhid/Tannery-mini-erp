@@ -40,6 +40,7 @@ import ProcessStageForm from './pages/ProcessStageForm';
 import GroupMaster from './pages/GroupMaster';
 import GroupMasterForm from './pages/GroupMasterForm';
 import Machine from './pages/Machine';
+import MachineForm from './pages/MachineForm';
 import MaterialMaster from './pages/MaterialMaster';
 import MaterialMasterForm from './pages/MaterialMasterForm';
 // Sales Order Pages
@@ -55,12 +56,17 @@ import BusinessUnits from './pages/BusinessUnits';
 // Inventory Pages
 import WarehouseMaster from './pages/WarehouseMaster';
 import WarehouseMasterForm from './pages/WarehouseMasterForm';
+import LocationRack from './pages/LocationRack';
+import LocationRackForm from './pages/LocationRackForm';
+import MonthlyBatchProcess from './pages/MonthlyBatchProcess';
 import StockOpeningEntry from './pages/StockOpeningEntry';
 import StockOpeningEntryDetail from './pages/StockOpeningEntryDetail';
 import MaterialReceiptEntry from './pages/MaterialReceiptEntry';
 import MaterialReceiptEntryDetail from './pages/MaterialReceiptEntryDetail';
 import StockTransferEntry from './pages/StockTransferEntry';
 import StockTransferEntryDetail from './pages/StockTransferEntryDetail';
+import OutboundDelivery from './pages/OutboundDelivery';
+import OutboundDeliveryDetail from './pages/OutboundDeliveryDetail';
 import MaterialIssueToBatch from './pages/MaterialIssueToBatch';
 import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
 // Production Plan Pages
@@ -74,6 +80,28 @@ import SupplierPriceApproval from './pages/SupplierPriceApproval';
 import PhysicalStockEntry from './pages/PhysicalStockEntry';
 import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
 import DatabaseBackups from './pages/DatabaseBackups';
+import DataTemplates from './pages/DataTemplates';
+import StandardCosting from './pages/StandardCosting';
+import StandardCostingForm from './pages/StandardCostingForm';
+import ActualStandardCostSheet from './pages/ActualStandardCostSheet';
+import ActualStandardCostSheetBom from './pages/ActualStandardCostSheetBom';
+import GeneralCost from './pages/GeneralCost';
+import GeneralCostForm from './pages/GeneralCostForm';
+import MachineCost from './pages/MachineCost';
+import MachineCostForm from './pages/MachineCostForm';
+import ProductionStatus from './pages/ProductionStatus';
+import ProductionStatusForm from './pages/ProductionStatusForm';
+import CostingReport from './pages/CostingReport';
+import CostComponents from './pages/CostComponents';
+import CostComponentsForm from './pages/CostComponentsForm';
+import DepartmentMaster from './pages/DepartmentMaster';
+import DepartmentMasterForm from './pages/DepartmentMasterForm';
+// Reports Module (grouped into 5 tabbed pages)
+import InventoryReports from './pages/reports/InventoryReports';
+import ProductionPlanReports from './pages/reports/ProductionPlanReports';
+import ActualProductionReports from './pages/reports/ActualProductionReports';
+import SalesOrderReports from './pages/reports/SalesOrderReports';
+import StageCostingReports from './pages/reports/StageCostingReports';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -150,6 +178,11 @@ function App() {
             <Route path="group-master/new" element={<GroupMasterForm />} />
             <Route path="group-master/:id" element={<GroupMasterForm />} />
             <Route path="machine" element={<Machine />} />
+            <Route path="machine/new" element={<MachineForm />} />
+            <Route path="machine/:id" element={<MachineForm />} />
+            <Route path="department-master" element={<DepartmentMaster />} />
+            <Route path="department-master/new" element={<DepartmentMasterForm />} />
+            <Route path="department-master/:id" element={<DepartmentMasterForm />} />
             {/* BOM / Recipe - BOM first, then Recipe */}
             <Route path="bom" element={<BOM />} />
             <Route path="bom/new" element={<BOMForm />} />
@@ -157,6 +190,28 @@ function App() {
             <Route path="recipe-creation" element={<RecipeCreation />} />
             <Route path="recipe-creation/new" element={<RecipeCreationForm />} />
             <Route path="recipe-creation/:id" element={<RecipeCreationForm />} />
+            <Route path="cost-breakdown" element={<PlaceholderPage />} />
+            <Route path="standard-costing" element={<StandardCosting />} />
+            <Route path="standard-costing/new" element={<StandardCostingForm />} />
+            <Route path="standard-costing/:id" element={<StandardCostingForm />} />
+            <Route path="standard-costing/actual/plan/:planId" element={<ActualStandardCostSheet />} />
+            <Route path="standard-costing/actual/:id" element={<ActualStandardCostSheet />} />
+            <Route path="standard-cost-bom" element={<StandardCosting detailBasePath="/standard-cost-bom/plan" title="Standard Cost (BOM)" />} />
+            <Route path="standard-cost-bom/plan/:planId" element={<ActualStandardCostSheetBom />} />
+            <Route path="standard-cost-bom/:id" element={<ActualStandardCostSheetBom />} />
+            <Route path="general-cost" element={<GeneralCost />} />
+            <Route path="general-cost/new" element={<GeneralCostForm />} />
+            <Route path="general-cost/:id" element={<GeneralCostForm />} />
+            <Route path="machine-cost" element={<MachineCost />} />
+            <Route path="machine-cost/new" element={<MachineCostForm />} />
+            <Route path="machine-cost/:id" element={<MachineCostForm />} />
+            <Route path="costing-report" element={<CostingReport />} />
+            <Route path="cost-components" element={<CostComponents />} />
+            <Route path="cost-components/new" element={<CostComponentsForm />} />
+            <Route path="cost-components/:id" element={<CostComponentsForm />} />
+            <Route path="production-status" element={<ProductionStatus />} />
+            <Route path="production-status/new" element={<ProductionStatusForm />} />
+            <Route path="production-status/:id" element={<ProductionStatusForm />} />
             <Route path="material-requirement" element={<PlaceholderPage />} />
             <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
             <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />
@@ -166,6 +221,9 @@ function App() {
             <Route path="warehouse-master" element={<WarehouseMaster />} />
             <Route path="warehouse-master/new" element={<WarehouseMasterForm />} />
             <Route path="warehouse-master/:id" element={<WarehouseMasterForm />} />
+            <Route path="location-rack" element={<LocationRack />} />
+            <Route path="location-rack/new" element={<LocationRackForm />} />
+            <Route path="location-rack/:id" element={<LocationRackForm />} />
             <Route path="stock-opening-entry" element={<StockOpeningEntry />} />
             <Route path="stock-opening-entry/new" element={<StockOpeningEntryDetail />} />
             <Route path="stock-opening-entry/:id" element={<StockOpeningEntryDetail />} />
@@ -175,9 +233,13 @@ function App() {
             <Route path="stock-transfer" element={<StockTransferEntry />} />
             <Route path="stock-transfer/new" element={<StockTransferEntryDetail />} />
             <Route path="stock-transfer/:id" element={<StockTransferEntryDetail />} />
+            <Route path="outbound-delivery" element={<OutboundDelivery />} />
+            <Route path="outbound-delivery/new" element={<OutboundDeliveryDetail />} />
+            <Route path="outbound-delivery/:id" element={<OutboundDeliveryDetail />} />
             <Route path="material-issue" element={<MaterialIssueToBatch />} />
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
+            <Route path="monthly-batch-process" element={<MonthlyBatchProcess />} />
             {/* Purchase */}
             <Route path="supplier-pricing-history" element={<SupplierPricingHistory />} />
             <Route path="supplier-pricing-history/new" element={<AddNewPrice />} />
@@ -194,10 +256,15 @@ function App() {
             <Route path="batch-lot-tracking" element={<BatchLotTracking />} />
             <Route path="batch-lot-tracking/new" element={<BatchLotTracking />} />
             <Route path="batch-lot-tracking/:id" element={<BatchLotTracking />} />
-            {/* Reports */}
-            <Route path="reports" element={<PlaceholderPage />} />
-            <Route path="inventory-reports" element={<PlaceholderPage />} />
-            <Route path="cost-analysis" element={<PlaceholderPage />} />
+            {/* Reports — five grouped, tabbed pages */}
+            <Route path="reports" element={<Navigate to="/reports/inventory" replace />} />
+            <Route path="reports/inventory" element={<InventoryReports />} />
+            <Route path="reports/production-plan" element={<ProductionPlanReports />} />
+            <Route path="reports/actual-production" element={<ActualProductionReports />} />
+            <Route path="reports/sales-order" element={<SalesOrderReports />} />
+            <Route path="reports/stage-costing" element={<StageCostingReports />} />
+            <Route path="inventory-reports" element={<Navigate to="/reports/inventory" replace />} />
+            <Route path="cost-analysis" element={<Navigate to="/reports/stage-costing" replace />} />
             {/* Settings */}
             <Route path="users" element={<UsersPage />} />
             <Route path="users/new" element={<UserFormPage />} />
@@ -208,6 +275,7 @@ function App() {
             <Route path="company" element={<Company />} />
             <Route path="business-units" element={<BusinessUnits />} />
             <Route path="database-backups" element={<DatabaseBackups />} />
+            <Route path="data-templates" element={<DataTemplates />} />
             <Route path="notifications" element={<PlaceholderPage />} />
           </Route>
         </Routes>

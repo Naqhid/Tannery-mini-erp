@@ -4,6 +4,8 @@ import { Factory } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 
 const STATUS_COLORS: Record<string, string> = {
   Posted: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
@@ -14,11 +16,18 @@ const STATUS_COLORS: Record<string, string> = {
 export default function MaterialIssueToBatch() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total: 0, posted: 0, draft: 0, total_value: 0 });
+  const [stageOptions, setStageOptions] = useState<{ value: string; label: string }[]>([]);
 
   const fetchStats = useCallback(async () => {
     try { const res = await api<{ data: typeof stats }>('/material-issues/stats'); setStats(res.data); } catch {}
   }, []);
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  const fetchStages = useCallback(async () => {
+    try {
+      const res = await api<{ data: { id: number; name: string }[] }>('/process-stages?limit=100');
+      setStageOptions((res.data || []).map((s) => ({ value: s.name, label: s.name })));
+    } catch {}
+  }, []);
+  useEffect(() => { fetchStats(); fetchStages(); }, [fetchStats, fetchStages]);
 
   const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
   const formatCurrency = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(n || 0);
@@ -42,11 +51,76 @@ export default function MaterialIssueToBatch() {
 
   const filterOptions = [
     { key: 'status', label: 'Status', options: [{ value: 'Posted', label: 'Posted' }, { value: 'Draft', label: 'Draft' }, { value: 'Cancelled', label: 'Cancelled' }] },
+    { key: 'process_stage', label: 'Stage', options: stageOptions },
   ];
 
   const handleDelete = async (id: number) => {
     const res = await api(`/material-issues/${id}`, { method: 'DELETE' });
     toast.success(res.message || 'Issue deleted!');
+  };
+
+  const fetchAllIssues = async () => {
+    const res = await api<{ data: any[] }>('/material-issues?page=1&limit=99999');
+    return res.data || [];
+  };
+
+  const exportColumns = [
+    { key: 'id', header: 'ID' },
+    { key: 'issue_no', header: 'Issue No' },
+    { key: 'issue_date', header: 'Issue Date' },
+    { key: 'department', header: 'Department' },
+    { key: 'job_order_no', header: 'Job Order No' },
+    { key: 'production_batch', header: 'Production Batch' },
+    { key: 'batch_qty', header: 'Batch Qty' },
+    { key: 'batch_uom', header: 'Batch UOM' },
+    { key: 'batch_description', header: 'Batch Description' },
+    { key: 'costing_method', header: 'Costing Method' },
+    { key: 'warehouse_id', header: 'Warehouse ID' },
+    { key: 'warehouse_name', header: 'Warehouse Name' },
+    { key: 'required_date', header: 'Required Date' },
+    { key: 'issued_by', header: 'Issued By' },
+    { key: 'loading_unloading', header: 'Loading/Unloading' },
+    { key: 'other_charges', header: 'Other Charges' },
+    { key: 'total_material_cost', header: 'Total Material Cost' },
+    { key: 'grand_total', header: 'Grand Total' },
+    { key: 'remarks', header: 'Remarks' },
+    { key: 'status', header: 'Status' },
+    { key: 'created_by', header: 'Created By' },
+    { key: 'updated_by', header: 'Updated By' },
+    { key: 'created_at', header: 'Created At' },
+  ];
+
+  const handlePreviewPDF = async () => {
+    try {
+      const data = await fetchAllIssues();
+      const pdfColumns = ['Issue No', 'Date', 'Department', 'Batch', 'Warehouse', 'Amount', 'Status'];
+      const rows = data.map((r: any) => [
+        r.issue_no || '', formatDate(r.issue_date), r.department || '—',
+        r.production_batch || '—', r.warehouse_name || '—', formatCurrency(r.grand_total), r.status || '',
+      ]);
+      previewPDF({ title: 'Material Issues', columns: pdfColumns, rows, fileName: 'Material_Issues' });
+    } catch { toast.error('Failed to generate PDF preview'); }
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      const data = await fetchAllIssues();
+      const pdfColumns = ['Issue No', 'Date', 'Department', 'Batch', 'Warehouse', 'Amount', 'Status'];
+      const rows = data.map((r: any) => [
+        r.issue_no || '', formatDate(r.issue_date), r.department || '—',
+        r.production_batch || '—', r.warehouse_name || '—', formatCurrency(r.grand_total), r.status || '',
+      ]);
+      downloadPDF({ title: 'Material Issues', columns: pdfColumns, rows, fileName: 'Material_Issues' });
+      toast.success('PDF downloaded!');
+    } catch { toast.error('Failed to download PDF'); }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const data = await fetchAllIssues();
+      exportToExcel({ data, columns: exportColumns, fileName: 'Material_Issues' });
+      toast.success('Excel downloaded!');
+    } catch { toast.error('Failed to download Excel'); }
   };
 
   return (
@@ -68,6 +142,8 @@ export default function MaterialIssueToBatch() {
       deleteMessage="Are you sure? This will remove the material issue entry."
       searchPlaceholder="Search issues..."
       enableBulkDelete={true}
+      isRowActionDisabled={(row) => row.status === 'Posted' || row.status === 'posted'}
+      exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />
   );
 }

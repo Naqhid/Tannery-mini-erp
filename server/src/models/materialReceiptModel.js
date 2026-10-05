@@ -1,5 +1,39 @@
 import pool from '../config/db.js';
-import { updateStock, addLedgerEntry } from './stockLedgerModel.js';
+import { updateStock, addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
+import { replaceReferenceTransactions } from './materialTransactionModel.js';
+
+// Company home state — intra-state suppliers get CGST+SGST, others get IGST.
+const HOME_STATE = 'Tamil Nadu';
+const normState = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Resolve a supplier's state (text) to decide intra vs inter state GST. */
+async function getSupplierState(conn, supplierId) {
+  if (!supplierId) return null;
+  const [[row]] = await conn.query(
+    `SELECT COALESCE(st.name, s.state) AS state_name
+       FROM suppliers s LEFT JOIN states st ON s.state_id = st.id
+      WHERE s.id = ?`,
+    [supplierId]
+  );
+  return row?.state_name || null;
+}
+
+/**
+ * Compute the GST breakup for a receipt. Driven purely by the supplier's state.
+ *   Intra-state (supplier in home state)  → CGST + SGST (half each).
+ *   Inter-state (any other state)         → IGST (full rate, no split).
+ */
+function computeReceiptGst(totalAmountInr, gstPercent, supplierState) {
+  const total = (Number(totalAmountInr) || 0) * (Number(gstPercent) || 0) / 100;
+  const isIntra = normState(supplierState) === normState(HOME_STATE);
+
+  if (isIntra) {
+    const cgst = Number((total / 2).toFixed(4));
+    const sgst = Number((total - cgst).toFixed(4));
+    return { tax_type: 'CGST_SGST', cgst_amount: cgst, sgst_amount: sgst, igst_amount: 0, total_gst_amount: Number(total.toFixed(4)) };
+  }
+  return { tax_type: 'IGST', cgst_amount: 0, sgst_amount: 0, igst_amount: Number(total.toFixed(4)), total_gst_amount: Number(total.toFixed(4)) };
+}
 
 export async function getAll({ search, status, warehouse_id, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = '1=1';
@@ -18,10 +52,7 @@ export async function getAll({ search, status, warehouse_id, page = 1, limit = 1
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
-    `SELECT mr.id, mr.receipt_no, mr.receipt_date, mr.receipt_type, mr.supplier_id,
-       mr.purchase_order_no, mr.challan_no, mr.lr_grn_no, mr.warehouse_id,
-       mr.freight, mr.loading_charges, mr.other_charges, mr.total_amount, mr.grand_total,
-       mr.status, mr.created_at,
+    `SELECT mr.*, 
        s.name AS supplier_name, s.code AS supplier_code,
        w.name AS warehouse_name, w.code AS warehouse_code
      FROM material_receipts mr
@@ -50,9 +81,13 @@ export async function getById(id) {
   );
   if (!receipt) return null;
   const [items] = await pool.query(
-    `SELECT mri.*, m.name AS material_name, m.code AS material_code
+    `SELECT mri.*, m.name AS material_name, m.code AS material_code,
+       m.currency AS material_currency,
+       pu.name AS material_primary_uom, su.name AS material_secondary_uom
      FROM material_receipt_items mri
      LEFT JOIN materials m ON mri.material_id = m.id
+     LEFT JOIN uom pu ON m.primary_uom_id = pu.id
+     LEFT JOIN uom su ON m.secondary_uom_id = su.id
      WHERE mri.receipt_id = ? ORDER BY mri.id ASC`, [id]
   );
   return { ...receipt, items };
@@ -74,57 +109,64 @@ export async function create(data, items = [], createdBy = null) {
   try {
     await conn.beginTransaction();
     const receipt_no = data.receipt_no || await getNextNo();
-    const totalAmount = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
-    const grandTotal = totalAmount + (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
+    const totalAmountInr = items.reduce((s, i) => s + (parseFloat(i.amount_inr) || 0), 0);
+    const gstPercent = parseFloat(data.gst_percent) || 0;
+    const supplierState = await getSupplierState(conn, data.supplier_id);
+    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState);
+    const totalOtherCharges = (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
+    const grandTotal = totalAmountInr + gst.total_gst_amount + totalOtherCharges;
+
+    const status = data.status || 'Draft';
 
     const [result] = await conn.query(
       `INSERT INTO material_receipts (
         receipt_no, receipt_date, receipt_type, supplier_id, purchase_order_no, po_date,
         challan_no, challan_date, lr_grn_no, lr_grn_date, transporter, gate_entry_no,
-        warehouse_id, freight, loading_charges, other_charges, total_amount, grand_total,
+        warehouse_id, freight, loading_charges, other_charges,
+        gst_percent, cgst_amount, sgst_amount, igst_amount, total_gst_amount, tax_type, total_other_charges,
+        total_amount, grand_total,
         remarks, status, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         receipt_no, data.receipt_date, data.receipt_type || 'Direct Purchase',
         data.supplier_id || null, data.purchase_order_no || null, data.po_date || null,
         data.challan_no || null, data.challan_date || null, data.lr_grn_no || null,
         data.lr_grn_date || null, data.transporter || null, data.gate_entry_no || null,
         data.warehouse_id, data.freight || 0, data.loading_charges || 0, data.other_charges || 0,
-        totalAmount, grandTotal, data.remarks || null, data.status || 'Posted', createdBy,
+        gstPercent, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.total_gst_amount, gst.tax_type, totalOtherCharges,
+        totalAmountInr, grandTotal, data.remarks || null, status, createdBy,
       ]
     );
     const receiptId = result.insertId;
 
     for (const item of items) {
       await conn.query(
-        `INSERT INTO material_receipt_items (receipt_id, material_id, uom, order_qty, received_qty, rate, amount, batch_no, expiry_date)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
-        [receiptId, item.material_id, item.uom || null, item.order_qty || 0,
-         item.received_qty || 0, item.rate || 0, item.amount || 0,
-         item.batch_no || null, item.expiry_date || null]
+        `INSERT INTO material_receipt_items (
+          receipt_id, material_id, uom, primary_uom, secondary_uom,
+          order_qty, primary_uom_qty, secondary_uom_qty,
+          currency, exchange_rate, rate_fc, rate_inr, amount_fc, amount_inr,
+          received_qty, rate, amount, batch_no, expiry_date,
+          manufacture_date, shelf_life_months
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          receiptId, item.material_id, item.uom || null,
+          item.primary_uom || null, item.secondary_uom || null,
+          item.order_qty || 0,
+          item.primary_uom_qty || 0, item.secondary_uom_qty || 0,
+          item.currency || 'INR', item.exchange_rate || 1,
+          item.rate_fc || 0, item.rate_inr || 0,
+          item.amount_fc || 0, item.amount_inr || 0,
+          item.primary_uom_qty || 0, item.rate_fc || 0, item.amount_inr || 0,
+          item.batch_no || null, item.expiry_date || null,
+          item.manufacture_date || null,
+          item.shelf_life_months != null && item.shelf_life_months !== '' ? item.shelf_life_months : null,
+        ]
       );
+    }
 
-      await updateStock(conn, data.warehouse_id, item.material_id, item.uom, item.received_qty || 0, item.rate || 0);
-
-      await addLedgerEntry(conn, {
-        transaction_date: data.receipt_date,
-        transaction_type: 'Receipt',
-        reference_type: 'material_receipt',
-        reference_id: receiptId,
-        reference_no: receipt_no,
-        warehouse_id: data.warehouse_id,
-        material_id: item.material_id,
-        uom: item.uom,
-        batch_no: item.batch_no,
-        expiry_date: item.expiry_date,
-        in_qty: item.received_qty || 0,
-        out_qty: 0,
-        unit_cost: item.rate || 0,
-        amount: item.amount || 0,
-        balance_qty: item.received_qty || 0,
-        remarks: 'Material receipt',
-        created_by: createdBy,
-      });
+    // Only create stock/transactions if status is Posted
+    if (status === 'Posted') {
+      await postReceiptTransactions(conn, receiptId, receipt_no, data, items, createdBy);
     }
 
     await conn.commit();
@@ -137,68 +179,152 @@ export async function create(data, items = [], createdBy = null) {
   }
 }
 
+/** Internal: create stock movements and material transactions for a posted receipt */
+async function postReceiptTransactions(conn, receiptId, receipt_no, data, items, createdBy) {
+  for (const item of items) {
+    await updateStock(conn, data.warehouse_id, item.material_id, item.uom, item.primary_uom_qty || 0, item.rate_inr || 0);
+    await addLedgerEntry(conn, {
+      transaction_date: data.receipt_date,
+      transaction_type: 'Receipt',
+      reference_type: 'material_receipt',
+      reference_id: receiptId,
+      reference_no: receipt_no,
+      warehouse_id: data.warehouse_id,
+      material_id: item.material_id,
+      uom: item.uom,
+      batch_no: item.batch_no,
+      expiry_date: item.expiry_date,
+      in_qty: item.primary_uom_qty || 0,
+      out_qty: 0,
+      unit_cost: item.rate_inr || 0,
+      amount: item.amount_inr || 0,
+      balance_qty: item.primary_uom_qty || 0,
+      remarks: 'Material receipt',
+      created_by: createdBy,
+    });
+  }
+
+  await replaceReferenceTransactions(conn, 'material_receipt', receiptId, items.map((item) => ({
+    transaction_date: data.receipt_date,
+    transaction_type: 'Receipt',
+    reference_no: receipt_no,
+    warehouse_id: data.warehouse_id,
+    item_id: item.material_id,
+    batch_no: item.batch_no || null,
+    receipt_qty: parseFloat(item.primary_uom_qty) || 0,
+    opening_stock: null,
+    opening_value: null,
+    receipt_value: parseFloat(item.amount_inr) || 0,
+    issue_qty: 0,
+    issue_value: 0,
+  })));
+
+  // Date-ordered rebuild of the live stock ledger (System A) so a backdated
+  // receipt correctly shifts every later balance and average rate that the
+  // inventory/stock reports read from warehouse_stock.
+  for (const item of items) {
+    await rebuildAndReprice(conn, data.warehouse_id, item.material_id);
+  }
+}
+
 export async function update(id, data, items = [], updatedBy = null) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    const totalAmount = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
-    const grandTotal = totalAmount + (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
+    // Check current status
+    const [[current]] = await conn.query('SELECT status, receipt_no FROM material_receipts WHERE id=?', [id]);
+    const wasPosted = current && current.status === 'Posted';
+    const newStatus = data.status || current?.status || 'Draft';
+
+    const totalAmountInr = items.reduce((s, i) => s + (parseFloat(i.amount_inr) || 0), 0);
+    const gstPercent = parseFloat(data.gst_percent) || 0;
+    const supplierState = await getSupplierState(conn, data.supplier_id);
+    const gst = computeReceiptGst(totalAmountInr, gstPercent, supplierState);
+    const totalOtherCharges = (parseFloat(data.freight) || 0) + (parseFloat(data.loading_charges) || 0) + (parseFloat(data.other_charges) || 0);
+    const grandTotal = totalAmountInr + gst.total_gst_amount + totalOtherCharges;
 
     await conn.query(
       `UPDATE material_receipts SET
         receipt_date=?, receipt_type=?, supplier_id=?, purchase_order_no=?, po_date=?,
         challan_no=?, challan_date=?, lr_grn_no=?, lr_grn_date=?, transporter=?, gate_entry_no=?,
-        warehouse_id=?, freight=?, loading_charges=?, other_charges=?, total_amount=?,
-        grand_total=?, remarks=?, updated_by=? WHERE id=?`,
+        warehouse_id=?, freight=?, loading_charges=?, other_charges=?,
+        gst_percent=?, cgst_amount=?, sgst_amount=?, igst_amount=?, total_gst_amount=?, tax_type=?, total_other_charges=?,
+        total_amount=?, grand_total=?, remarks=?, status=?, updated_by=? WHERE id=?`,
       [
         data.receipt_date, data.receipt_type || 'Direct Purchase', data.supplier_id || null,
         data.purchase_order_no || null, data.po_date || null, data.challan_no || null,
         data.challan_date || null, data.lr_grn_no || null, data.lr_grn_date || null,
         data.transporter || null, data.gate_entry_no || null, data.warehouse_id,
         data.freight || 0, data.loading_charges || 0, data.other_charges || 0,
-        totalAmount, grandTotal, data.remarks || null, updatedBy, id,
+        gstPercent, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.total_gst_amount, gst.tax_type, totalOtherCharges,
+        totalAmountInr, grandTotal, data.remarks || null, newStatus, updatedBy, id,
       ]
     );
 
-    // Reverse old stock
-    const [oldItems] = await conn.query(
-      'SELECT material_id, uom, received_qty FROM material_receipt_items WHERE receipt_id=?', [id]
-    );
-    for (const old of oldItems) {
-      await updateStock(conn, data.warehouse_id, old.material_id, old.uom, -parseFloat(old.received_qty), 0);
-    }
-    await conn.query('DELETE FROM material_receipt_items WHERE receipt_id=?', [id]);
-    await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
+    // Remember the (warehouse, material) pairs the old posted version affected so
+    // we can rebuild their valuation even if the item set / warehouse changed.
+    const affectedPairs = new Map();
 
+    // If it was posted, reverse old stock first
+    if (wasPosted) {
+      const [prevLedger] = await conn.query(
+        'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+        ['material_receipt', id]
+      );
+      for (const p of prevLedger) affectedPairs.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
+
+      const [oldItems] = await conn.query(
+        'SELECT material_id, uom, received_qty, primary_uom_qty FROM material_receipt_items WHERE receipt_id=?', [id]
+      );
+      for (const old of oldItems) {
+        const qty = parseFloat(old.primary_uom_qty) || parseFloat(old.received_qty) || 0;
+        await updateStock(conn, data.warehouse_id, old.material_id, old.uom, -qty, 0);
+      }
+      await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
+      await replaceReferenceTransactions(conn, 'material_receipt', id, []);
+    }
+
+    // Re-insert items
+    await conn.query('DELETE FROM material_receipt_items WHERE receipt_id=?', [id]);
     for (const item of items) {
       await conn.query(
-        `INSERT INTO material_receipt_items (receipt_id, material_id, uom, order_qty, received_qty, rate, amount, batch_no, expiry_date)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
-        [id, item.material_id, item.uom || null, item.order_qty || 0,
-         item.received_qty || 0, item.rate || 0, item.amount || 0,
-         item.batch_no || null, item.expiry_date || null]
+        `INSERT INTO material_receipt_items (
+          receipt_id, material_id, uom, primary_uom, secondary_uom,
+          order_qty, primary_uom_qty, secondary_uom_qty,
+          currency, exchange_rate, rate_fc, rate_inr, amount_fc, amount_inr,
+          received_qty, rate, amount, batch_no, expiry_date,
+          manufacture_date, shelf_life_months
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          id, item.material_id, item.uom || null,
+          item.primary_uom || null, item.secondary_uom || null,
+          item.order_qty || 0,
+          item.primary_uom_qty || 0, item.secondary_uom_qty || 0,
+          item.currency || 'INR', item.exchange_rate || 1,
+          item.rate_fc || 0, item.rate_inr || 0,
+          item.amount_fc || 0, item.amount_inr || 0,
+          item.primary_uom_qty || 0, item.rate_fc || 0, item.amount_inr || 0,
+          item.batch_no || null, item.expiry_date || null,
+          item.manufacture_date || null,
+          item.shelf_life_months != null && item.shelf_life_months !== '' ? item.shelf_life_months : null,
+        ]
       );
-      await updateStock(conn, data.warehouse_id, item.material_id, item.uom, item.received_qty || 0, item.rate || 0);
-      await addLedgerEntry(conn, {
-        transaction_date: data.receipt_date,
-        transaction_type: 'Receipt',
-        reference_type: 'material_receipt',
-        reference_id: id,
-        reference_no: data.receipt_no,
-        warehouse_id: data.warehouse_id,
-        material_id: item.material_id,
-        uom: item.uom,
-        batch_no: item.batch_no,
-        expiry_date: item.expiry_date,
-        in_qty: item.received_qty || 0,
-        out_qty: 0,
-        unit_cost: item.rate || 0,
-        amount: item.amount || 0,
-        balance_qty: item.received_qty || 0,
-        remarks: 'Material receipt (updated)',
-        created_by: updatedBy,
-      });
+    }
+
+    // Only create stock/transactions if posting
+    if (newStatus === 'Posted') {
+      const receipt_no = data.receipt_no || current?.receipt_no || null;
+      // postReceiptTransactions rebuilds the new pairs; record them so any old
+      // pair that's no longer present still gets rebuilt below.
+      await postReceiptTransactions(conn, id, receipt_no, data, items, updatedBy);
+      for (const it of items) affectedPairs.set(`${data.warehouse_id}:${it.material_id}`, { w: data.warehouse_id, m: it.material_id });
+    }
+
+    // Rebuild any pair that was affected by the OLD version but not repriced
+    // above (e.g. an item removed on edit, or the receipt was un-posted).
+    for (const p of affectedPairs.values()) {
+      await rebuildAndReprice(conn, p.w, p.m);
     }
 
     await conn.commit();
@@ -216,16 +342,35 @@ export async function remove(id) {
   try {
     await conn.beginTransaction();
 
+    // A Draft receipt never affected stock (create/update only touch stock when
+    // status === 'Posted'). So a Draft delete must NOT reverse stock, ledger or
+    // transactions — otherwise it would subtract phantom stock. Only a Posted
+    // receipt needs its stock effects reversed.
+    const [[current]] = await conn.query('SELECT status FROM material_receipts WHERE id=?', [id]);
+    const wasPosted = current && current.status === 'Posted';
+
     const [items] = await conn.query(
       'SELECT material_id, uom, received_qty, warehouse_id FROM material_receipt_items mri JOIN material_receipts mr ON mri.receipt_id = mr.id WHERE mri.receipt_id=?',
       [id]
     );
-    for (const item of items) {
-      await updateStock(conn, item.warehouse_id, item.material_id, item.uom, -parseFloat(item.received_qty), 0);
+
+    if (wasPosted) {
+      for (const item of items) {
+        await updateStock(conn, item.warehouse_id, item.material_id, item.uom, -parseFloat(item.received_qty), 0);
+      }
+      await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
+      await replaceReferenceTransactions(conn, 'material_receipt', id, []);
     }
-    await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['material_receipt', id]);
+
     await conn.query('DELETE FROM material_receipt_items WHERE receipt_id=?', [id]);
     const [result] = await conn.query('DELETE FROM material_receipts WHERE id=?', [id]);
+
+    // Rebuild valuation only for Posted receipts (Draft never touched stock).
+    if (wasPosted) {
+      for (const item of items) {
+        await rebuildAndReprice(conn, item.warehouse_id, item.material_id);
+      }
+    }
 
     await conn.commit();
     return result.affectedRows > 0;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import api from './api';
 
 interface User {
@@ -33,6 +33,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+  // Use a ref so the timer handle is stable across re-renders. A plain `let`
+  // is recreated on every render, which meant activity handlers were clearing
+  // a stale (undefined) timer and the original 30-min timer could still fire
+  // while the user was actively working — causing random logouts.
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetInactivityTimer = () => {
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    inactivityTimer.current = setTimeout(() => {
+      // Auto-logout on inactivity
+      const storedToken = localStorage.getItem(TOKEN_KEY);
+      if (storedToken) {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setToken(null);
+        setUser(null);
+        window.location.href = '/login';
+      }
+    }, INACTIVITY_TIMEOUT);
+  };
+
+  // Track user activity
+  useEffect(() => {
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    const handleActivity = () => resetInactivityTimer();
+    events.forEach(e => window.addEventListener(e, handleActivity));
+    resetInactivityTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handleActivity));
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Check for existing token on mount

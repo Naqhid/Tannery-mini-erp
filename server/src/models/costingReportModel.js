@@ -1,0 +1,763 @@
+import pool from '../config/db.js';
+
+/**
+ * Get Costing Report data - sources from production_status_orders.
+ * Columns: Customer, Order-No, Article, Color, Order-qty Sqft, Completed qty Sq.ft,
+ *          Cost per Sqft, Selling Price per Sqft, Variance per sq.ft
+ * 
+ * Cost data is pulled from general_cost_headers + machine_cost_headers + bom material
+ * linked via production_plans (joined by sales_order_id -> sales_orders.order_no = o.order_no).
+ * Selling price comes from sales_order_items.
+ */
+export async function getReport({ search, customer, article, color, page = 1, limit = 10, sortBy, sortOrder }) {
+  const params = [];
+  let where = 'o.deleted_at IS NULL';
+
+  if (search) {
+    where += ' AND (o.customer_name LIKE ? OR o.order_no LIKE ? OR o.article LIKE ? OR o.color LIKE ?)';
+    const t = `%${search}%`;
+    params.push(t, t, t, t);
+  }
+  if (customer) {
+    where += ' AND o.customer_name = ?';
+    params.push(customer);
+  }
+  if (article) {
+    where += ' AND o.article = ?';
+    params.push(article);
+  }
+  if (color) {
+    where += ' AND o.color = ?';
+    params.push(color);
+  }
+
+  const allowedSort = ['customer_name', 'order_no', 'article', 'color', 'order_qty_sqft', 'completed_qty_sqft', 'cost_per_sqft', 'selling_price_per_sqft', 'variance_per_sqft'];
+  let orderClause = 'o.id DESC';
+  if (allowedSort.includes(sortBy)) {
+    const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
+    if (sortBy === 'customer_name') orderClause = `o.customer_name ${ord}`;
+    else if (sortBy === 'order_no') orderClause = `o.order_no ${ord}`;
+    else if (sortBy === 'article') orderClause = `o.article ${ord}`;
+    else if (sortBy === 'color') orderClause = `o.color ${ord}`;
+    else if (sortBy === 'order_qty_sqft') orderClause = `o.issued_qty ${ord}`;
+    else if (sortBy === 'completed_qty_sqft') orderClause = `o.completed_qty ${ord}`;
+    else orderClause = `o.id ${ord}`;
+  }
+
+  const offset = (page - 1) * limit;
+
+  // Main query: pull from production_status_orders
+  // Sales order is linked via the production plan:
+  //   production_status_orders.production_plan_id -> production_plans.id
+  //   production_plans.sales_order_id -> sales_orders.id
+  // Order No, Customer, Article, Color, Order Date and Delivery Date are sourced
+  // from the sales order (falling back to the planning values when unlinked).
+  const [rows] = await pool.query(
+    `SELECT 
+       o.id,
+       COALESCE(so2.customer_name_resolved, o.customer_name) AS customer_name,
+       COALESCE(so2.sales_order_no, o.order_no) AS order_no,
+       COALESCE(so_item.article, o.article) AS article,
+       COALESCE(so_item.color, o.color) AS color,
+       so2.order_date,
+       so_item.delivery_date,
+       COALESCE(so_item.order_qty, o.issued_qty) AS order_qty_sqft,
+       o.completed_qty AS completed_qty_sqft,
+       COALESCE(cost_agg.total_general_cost, 0) AS total_general_cost,
+       COALESCE(cost_agg.total_machine_cost, 0) AS total_machine_cost,
+       COALESCE(cost_agg.total_material_cost, 0) AS total_material_cost,
+       CASE 
+         WHEN o.completed_qty > 0 
+         THEN (COALESCE(cost_agg.total_general_cost, 0) + COALESCE(cost_agg.total_machine_cost, 0) + COALESCE(cost_agg.total_material_cost, 0)) / o.completed_qty
+         ELSE 0 
+       END AS cost_per_sqft,
+       COALESCE(so_agg.selling_price, 0) AS selling_price_per_sqft,
+       CASE 
+         WHEN o.completed_qty > 0 
+         THEN ((COALESCE(cost_agg.total_general_cost, 0) + COALESCE(cost_agg.total_machine_cost, 0) + COALESCE(cost_agg.total_material_cost, 0)) / o.completed_qty) - COALESCE(so_agg.selling_price, 0)
+         ELSE 0 
+       END AS variance_per_sqft
+     FROM production_status_orders o
+     LEFT JOIN (
+       SELECT 
+         so.order_no,
+         SUM(COALESCE(gc_sub.gc_total, 0)) AS total_general_cost,
+         SUM(COALESCE(mc_sub.mc_total, 0)) AS total_machine_cost,
+         0 AS total_material_cost
+       FROM sales_orders so
+       JOIN production_plans pp ON pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+       LEFT JOIN (
+         SELECT production_plan_id, SUM(total_amount) AS gc_total
+         FROM general_cost_headers GROUP BY production_plan_id
+       ) gc_sub ON gc_sub.production_plan_id = pp.id
+       LEFT JOIN (
+         SELECT production_plan_id, SUM(total_amount) AS mc_total
+         FROM machine_cost_headers GROUP BY production_plan_id
+       ) mc_sub ON mc_sub.production_plan_id = pp.id
+       GROUP BY so.order_no
+     ) cost_agg ON cost_agg.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
+     LEFT JOIN (
+       SELECT so.order_no, AVG(soi.unit_price) AS selling_price
+       FROM sales_orders so
+       JOIN sales_order_items soi ON soi.sales_order_id = so.id
+       GROUP BY so.order_no
+     ) so_agg ON so_agg.order_no COLLATE utf8mb4_0900_ai_ci = o.order_no
+     LEFT JOIN production_plans pp2 ON pp2.id = o.production_plan_id AND pp2.deleted_at IS NULL
+     LEFT JOIN (
+       SELECT so.id AS sales_order_id, so.order_no AS sales_order_no, so.order_date,
+         c.name AS customer_name_resolved
+       FROM sales_orders so
+       LEFT JOIN customers c ON so.customer_id = c.id
+     ) so2 ON so2.sales_order_id = pp2.sales_order_id
+     LEFT JOIN (
+       SELECT soi.sales_order_id,
+         soi.item_description AS article,
+         soi.finish_color AS color,
+         SUM(soi.quantity) AS order_qty,
+         MAX(soi.delivery_date) AS delivery_date
+       FROM sales_order_items soi
+       GROUP BY soi.sales_order_id, soi.item_description, soi.finish_color
+     ) so_item
+       ON so_item.sales_order_id = pp2.sales_order_id
+       AND so_item.article COLLATE utf8mb4_0900_ai_ci = o.article COLLATE utf8mb4_0900_ai_ci
+       AND COALESCE(so_item.color, '') COLLATE utf8mb4_0900_ai_ci = COALESCE(o.color, '') COLLATE utf8mb4_0900_ai_ci
+     WHERE ${where}
+     ORDER BY ${orderClause}
+     LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM production_status_orders o
+     WHERE ${where}`,
+    params
+  );
+
+  return { rows, total };
+}
+
+/**
+ * Get filter options for the Costing Report page
+ */
+export async function getFilterOptions() {
+  const [customers] = await pool.query(
+    `SELECT DISTINCT customer_name AS name FROM production_status_orders
+     WHERE deleted_at IS NULL AND customer_name IS NOT NULL AND customer_name != ''
+     ORDER BY customer_name`
+  );
+  const [articles] = await pool.query(
+    `SELECT DISTINCT article FROM production_status_orders
+     WHERE deleted_at IS NULL AND article IS NOT NULL AND article != ''
+     ORDER BY article`
+  );
+  const [colors] = await pool.query(
+    `SELECT DISTINCT color FROM production_status_orders
+     WHERE deleted_at IS NULL AND color IS NOT NULL AND color != ''
+     ORDER BY color`
+  );
+
+  return {
+    customers: customers.map(r => r.name),
+    articles: articles.map(r => r.article),
+    colors: colors.map(r => r.color),
+  };
+}
+
+/**
+ * Actual standard cost detail for a production-status order.  The detail is
+ * stage-wise and uses the production plan/status as the single source of truth.
+ */
+export async function getActualCostDetail(orderId) {
+  const [[seed]] = await pool.query(
+    `SELECT id, order_no, customer_name, article, color, uom, production_plan_id
+     FROM production_status_orders WHERE id=? AND deleted_at IS NULL`,
+    [orderId]
+  );
+  if (!seed) return null;
+  return buildDetailFromSeed(seed);
+}
+
+/**
+ * Resolve the actual standard cost detail directly from a production plan.
+ * Picks any one production_status_orders row seeded by production_plan_id, then
+ * reuses the SAME aggregation logic (grouping on order_no + article + color).
+ */
+export async function getActualCostDetailByPlan(planId) {
+  const [[seed]] = await pool.query(
+    `SELECT id, order_no, customer_name, article, color, uom, production_plan_id
+     FROM production_status_orders
+     WHERE production_plan_id=? AND deleted_at IS NULL
+     ORDER BY id LIMIT 1`,
+    [planId]
+  );
+
+  // No production_status_orders row exists yet for this plan. Fall back to the
+  // production plan itself so the detail page can still render header info.
+  if (!seed) {
+    const [[plan]] = await pool.query(
+      `SELECT pp.id AS production_plan_id, pp.article,
+              so.order_no AS order_no, c.name AS customer_name
+       FROM production_plans pp
+       LEFT JOIN sales_orders so ON so.id = pp.sales_order_id
+       LEFT JOIN customers c ON c.id = so.customer_id
+       WHERE pp.id=? AND pp.deleted_at IS NULL`,
+      [planId]
+    );
+    if (!plan) return null;
+    return {
+      order: {
+        production_plan_id: Number(planId),
+        order_no: plan.order_no || '',
+        customer_name: plan.customer_name || '',
+        article: plan.article || '',
+        color: '',
+        uom: '',
+        order_qty: 0,
+        completed_qty: 0,
+        balance_qty: 0,
+      },
+      stages: [],
+    };
+  }
+
+  return buildDetailFromSeed(seed);
+}
+
+/**
+ * Get cost summary by production plan ID for accordion display.
+ * Returns stage-wise cost breakdown with material, general, and machine costs.
+ */
+export async function getCostSummaryByPlan(planId) {
+  const planIdNum = Number(planId);
+  if (!planIdNum) return null;
+
+  // Get plan number for material issue lookup
+  const [[planInfo]] = await pool.query(
+    `SELECT plan_no FROM production_plans WHERE id = ? AND deleted_at IS NULL`,
+    [planIdNum]
+  );
+  if (!planInfo) return null;
+
+  // Get all stages for this plan from production_status_orders, production_plan_stages, and process_stages master
+  const [stages] = await pool.query(
+    `SELECT DISTINCT pso.process_stage
+     FROM production_status_orders pso
+     WHERE pso.production_plan_id = ? AND pso.deleted_at IS NULL
+       AND pso.process_stage IS NOT NULL AND pso.process_stage != ''
+     UNION
+     SELECT DISTINCT s.stage_name AS process_stage
+     FROM production_plan_stages s
+     WHERE s.plan_id = ? AND s.stage_name IS NOT NULL AND s.stage_name != ''
+     UNION
+     SELECT DISTINCT ps.name AS process_stage
+     FROM process_stages ps
+     WHERE ps.status = 'Active' AND ps.name IS NOT NULL AND ps.name != ''
+     ORDER BY process_stage`,
+    [planIdNum, planIdNum]
+  );
+
+  const result = {
+    stages: [],
+    total_material: 0,
+    total_general: 0,
+    total_machine: 0,
+    grand_total: 0,
+  };
+
+  for (const stageRow of stages) {
+    const stageName = stageRow.process_stage;
+
+    // Get pso IDs for this plan+stage
+    const [psoRows] = await pool.query(
+      `SELECT id FROM production_status_orders 
+       WHERE production_plan_id = ? AND process_stage = ? AND deleted_at IS NULL`,
+      [planIdNum, stageName]
+    );
+    const psoIds = psoRows.map(r => r.id);
+
+    // Material cost from material_issues
+    const [[matCost]] = await pool.query(
+      `SELECT COALESCE(SUM(mii.amount), 0) AS total
+       FROM material_issues mi
+       JOIN material_issue_items mii ON mii.issue_id = mi.id
+       WHERE mi.production_batch = ?
+         AND COALESCE(mi.process_stage, '') COLLATE utf8mb4_0900_ai_ci = COALESCE(?, '') COLLATE utf8mb4_0900_ai_ci`,
+      [planInfo.plan_no, stageName]
+    );
+
+    // General cost from general_cost_headers
+    let generalCost = 0;
+    if (psoIds.length > 0) {
+      const [[genCost]] = await pool.query(
+        `SELECT COALESCE(SUM(gh.total_amount), 0) AS total
+         FROM general_cost_headers gh
+         WHERE gh.production_plan_id IN (?)`,
+        [psoIds]
+      );
+      generalCost = Number(genCost?.total) || 0;
+    }
+
+    // Machine cost from machine_cost_headers  
+    let machineCost = 0;
+    if (psoIds.length > 0) {
+      const [[machCost]] = await pool.query(
+        `SELECT COALESCE(SUM(mh.total_amount), 0) AS total
+         FROM machine_cost_headers mh
+         WHERE mh.production_plan_id IN (?)`,
+        [psoIds]
+      );
+      machineCost = Number(machCost?.total) || 0;
+    }
+
+    const materialCost = Number(matCost?.total) || 0;
+    const stageTotalCost = materialCost + generalCost + machineCost;
+
+    result.stages.push({
+      process_stage: stageName,
+      material_cost: materialCost,
+      general_cost: generalCost,
+      machine_cost: machineCost,
+      total_cost: stageTotalCost,
+    });
+
+    result.total_material += materialCost;
+    result.total_general += generalCost;
+    result.total_machine += machineCost;
+    result.grand_total += stageTotalCost;
+  }
+
+  return result;
+}
+
+/**
+ * Shared aggregation: given a seed production_status_orders row, group all
+ * matching rows on order_no + article + color and build the stage-wise cost
+ * detail. Used by both getActualCostDetail and getActualCostDetailByPlan.
+ */
+async function buildDetailFromSeed(seed) {
+  // ── Order-level rollup ──────────────────────────────────────────────────
+  // A single sales order + article can be produced across MULTIPLE production
+  // plans (e.g. PRP-000004 + PRP-000005). Material issues, machine & general
+  // costs may be recorded against any of those sibling plans. So we gather all
+  // sibling plans for the same sales order + article + color and aggregate the
+  // whole order's cost, not just the one plan that was opened.
+  let siblingPlanIds = seed.production_plan_id ? [seed.production_plan_id] : [];
+  let siblingPlanNos = [];
+  if (seed.production_plan_id) {
+    const [siblings] = await pool.query(
+      `SELECT pp2.id, pp2.plan_no
+       FROM production_plans pp
+       JOIN production_plans pp2
+         ON ((pp.sales_order_id IS NOT NULL AND pp2.sales_order_id = pp.sales_order_id)
+             OR (pp.sales_order_id IS NULL AND pp2.id = pp.id))
+        AND pp2.deleted_at IS NULL
+        AND TRIM(REGEXP_REPLACE(COALESCE(pp2.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+            = TRIM(REGEXP_REPLACE(COALESCE(pp.article,''), '[[:space:]]+', ' ')) COLLATE utf8mb4_unicode_ci
+       WHERE pp.id = ? AND pp.deleted_at IS NULL`,
+      [seed.production_plan_id]
+    );
+    if (siblings.length) {
+      siblingPlanIds = siblings.map(s => s.id);
+      siblingPlanNos = siblings.map(s => s.plan_no).filter(Boolean);
+    }
+  }
+  const planIdList = siblingPlanIds.length ? siblingPlanIds : [0];
+  const planNoList = siblingPlanNos.length ? siblingPlanNos : [''];
+
+  // Build the stage list from the PLAN DEFINITION (production_plan_stages) across
+  // all sibling plans, UNIONed with any Daily Production stages, and UNIONed with
+  // the master process_stages table to ensure EVERY defined stage appears
+  // (Wet End, Finishing, Measurement, Packing, ...) even if no
+  // daily-production/cost has been recorded for it yet. Stages are merged by name.
+  // planIdList holds validated integer plan ids, so they are safe to inline.
+  const idInList = planIdList.map(n => Number(n) || 0).join(',');
+  const seedPlanId = Number(seed.production_plan_id) || 0;
+  const [stages] = await pool.query(
+    `SELECT
+        stage_union.stage_name AS process_stage,
+        (SELECT GROUP_CONCAT(DISTINCT pso.id)
+           FROM production_status_orders pso
+          WHERE pso.deleted_at IS NULL
+            AND pso.production_plan_id IN (${idInList})
+            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+        ) AS pso_ids,
+        (SELECT MIN(pso.id)
+           FROM production_status_orders pso
+          WHERE pso.deleted_at IS NULL
+            AND pso.production_plan_id IN (${idInList})
+            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+        ) AS id,
+        ${seedPlanId} AS production_plan_id,
+        COALESCE((
+          SELECT SUM(pso.completed_qty) FROM production_status_orders pso
+          WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
+            AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+        ), 0) AS completed_qty,
+        COALESCE(
+          NULLIF((
+            SELECT SUM(pso.issued_qty) FROM production_status_orders pso
+            WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
+              AND pso.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+          ), 0),
+          -- Fall back to the planned qty defined on the production plan stage
+          -- when nothing has been issued into this stage yet (issued_qty = 0).
+          (
+            SELECT SUM(s.planned_qty) FROM production_plan_stages s
+            WHERE s.plan_id IN (${idInList})
+              AND s.stage_name COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+          ),
+          0
+        ) AS order_qty,
+        COALESCE((
+          SELECT ps.uom FROM process_stages ps
+          WHERE ps.name COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+          ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
+        ), '') AS uom,
+        COALESCE((
+          SELECT SUM(t.rejection_qty) FROM production_status_transactions t
+          JOIN production_status_orders p2 ON p2.id = t.production_status_order_id
+          WHERE p2.process_stage COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+            AND p2.production_plan_id IN (${idInList})
+            AND t.deleted_at IS NULL AND p2.deleted_at IS NULL
+        ), 0) AS rejection_qty,
+        COALESCE((
+          SELECT ps.seq FROM process_stages ps
+          WHERE ps.name COLLATE utf8mb4_unicode_ci = stage_union.stage_name COLLATE utf8mb4_unicode_ci
+          ORDER BY (ps.status='Active') DESC, ps.id LIMIT 1
+        ), MIN(stage_union.min_seq), 999999) AS stage_seq
+     FROM (
+        SELECT s.stage_name COLLATE utf8mb4_unicode_ci AS stage_name, MIN(s.seq) AS min_seq
+          FROM production_plan_stages s
+         WHERE s.plan_id IN (${idInList})
+         GROUP BY s.stage_name COLLATE utf8mb4_unicode_ci
+        UNION
+        SELECT pso.process_stage COLLATE utf8mb4_unicode_ci AS stage_name, 999999 AS min_seq
+          FROM production_status_orders pso
+         WHERE pso.deleted_at IS NULL AND pso.production_plan_id IN (${idInList})
+         GROUP BY pso.process_stage COLLATE utf8mb4_unicode_ci
+        UNION
+        SELECT ps.name COLLATE utf8mb4_unicode_ci AS stage_name, MIN(ps.seq) AS min_seq
+          FROM process_stages ps
+         WHERE ps.status = 'Active'
+         GROUP BY ps.name COLLATE utf8mb4_unicode_ci
+     ) stage_union
+     GROUP BY stage_union.stage_name
+     ORDER BY stage_seq ASC`,
+    []
+  );
+
+  // Resolve the real Sales Order No and ordered quantity from the linked sales
+  // order (production_status_orders.order_no actually stores the plan number).
+  let salesOrderNo = seed.order_no;
+  let salesOrderQty = 0;
+  if (seed.production_plan_id) {
+    const [[so]] = await pool.query(
+      `SELECT so.order_no,
+              COALESCE((
+                SELECT SUM(soi.quantity) FROM sales_order_items soi
+                WHERE soi.sales_order_id = so.id
+                  AND soi.item_description COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                  AND COALESCE(soi.finish_color,'') COLLATE utf8mb4_unicode_ci = COALESCE(?, '') COLLATE utf8mb4_unicode_ci
+              ), 0) AS order_qty
+       FROM production_plans pp
+       JOIN sales_orders so ON so.id = pp.sales_order_id
+       WHERE pp.id = ? AND pp.deleted_at IS NULL`,
+      [seed.article, seed.color, seed.production_plan_id]
+    );
+    if (so) {
+      if (so.order_no) salesOrderNo = so.order_no;
+      salesOrderQty = Number(so.order_qty) || 0;
+    }
+  }
+
+  // Completed Qty must match the Production Requirement Plans list: cumulative
+  // Daily Production output of the Measurement (last) stage, summed across ALL
+  // production plans linked to this sales order + article. This is the
+  // order-line rollup (e.g. 85 = 75 + 10 across two plans), not a single plan.
+  let completedQty = 0;
+  if (seed.production_plan_id) {
+    const [[row]] = await pool.query(
+      `SELECT COALESCE(SUM(t.output_qty), 0) AS completed_qty
+       FROM production_plans pp
+       JOIN sales_orders so ON so.id = pp.sales_order_id
+       JOIN production_plans pp2 ON pp2.sales_order_id = so.id AND pp2.deleted_at IS NULL
+         AND pp2.article COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+       JOIN production_status_orders pso
+         ON pso.production_plan_id = pp2.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name FROM production_plan_stages s2
+          WHERE s2.plan_id = pp2.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+        )
+       JOIN production_status_transactions t
+         ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+       WHERE pp.id = ? AND pp.deleted_at IS NULL`,
+      [seed.article, seed.production_plan_id]
+    );
+    completedQty = Number(row?.completed_qty) || 0;
+  }
+  // Fall back to the recorded completed_qty on the status orders when no Daily
+  // Production transactions exist yet.
+  if (completedQty <= 0) {
+    completedQty = stages.reduce((m, r) => Math.max(m, Number(r.completed_qty) || 0), 0);
+  }
+  // Prefer the sales order quantity; fall back to the max issued qty across stages.
+  const orderQty = salesOrderQty > 0
+    ? salesOrderQty
+    : stages.reduce((m, r) => Math.max(m, Number(r.order_qty) || 0), 0);
+  const balanceQty = Math.max(0, orderQty - completedQty);
+
+  // Measurement (Sq.Ft.) basis for the Summary's Cost/Sqft column. The sqft
+  // basis is the completed qty of the stage(s) measured in Square Feet (the
+  // Measurement stage). If measurement has produced 0 Sq.Ft. yet, there is no
+  // valid sqft basis, so Cost/Sqft must be 0 (not derived from a piece count).
+  const isSqftUom = (u) => /sq\.?\s*ft|square\s*feet|sqft/i.test(String(u || ''));
+  const measurementSqft = stages.reduce(
+    (m, r) => isSqftUom(r.uom) ? m + (Number(r.completed_qty) || 0) : m,
+    0
+  );
+
+  // Material Issues link by plan_no + process_stage. We aggregate across ALL
+  // sibling plan numbers so material issued under any plan of this sales order
+  // is included. planNoList was resolved above.
+  let productId = null;
+  if (seed.production_plan_id) {
+    const [[pp]] = await pool.query(
+      `SELECT product_id FROM production_plans WHERE id=? AND deleted_at IS NULL`,
+      [seed.production_plan_id]
+    );
+    productId = pp?.product_id || null;
+  }
+
+  // BOM (standard) cost per item, keyed by the item's name. Each item's BOM Cost
+  // is the BOM line Amount = qty * (1 + scrap%/100) * unit_cost.
+  // We resolve the BOM by (a) the plan's product_id, or (b) a product whose name
+  // matches the order article. Prefer an Active BOM, else the most recent one.
+  const bomCostByName = new Map();
+
+  // Find the BOM id to use.
+  let bomId = null;
+  if (productId) {
+    const [[b]] = await pool.query(
+      `SELECT id FROM boms WHERE product_id = ?
+       ORDER BY (status='Active') DESC, version DESC, id DESC LIMIT 1`,
+      [productId]
+    );
+    bomId = b?.id || null;
+  }
+  if (!bomId && seed.article) {
+    // Fall back to a BOM whose product name matches the order article. Match
+    // exactly first, then a prefix/contains match ("Sheep Softy" vs
+    // "Sheep Softy Black"). Whitespace is normalized (collapse repeated spaces
+    // and trim) so a stray double space in the product name does not block a
+    // match. Prefer Active, latest version.
+    const norm = (col) => `TRIM(REGEXP_REPLACE(${col}, '[[:space:]]+', ' '))`;
+    const [[b]] = await pool.query(
+      `SELECT bm.id FROM boms bm
+       JOIN products p ON p.id = bm.product_id
+       WHERE ${norm('p.name')} COLLATE utf8mb4_unicode_ci = ${norm('?')} COLLATE utf8mb4_unicode_ci
+          OR ${norm('p.name')} COLLATE utf8mb4_unicode_ci LIKE CONCAT(${norm('?')}, '%')
+          OR ${norm('?')} LIKE CONCAT(${norm('p.name')} COLLATE utf8mb4_unicode_ci, '%')
+       ORDER BY (${norm('p.name')} COLLATE utf8mb4_unicode_ci = ${norm('?')}) DESC,
+                (bm.status='Active') DESC, bm.version DESC, bm.id DESC
+       LIMIT 1`,
+      [seed.article, seed.article, seed.article, seed.article]
+    );
+    bomId = b?.id || null;
+  }
+  if (!bomId && seed.customer_name) {
+    // Last-resort fallback: a BOM for the same customer. Prefer a product whose
+    // name relates to the article, then Active / latest.
+    const [[b]] = await pool.query(
+      `SELECT bm.id FROM boms bm
+       LEFT JOIN products p ON p.id = bm.product_id
+       LEFT JOIN customers c ON c.id = bm.customer_id
+       WHERE c.name COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+       ORDER BY (p.name COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, '%')) DESC,
+                (bm.status='Active') DESC, bm.version DESC, bm.id DESC
+       LIMIT 1`,
+      [seed.customer_name, seed.article || '']
+    );
+    bomId = b?.id || null;
+  }
+
+  if (bomId) {
+    const [bomItems] = await pool.query(
+      `SELECT COALESCE(m.name, mac.name) AS item_name,
+              COALESCE(SUM(bi.qty * (1 + COALESCE(bi.scrap_percent,0)/100) * COALESCE(bi.unit_cost,0)), 0) AS bom_cost
+       FROM bom_items bi
+       LEFT JOIN materials m ON bi.material_id = m.id
+       LEFT JOIN machines mac ON bi.machine_id = mac.id
+       WHERE bi.bom_id = ?
+       GROUP BY COALESCE(m.name, mac.name)`,
+      [bomId]
+    );
+    for (const bi of bomItems) {
+      if (bi.item_name) bomCostByName.set(String(bi.item_name).toLowerCase(), Number(bi.bom_cost) || 0);
+    }
+  }
+
+  const stageDetails = [];
+  const summary = [];
+  for (const stage of stages) {
+    // Material Issues for this plan + stage. Item Group comes from the
+    // material's group_master; Item Name is the material name.
+    // Material Issues across ALL sibling plans for this stage.
+    const psoIds = String(stage.pso_ids || stage.id).split(',').map(s => Number(s)).filter(Boolean);
+    const psoIdPlaceholders = psoIds.length ? psoIds.map(() => '?').join(',') : '0';
+    const batchPlaceholders = planNoList.map(() => '?').join(',');
+    const [materialRows] = await pool.query(
+      `SELECT 'Material Issue' AS data_source,
+              COALESCE(g.name, '') AS item_group,
+              m.name AS item_name,
+              i.uom,
+              COALESCE(SUM(i.amount),0) AS actual_cost
+       FROM material_issues h
+       JOIN material_issue_items i ON i.issue_id=h.id
+       JOIN materials m ON m.id = i.material_id
+       LEFT JOIN group_master g ON m.group_id = g.id
+       WHERE h.production_batch IN (${batchPlaceholders})
+         AND COALESCE(h.process_stage,'') COLLATE utf8mb4_0900_ai_ci = COALESCE(?, '') COLLATE utf8mb4_0900_ai_ci
+       GROUP BY g.name, m.name, i.uom
+       ORDER BY g.name, m.name`,
+      [...planNoList, stage.process_stage]
+    );
+    const [generalRows] = await pool.query(
+      `SELECT 'General Cost' AS data_source,
+              COALESCE(mg.group_name, '') AS item_group,
+              i.cost_category AS item_name, i.uom,
+              COALESCE(SUM(i.amount),0) AS actual_cost
+       FROM general_cost_headers h
+       JOIN general_cost_items i ON i.general_cost_id=h.id
+       LEFT JOIN (
+         SELECT mm.name AS material_name, gm.name AS group_name
+         FROM materials mm LEFT JOIN group_master gm ON mm.group_id = gm.id
+       ) mg ON mg.material_name COLLATE utf8mb4_0900_ai_ci = i.cost_category COLLATE utf8mb4_0900_ai_ci
+       WHERE h.production_plan_id IN (${psoIdPlaceholders})
+       GROUP BY mg.group_name, i.cost_category, i.uom
+       ORDER BY MIN(i.sort_order), MIN(i.id)`, psoIds.length ? psoIds : [0]
+    );
+    const [machineRows] = await pool.query(
+      `SELECT 'Machine Cost' AS data_source,
+              COALESCE(g.name, i.group_name, '') AS item_group,
+              i.machine_name AS item_name, i.uom,
+              COALESCE(SUM(i.amount),0) AS actual_cost
+       FROM machine_cost_headers h
+       JOIN machine_cost_items i ON i.machine_cost_id=h.id
+       LEFT JOIN group_master g ON i.group_id = g.id
+       WHERE h.production_plan_id IN (${psoIdPlaceholders})
+       GROUP BY COALESCE(g.name, i.group_name, ''), i.machine_name, i.uom
+       ORDER BY MIN(i.sort_order), MIN(i.id)`, psoIds.length ? psoIds : [0]
+    );
+    const outputQty = Number(stage.completed_qty) || 0;
+    const perUom = (amt) => outputQty > 0 ? amt / outputQty : 0;
+    const rows = [...materialRows, ...machineRows, ...generalRows].map(r => {
+      const actual = Number(r.actual_cost) || 0;
+      const bomCost = bomCostByName.get(String(r.item_name || '').toLowerCase()) || 0;
+      return ({
+      data_source: r.data_source,
+      item_group: r.item_group || '',
+      item_name: r.item_name || '',
+      // Kept for backward compatibility with any existing consumers.
+      cost_group: r.data_source,
+      cost_category: r.item_name || '',
+      uom: r.uom,
+      actual_cost: actual,
+      cost_per_uom: perUom(actual),
+      bom_cost: bomCost,
+      variance: bomCost - actual,
+    });
+    });
+    stageDetails.push({ ...stage, rows });
+
+    // --- Per-stage Summary (mirrors the Excel breakdown) ---
+    // In the Summary, Cost/Sqft = amount / measurement (Sq.Ft.) qty. When the
+    // Measurement stage has produced 0 Sq.Ft., there is no sqft basis and the
+    // Cost/Sqft is 0.
+    const perSqft = (amt) => measurementSqft > 0 ? amt / measurementSqft : 0;
+    const sumBy = (list) => list.reduce((a, r) => a + (Number(r.actual_cost) || 0), 0);
+    const materialCost = sumBy(materialRows);
+    const generalCost = sumBy(generalRows);
+    const machineCost = sumBy(machineRows);
+    const stageTotal = materialCost + generalCost + machineCost;
+    const rejectionQty = Number(stage.rejection_qty) || 0;
+    // Rejection cost = per-sqft cost of the stage * rejection qty.
+    const stageCostPerPiece = perSqft(stageTotal);
+    const rejectionAmount = stageCostPerPiece * rejectionQty;
+
+    // Planned qty for this stage (from production_plan_stages.planned_qty, or
+    // the issued qty). This is what the stage label and the per-piece cost are
+    // based on, matching the Production Plan's "Plan Qty" column.
+    const plannedQty = Number(stage.order_qty) || 0;
+
+    summary.push({
+      process_stage: stage.process_stage,
+      uom: stage.uom,
+      output_qty: outputQty,
+      planned_qty: plannedQty,
+      rejection_qty: rejectionQty,
+      lines: [
+        { label: 'Material Cost', amount: materialCost, cost_per_piece: perSqft(materialCost) },
+        { label: 'General Cost', amount: generalCost, cost_per_piece: perSqft(generalCost) },
+        { label: 'Machine Cost', amount: machineCost, cost_per_piece: perSqft(machineCost) },
+      ],
+      total: { amount: stageTotal, cost_per_piece: stageCostPerPiece },
+      rejection: { qty: rejectionQty, amount: rejectionAmount, cost_per_piece: perSqft(rejectionAmount) },
+      total_with_rejection: {
+        amount: stageTotal + rejectionAmount,
+        cost_per_piece: stageCostPerPiece + perSqft(rejectionAmount),
+      },
+    });
+  }
+
+  // Overall order-level excess/shortage: order qty vs the final (measurement)
+  // completed qty. Positive => shortage, negative => excess.
+  const excessShortage = orderQty - completedQty;
+
+  // Order-level cost totals (Actual, BOM, Variance) for the BOM cost sheet.
+  const allRows = stageDetails.flatMap(s => s.rows);
+  const totalActualCost = allRows.reduce((a, r) => a + (Number(r.actual_cost) || 0), 0);
+  const totalBomCost = allRows.reduce((a, r) => a + (Number(r.bom_cost) || 0), 0);
+  const totalVariance = totalBomCost - totalActualCost;
+
+  // Latest SAVED standard cost sheet for this plan (or any sibling plan of the
+  // same sales order). Used so the UI shows the real status (e.g. Approved)
+  // instead of always defaulting to Draft. Prefer Approved/Posted, then latest.
+  let savedCostSheet = null;
+  if (planIdList.length) {
+    const idList = planIdList.map(n => Number(n) || 0).join(',');
+    const [[scs]] = await pool.query(
+      `SELECT id, cost_sheet_no, status, effective_from, description, currency
+         FROM standard_cost_sheets
+        WHERE production_plan_id IN (${idList})
+        ORDER BY (status IN ('Approved','Posted')) DESC, id DESC
+        LIMIT 1`
+    );
+    if (scs) savedCostSheet = scs;
+  }
+
+  return {
+    order: {
+      ...seed,
+      order_no: salesOrderNo,
+      production_plan_id: seed.production_plan_id,
+      order_qty: orderQty,
+      completed_qty: completedQty,
+      balance_qty: balanceQty,
+    },
+    stages: stageDetails,
+    summary,
+    summary_meta: {
+      order_qty: orderQty,
+      completed_qty: completedQty,
+      measurement_sqft: measurementSqft,
+      excess_shortage: excessShortage,
+    },
+    cost_totals: {
+      total_actual_cost: totalActualCost,
+      total_bom_cost: totalBomCost,
+      total_variance: totalVariance,
+    },
+    saved_cost_sheet: savedCostSheet,
+  };
+}

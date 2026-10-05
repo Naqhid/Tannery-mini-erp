@@ -14,12 +14,14 @@ const breadcrumbMap: Record<string, string> = {
   '/recipe-creation': 'Recipe Creation',
   '/bom': 'BOM',
   '/bom-revision': 'BOM Revision',
+  '/cost-breakdown': 'Cost Breakdown',
   '/material-requirement': 'Material Requirement',
   '/inventory': 'Inventory',
   '/production': 'Production',
   '/reports': 'Reports',
   '/settings': 'Settings',
   '/batch-lot-tracking': 'Batch / Lot Tracking',
+  '/batch-process': 'Material Requisition Note',
   '/supplier-pricing-history': 'Supplier Pricing History',
   '/supplier-pricing-history/new': 'Add New Price',
   '/supplier-price-approval': 'Supplier Price Approval',
@@ -30,13 +32,15 @@ const breadcrumbMap: Record<string, string> = {
 const parentMap: Record<string, string> = {
   '/customer-master': 'Masters',
   '/product-master': 'Masters',
-  '/chemical-master': 'Masters',
-  '/supplier-master': 'Purchase',
+  '/chemical-master': 'Purchase',
+  '/supplier-master': 'Masters',
   '/recipe-creation': 'BOM / Recipe',
   '/bom': 'BOM / Recipe',
   '/bom-revision': 'BOM / Recipe',
+  '/cost-breakdown': 'BOM / Recipe',
   '/material-requirement': 'BOM / Recipe',
   '/batch-lot-tracking': 'Production',
+  '/batch-process': 'Production',
   '/supplier-pricing-history': 'Purchase',
   '/supplier-pricing-history/new': 'Purchase',
   '/supplier-price-approval': 'Purchase',
@@ -63,18 +67,29 @@ export default function Layout() {
   // Flatten menu items for search
   const searchableItems = useMemo(() => {
     const items: { label: string; path: string; parent?: string }[] = [];
+    
+    // Filter menu items based on user's menu_access (same logic as Sidebar)
+    const userMenuAccess = user?.menu_access;
+    const hasMenuRestrictions = Array.isArray(userMenuAccess) && userMenuAccess.length > 0;
+    
     for (const item of menuItems) {
       if (item.path) {
-        items.push({ label: item.label, path: item.path });
+        // Only include if user has access or no restrictions (admin)
+        if (!hasMenuRestrictions || userMenuAccess.includes(item.path)) {
+          items.push({ label: item.label, path: item.path });
+        }
       }
       if (item.children) {
         for (const child of item.children) {
-          items.push({ label: child.label, path: child.path, parent: item.label });
+          // Only include child if user has access or no restrictions (admin)
+          if (!hasMenuRestrictions || userMenuAccess.includes(child.path)) {
+            items.push({ label: child.label, path: child.path, parent: item.label });
+          }
         }
       }
     }
     return items;
-  }, []);
+  }, [user?.menu_access]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];

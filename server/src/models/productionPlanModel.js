@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 
 const ALLOWED_SORT = ['id', 'plan_no', 'plan_date', 'status', 'order_qty', 'planned_qty', 'created_at'];
 
-export async function getAll({ search, status, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
+export async function getAll({ search, status, plan_id, customer_id, product_id, article, color, finish, sales_order_no, customer_order_no, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
   const params = [];
   let where = 'pp.deleted_at IS NULL';
 
@@ -11,6 +11,9 @@ export async function getAll({ search, status, customer_id, product_id, article,
     const t = `%${search}%`;
     params.push(t, t, t, t, t);
   }
+  // Exact plan id (used by the sales-order-items expander which already knows
+  // the plan_id, avoiding fragile article-name matching).
+  if (plan_id) { where += ' AND pp.id = ?'; params.push(plan_id); }
   if (status) { where += ' AND pp.status = ?'; params.push(status); }
   if (customer_id) { where += ' AND pp.customer_id = ?'; params.push(customer_id); }
   if (product_id) { where += ' AND pp.product_id = ?'; params.push(product_id); }
@@ -26,12 +29,58 @@ export async function getAll({ search, status, customer_id, product_id, article,
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * limit;
 
+  // Measurement stage = last stage by sequence for the plan. Its cumulative
+  // Daily Production output is the source of truth for output/completed qty.
+  const measurementOutputSql = `
+    COALESCE((
+      SELECT SUM(t.output_qty)
+      FROM production_status_orders pso
+      JOIN production_status_transactions t
+        ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+          SELECT s2.stage_name
+          FROM production_plan_stages s2
+          WHERE s2.plan_id = pp.id
+          ORDER BY s2.seq DESC, s2.id DESC
+          LIMIT 1
+        )
+    ), 0)`;
+
+  // Per-stage Daily Production output for this plan (one row per stage),
+  // used to derive status across ALL stages of the plan.
+  const stageOutputCte = `
+    SELECT s.plan_id, s.stage_name, s.planned_qty AS stage_planned,
+      COALESCE((
+        SELECT SUM(t.output_qty)
+        FROM production_status_orders pso
+        JOIN production_status_transactions t
+          ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+        WHERE pso.production_plan_id = s.plan_id AND pso.deleted_at IS NULL
+          AND pso.process_stage COLLATE utf8mb4_unicode_ci = s.stage_name COLLATE utf8mb4_unicode_ci
+      ), 0) AS stage_output
+    FROM production_plan_stages s`;
+
+  // Count of stages, stages with output > 0, and stages meeting planned qty.
+  const stageCountSql = `(SELECT COUNT(*) FROM production_plan_stages s0 WHERE s0.plan_id = pp.id)`;
+  const stagesWithOutputSql = `(SELECT COUNT(*) FROM (${stageOutputCte}) so1 WHERE so1.plan_id = pp.id AND so1.stage_output > 0)`;
+  const stagesCompletedSql = `(SELECT COUNT(*) FROM (${stageOutputCte}) so2 WHERE so2.plan_id = pp.id AND so2.stage_planned > 0 AND so2.stage_output >= so2.stage_planned)`;
+
   const [rows] = await pool.query(
     `SELECT pp.id, pp.plan_no, pp.plan_date, pp.planned_start_date, pp.planned_end_date,
        pp.order_qty, pp.planned_qty, pp.batch_qty, pp.no_of_batches,
-       pp.balance_qty, pp.output_qty, pp.output_percent, pp.wip_qty,
+       pp.output_percent,
        pp.article, pp.color, pp.finish, pp.customer_order_no,
-       pp.priority, pp.status, pp.uom, pp.created_at,
+       pp.priority, pp.uom, pp.created_at,
+       ${measurementOutputSql} AS output_qty,
+       ${measurementOutputSql} AS completed_qty,
+       GREATEST(0, COALESCE(pp.planned_qty, 0) - ${measurementOutputSql}) AS wip_qty,
+       GREATEST(0, COALESCE(pp.planned_qty, 0) - ${measurementOutputSql}) AS balance_qty,
+       CASE
+         WHEN ${stageCountSql} > 0 AND ${stagesCompletedSql} = ${stageCountSql} THEN 'Completed'
+         WHEN ${stagesWithOutputSql} > 0 THEN 'In Progress'
+         ELSE 'Planned'
+       END AS status,
        c.id AS customer_id, c.name AS customer_name,
        p.id AS product_id, p.name AS product_name, p.code AS product_code,
        so.order_no AS sales_order_no
@@ -84,11 +133,39 @@ export async function getById(id) {
   );
 
   const [stages] = await pool.query(
-    `SELECT pps.*, ps.name AS process_stage_name, ps.code AS process_stage_code
+    `SELECT pps.*, ps.name AS process_stage_name, ps.code AS process_stage_code, ps.uom AS stage_uom
      FROM production_plan_stages pps
      LEFT JOIN process_stages ps ON pps.stage_id = ps.id
      WHERE pps.plan_id = ? ORDER BY pps.seq ASC`, [id]
   );
+
+  // Aggregate Daily Production transactions per stage for this plan
+  const [dpAgg] = await pool.query(
+    `SELECT pso.process_stage,
+       COALESCE(SUM(t.input_qty), 0) AS agg_input_qty,
+       COALESCE(SUM(t.output_qty), 0) AS agg_output_qty,
+       COALESCE(SUM(t.rejection_qty), 0) AS agg_rejection_qty
+     FROM production_status_orders pso
+     JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+     WHERE pso.production_plan_id = ? AND pso.deleted_at IS NULL
+     GROUP BY pso.process_stage`, [id]
+  );
+  const aggMap = {};
+  for (const row of dpAgg) {
+    aggMap[row.process_stage] = row;
+  }
+
+  // Merge aggregated data into stages
+  for (const stage of stages) {
+    const stageName = stage.stage_name || stage.process_stage_name;
+    const agg = aggMap[stageName];
+    if (agg) {
+      stage.issue_input_qty = parseFloat(agg.agg_input_qty) || 0;
+      stage.output_qty = parseFloat(agg.agg_output_qty) || 0;
+      stage.rejection_qty = parseFloat(agg.agg_rejection_qty) || 0;
+      stage.wip_qty = Math.max(0, (parseFloat(stage.planned_qty) || 0) - stage.output_qty - stage.rejection_qty);
+    }
+  }
 
   const [batches] = await pool.query(
     `SELECT * FROM production_batches
@@ -99,14 +176,13 @@ export async function getById(id) {
 }
 
 export async function getNextNo() {
-  const year = new Date().getFullYear();
   const [[row]] = await pool.query(
-    `SELECT plan_no FROM production_plans WHERE plan_no LIKE ? ORDER BY id DESC LIMIT 1`,
-    [`PLAN-${year}-%`]
+    `SELECT plan_no FROM production_plans WHERE plan_no LIKE 'PRP-%' ORDER BY id DESC LIMIT 1`
   );
-  if (!row) return `PLAN-${year}-00001`;
-  const num = parseInt(row.plan_no.split('-')[2], 10) + 1;
-  return `PLAN-${year}-${String(num).padStart(5, '0')}`;
+  if (!row) return `PRP-000001`;
+  const numPart = row.plan_no.replace('PRP-', '');
+  const num = parseInt(numPart, 10) + 1;
+  return `PRP-${String(num).padStart(6, '0')}`;
 }
 
 export async function getStats() {
@@ -148,10 +224,11 @@ export async function create(data, items = [], stages = [], createdBy = null) {
       `INSERT INTO production_plans (
         plan_no, plan_date, sales_order_id, customer_id, product_id, warehouse_id, uom,
         article, color, finish, customer_order_no,
-        order_qty, planned_qty, batch_qty, no_of_batches, balance_qty,
+        order_qty, expected_yield, planner, completed_qty, sales_order_qty,
+        planned_qty, batch_qty, no_of_batches, balance_qty,
         output_qty, output_percent, wip_qty,
         planned_start_date, planned_end_date, priority, remarks, status, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         plan_no,
         data.plan_date || new Date().toISOString().split('T')[0],
@@ -159,12 +236,16 @@ export async function create(data, items = [], stages = [], createdBy = null) {
         data.customer_id || null,
         data.product_id || null,
         data.warehouse_id || null,
-        data.uom || null,
+        data.uom || 'Pcs',
         data.article || null,
         data.color || null,
         data.finish || null,
         data.customer_order_no || null,
         parseFloat(data.order_qty) || 0,
+        parseFloat(data.expected_yield) || 92,
+        data.planner || null,
+        parseFloat(data.completed_qty) || 0,
+        parseFloat(data.sales_order_qty) || 0,
         parseFloat(data.planned_qty) || 0,
         parseFloat(data.batch_qty) || 0,
         noOfBatches,
@@ -194,11 +275,11 @@ export async function create(data, items = [], stages = [], createdBy = null) {
       );
     }
 
-    // Insert stages
+    // Insert stages and auto-create Daily Production entries
     for (const stage of stages) {
       await conn.query(
-        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, issue_input_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           planId,
           parseInt(stage.seq) || 1,
@@ -206,6 +287,7 @@ export async function create(data, items = [], stages = [], createdBy = null) {
           stage.stage_name || null,
           parseFloat(stage.capacity) || 0,
           parseFloat(stage.planned_qty) || 0,
+          parseFloat(stage.issue_input_qty) || 0,
           parseFloat(stage.planned_percent) || 100,
           parseFloat(stage.receipt_qty) || 0,
           parseFloat(stage.rejection_qty) || 0,
@@ -214,6 +296,55 @@ export async function create(data, items = [], stages = [], createdBy = null) {
           parseFloat(stage.wip_qty) || 0,
           stage.status || 'In-Process',
           stage.remarks || null,
+        ]
+      );
+
+      // Auto-create Daily Production entry for this plan+stage if stage has a name
+      if (stage.stage_name || stage.stage_id) {
+        const stageName = stage.stage_name || '';
+        // Check if a Daily Production entry already exists for this plan+stage
+        const [[existing]] = await conn.query(
+          `SELECT id FROM production_status_orders WHERE production_plan_id=? AND process_stage=? AND deleted_at IS NULL`,
+          [planId, stageName]
+        );
+        if (!existing) {
+          // Fetch customer name
+          let customerName = '';
+          if (data.customer_id) {
+            const [[cust]] = await conn.query('SELECT name FROM customers WHERE id=?', [data.customer_id]);
+            if (cust) customerName = cust.name;
+          }
+          await conn.query(
+            `INSERT INTO production_status_orders
+             (order_no, production_plan_id, plan_date, customer_name, customer_id, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, created_by, updated_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [
+              plan_no, planId, data.plan_date || null,
+              customerName, data.customer_id || null,
+              data.article || null, data.color || null, stageName,
+              0, 0, 0, 'Pcs', 'Pending', createdBy, createdBy,
+            ]
+          );
+        }
+      }
+    }
+
+    // If no stages but plan was created, create a single Daily Production entry
+    if (stages.length === 0) {
+      let customerName = '';
+      if (data.customer_id) {
+        const [[cust]] = await conn.query('SELECT name FROM customers WHERE id=?', [data.customer_id]);
+        if (cust) customerName = cust.name;
+      }
+      await conn.query(
+        `INSERT INTO production_status_orders
+         (order_no, production_plan_id, plan_date, customer_name, customer_id, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, created_by, updated_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          plan_no, planId, data.plan_date || null,
+          customerName, data.customer_id || null,
+          data.article || null, data.color || null, null,
+          0, 0, 0, 'Pcs', 'Pending', createdBy, createdBy,
         ]
       );
     }
@@ -239,16 +370,22 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
       `UPDATE production_plans SET
         plan_date=?, sales_order_id=?, customer_id=?, product_id=?, warehouse_id=?, uom=?,
         article=?, color=?, finish=?, customer_order_no=?,
-        order_qty=?, planned_qty=?, batch_qty=?, no_of_batches=?, balance_qty=?,
+        order_qty=?, expected_yield=?, planner=?, completed_qty=?, sales_order_qty=?,
+        planned_qty=?, batch_qty=?, no_of_batches=?, balance_qty=?,
         output_qty=?, output_percent=?, wip_qty=?,
         planned_start_date=?, planned_end_date=?, priority=?, remarks=?, status=?,
         updated_by=?, updated_at=NOW()
       WHERE id=? AND deleted_at IS NULL`,
       [
         data.plan_date, data.sales_order_id || null, data.customer_id || null,
-        data.product_id || null, data.warehouse_id || null, data.uom || null,
+        data.product_id || null, data.warehouse_id || null, data.uom || 'Pcs',
         data.article || null, data.color || null, data.finish || null, data.customer_order_no || null,
-        parseFloat(data.order_qty) || 0, parseFloat(data.planned_qty) || 0,
+        parseFloat(data.order_qty) || 0,
+        parseFloat(data.expected_yield) || 92,
+        data.planner || null,
+        parseFloat(data.completed_qty) || 0,
+        parseFloat(data.sales_order_qty) || 0,
+        parseFloat(data.planned_qty) || 0,
         parseFloat(data.batch_qty) || 0, noOfBatches, balanceQty,
         parseFloat(data.output_qty) || 0, outputPercent, wipQty,
         data.planned_start_date || null, data.planned_end_date || null,
@@ -271,12 +408,22 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
       );
     }
 
-    // Re-insert stages
+    // Re-insert stages and ensure Daily Production entries exist
     await conn.query(`DELETE FROM production_plan_stages WHERE plan_id = ?`, [id]);
+
+    // Get plan header info for Daily Production entries
+    const [[planHeader]] = await conn.query('SELECT plan_no, plan_date, customer_id, article, color FROM production_plans WHERE id=?', [id]);
+    let customerName = '';
+    if (data.customer_id || planHeader?.customer_id) {
+      const custId = data.customer_id || planHeader?.customer_id;
+      const [[cust]] = await conn.query('SELECT name FROM customers WHERE id=?', [custId]);
+      if (cust) customerName = cust.name;
+    }
+
     for (const stage of stages) {
       await conn.query(
-        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO production_plan_stages (plan_id, seq, stage_id, stage_name, capacity, planned_qty, issue_input_qty, planned_percent, receipt_qty, rejection_qty, output_qty, output_percent, wip_qty, status, remarks)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           parseInt(stage.seq) || 1,
@@ -284,6 +431,7 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
           stage.stage_name || null,
           parseFloat(stage.capacity) || 0,
           parseFloat(stage.planned_qty) || 0,
+          parseFloat(stage.issue_input_qty) || 0,
           parseFloat(stage.planned_percent) || 100,
           parseFloat(stage.receipt_qty) || 0,
           parseFloat(stage.rejection_qty) || 0,
@@ -294,6 +442,28 @@ export async function update(id, data, items = [], stages = [], updatedBy = null
           stage.remarks || null,
         ]
       );
+
+      // Auto-create Daily Production entry for this plan+stage if not exists
+      if (stage.stage_name || stage.stage_id) {
+        const stageName = stage.stage_name || '';
+        const [[existing]] = await conn.query(
+          `SELECT id FROM production_status_orders WHERE production_plan_id=? AND process_stage=? AND deleted_at IS NULL`,
+          [id, stageName]
+        );
+        if (!existing) {
+          await conn.query(
+            `INSERT INTO production_status_orders
+             (order_no, production_plan_id, plan_date, customer_name, customer_id, article, color, process_stage, issued_qty, completed_qty, balance_qty, uom, status, created_by, updated_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [
+              planHeader?.plan_no || null, id, data.plan_date || planHeader?.plan_date || null,
+              customerName, data.customer_id || planHeader?.customer_id || null,
+              data.article || planHeader?.article || null, data.color || planHeader?.color || null, stageName,
+              0, 0, 0, 'Pcs', 'Pending', updatedBy, updatedBy,
+            ]
+          );
+        }
+      }
     }
 
     await conn.commit();
@@ -326,17 +496,131 @@ export async function bulkDelete(ids, deletedBy = null) {
 // Get dropdown data for filters
 export async function getFilterOptions() {
   const [articles] = await pool.query(
-    `SELECT DISTINCT article FROM production_plans WHERE article IS NOT NULL AND article != '' AND deleted_at IS NULL ORDER BY article`
+    `SELECT DISTINCT soi.item_description AS article FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     WHERE soi.item_description IS NOT NULL AND soi.item_description != '' AND so.status NOT IN ('Cancelled')
+     ORDER BY soi.item_description`
   );
   const [colors] = await pool.query(
-    `SELECT DISTINCT color FROM production_plans WHERE color IS NOT NULL AND color != '' AND deleted_at IS NULL ORDER BY color`
+    `SELECT DISTINCT soi.finish_color AS color FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     WHERE soi.finish_color IS NOT NULL AND soi.finish_color != '' AND so.status NOT IN ('Cancelled')
+     ORDER BY soi.finish_color`
   );
   const [finishes] = await pool.query(
-    `SELECT DISTINCT finish FROM production_plans WHERE finish IS NOT NULL AND finish != '' AND deleted_at IS NULL ORDER BY finish`
+    `SELECT DISTINCT soi.leather_type AS finish FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     WHERE soi.leather_type IS NOT NULL AND soi.leather_type != '' AND so.status NOT IN ('Cancelled')
+     ORDER BY soi.leather_type`
   );
   return {
     articles: articles.map(r => r.article),
     colors: colors.map(r => r.color),
     finishes: finishes.map(r => r.finish),
   };
+}
+
+// Get sales order items as production requirement source
+export async function getSalesOrderItems({ search, status, customer_id, article, color, plan_no, page = 1, limit = 10 } = {}) {
+  const params = [];
+  let where = 'so.status NOT IN ("Cancelled")';
+
+  if (search) {
+    where += ' AND (so.order_no LIKE ? OR c.name LIKE ? OR soi.item_description LIKE ? OR so.customer_po_no LIKE ?)';
+    const t = `%${search}%`;
+    params.push(t, t, t, t);
+  }
+  if (customer_id) { where += ' AND so.customer_id = ?'; params.push(customer_id); }
+  if (article) { where += ' AND soi.item_description LIKE ?'; params.push(`%${article}%`); }
+  if (color) { where += ' AND soi.finish_color LIKE ?'; params.push(`%${color}%`); }
+  // Plan No filter: keep only sales-order items that have at least one production
+  // plan whose plan_no matches, scoped to the same order + article.
+  if (plan_no) {
+    where += ` AND EXISTS (
+      SELECT 1 FROM production_plans pp3
+      WHERE pp3.sales_order_id = so.id
+        AND pp3.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
+        AND pp3.deleted_at IS NULL
+        AND pp3.plan_no LIKE ?
+    )`;
+    params.push(`%${plan_no}%`);
+  }
+  if (status) {
+    if (status === 'Pending') {
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) = 0';
+    } else if (status === 'In Progress') {
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) > 0';
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) < soi.quantity';
+    } else if (status === 'Completed') {
+      where += ' AND COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0) >= soi.quantity';
+    }
+  }
+
+  const offset = (page - 1) * limit;
+
+  // Planned qty across all matching plans (unchanged).
+  const plannedSql = `COALESCE((SELECT SUM(pp2.planned_qty) FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL), 0)`;
+
+  // Completed qty = cumulative Daily Production output of each plan's
+  // measurement stage (last stage by sequence), summed across matching plans.
+  const completedSql = `COALESCE((
+    SELECT SUM(t.output_qty)
+    FROM production_plans pp2
+    JOIN production_status_orders pso
+      ON pso.production_plan_id = pp2.id AND pso.deleted_at IS NULL
+     AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+       SELECT s2.stage_name FROM production_plan_stages s2
+       WHERE s2.plan_id = pp2.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+     )
+    JOIN production_status_transactions t
+      ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+    WHERE pp2.sales_order_id = so.id
+      AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
+      AND pp2.deleted_at IS NULL
+  ), 0)`;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       soi.id AS item_id,
+       so.id AS sales_order_id,
+       so.order_no AS sales_order_no,
+       so.customer_po_no AS customer_order_no,
+       c.name AS customer_name,
+       c.id AS customer_id,
+       COALESCE(prod.name, soi.item_description) AS article,
+       soi.item_description AS item_description,
+       soi.item_code AS article_code,
+       soi.finish_color AS color,
+       soi.leather_type AS finish,
+       soi.quantity AS order_qty,
+       soi.uom,
+       ${plannedSql} AS planned_qty,
+       ${completedSql} AS completed_qty,
+       GREATEST(0, soi.quantity - ${completedSql}) AS balance_qty,
+       (SELECT pp2.id FROM production_plans pp2 WHERE pp2.sales_order_id = so.id AND pp2.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci AND pp2.deleted_at IS NULL ORDER BY pp2.id DESC LIMIT 1) AS plan_id,
+       CASE
+         WHEN ${completedSql} <= 0 THEN 'Pending'
+         WHEN ${completedSql} >= soi.quantity AND soi.quantity > 0 THEN 'Completed'
+         ELSE 'In Progress'
+       END AS status
+     FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     LEFT JOIN customers c ON so.customer_id = c.id
+     LEFT JOIN products prod ON prod.id = soi.product_id
+     WHERE ${where}
+     ORDER BY so.id DESC, soi.id ASC
+     LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM sales_order_items soi
+     JOIN sales_orders so ON soi.sales_order_id = so.id
+     LEFT JOIN customers c ON so.customer_id = c.id
+     WHERE ${where}`,
+    params
+  );
+
+  return { rows, total };
 }

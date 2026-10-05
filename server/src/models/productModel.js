@@ -24,7 +24,8 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
       pc.name AS category_name, lt.name AS leather_type_name, u.name AS uom_name,
       th.name AS thickness_name, c.name AS color_name, ft.name AS finish_type_name,
       g.name AS grade_name, h.name AS hsn_name, ss.name AS standard_size_name,
-      gm.name AS group_name, gm.hsn_code AS group_hsn_code, gm.gst_rate AS group_gst_rate
+      gm.name AS group_name, gm.hsn_code AS group_hsn_code, gm.gst_rate AS group_gst_rate,
+      cust.name AS customer_name
     FROM products p
     LEFT JOIN product_categories pc ON p.category_id = pc.id
     LEFT JOIN leather_types lt ON p.leather_type_id = lt.id
@@ -36,6 +37,7 @@ export async function getAll({ search, status, page, limit, sortBy, sortOrder })
     LEFT JOIN hsn_codes h ON p.hsn_code_id = h.id
     LEFT JOIN standard_sizes ss ON p.standard_size_id = ss.id
     LEFT JOIN group_master gm ON p.group_id = gm.id
+    LEFT JOIN customers cust ON p.customer_id = cust.id
     WHERE ${where} ORDER BY ${column} ${order} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
@@ -52,7 +54,8 @@ export async function getById(id) {
       pc.name AS category_name, lt.name AS leather_type_name, u.name AS uom_name,
       th.name AS thickness_name, c.name AS color_name, ft.name AS finish_type_name,
       g.name AS grade_name, h.name AS hsn_name, ss.name AS standard_size_name,
-      gm.name AS group_name, gm.hsn_code AS group_hsn_code, gm.gst_rate AS group_gst_rate
+      gm.name AS group_name, gm.hsn_code AS group_hsn_code, gm.gst_rate AS group_gst_rate,
+      cust.name AS customer_name
     FROM products p
     LEFT JOIN product_categories pc ON p.category_id = pc.id
     LEFT JOIN leather_types lt ON p.leather_type_id = lt.id
@@ -64,6 +67,7 @@ export async function getById(id) {
     LEFT JOIN hsn_codes h ON p.hsn_code_id = h.id
     LEFT JOIN standard_sizes ss ON p.standard_size_id = ss.id
     LEFT JOIN group_master gm ON p.group_id = gm.id
+    LEFT JOIN customers cust ON p.customer_id = cust.id
     WHERE p.id = ?`,
     [id]
   );
@@ -71,14 +75,42 @@ export async function getById(id) {
 }
 
 export async function getNextCode() {
-  const [[row]] = await pool.query("SELECT code FROM products ORDER BY id DESC LIMIT 1");
-  if (!row) return 'PRD-00001';
-  const num = parseInt(row.code.split('-')[1], 10) + 1;
-  return `PRD-${String(num).padStart(5, '0')}`;
+  const [rows] = await pool.query("SELECT code FROM products WHERE code LIKE 'PRD-%'");
+  let maxNum = 0;
+  for (const r of rows) {
+    const parts = String(r.code || '').split('-');
+    const n = parseInt(parts[parts.length - 1], 10);
+    if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+  }
+  return `PRD-${String(maxNum + 1).padStart(5, '0')}`;
+}
+
+// Compose the product name from the master names of leather type, finish type
+// and color (in that order). Falls back to the provided name when the ids are
+// not available. This keeps products.name = "Leather Finish Color" in the DB.
+async function composeProductName(data) {
+  const ids = {
+    leather: data.leather_type_id || null,
+    finish: data.finish_type_id || null,
+    color: data.color_id || null,
+  };
+  if (!ids.leather && !ids.finish && !ids.color) return data.name || null;
+
+  const [ltRows] = ids.leather
+    ? await pool.query('SELECT name FROM leather_types WHERE id=?', [ids.leather]) : [[]];
+  const [ftRows] = ids.finish
+    ? await pool.query('SELECT name FROM finish_types WHERE id=?', [ids.finish]) : [[]];
+  const [cRows] = ids.color
+    ? await pool.query('SELECT name FROM colors WHERE id=?', [ids.color]) : [[]];
+
+  const parts = [ltRows?.[0]?.name, ftRows?.[0]?.name, cRows?.[0]?.name].filter(Boolean);
+  const composed = parts.join(' ').trim();
+  return composed || data.name || null;
 }
 
 export async function create(data, createdBy = null) {
   const code = data.code || await getNextCode();
+  const productName = await composeProductName(data);
 
   // Normalize leather_type to valid ENUM value when using _id field
   let leatherType = data.leather_type || 'cow';
@@ -100,20 +132,23 @@ export async function create(data, createdBy = null) {
   }
 
   const [result] = await pool.query(
-    `INSERT INTO products (code, name, category, leather_type, uom, thickness, color, finish_type, description, standard_size, grade, hsn_code, status, category_id, group_id, leather_type_id, uom_id, thickness_id, color_id, finish_type_id, grade_id, hsn_code_id, standard_size_id, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [code, data.name, data.category || 'General', leatherType, data.uom || null, data.thickness || null,
+    `INSERT INTO products (code, name, category, leather_type, uom, thickness, color, finish_type, description, standard_size, grade, hsn_code, status, category_id, group_id, leather_type_id, uom_id, secondary_uom_id, thickness_id, color_id, finish_type_id, grade_id, hsn_code_id, standard_size_id, customer_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [code, productName, data.category || 'General', leatherType, data.uom || null, data.thickness || null,
      data.color || null, data.finish_type || null, data.description, data.standard_size || null,
      grade, data.hsn_code || null, data.status || 'Active',
      data.category_id || null, data.group_id || null, data.leather_type_id || null, data.uom_id || null,
+     data.secondary_uom_id || null,
      data.thickness_id || null, data.color_id || null, data.finish_type_id || null,
      data.grade_id || null, data.hsn_code_id || null, data.standard_size_id || null,
+     data.customer_id || null,
      createdBy]
   );
   return { id: result.insertId, code };
 }
 
 export async function update(id, data, updatedBy = null) {
+  const productName = await composeProductName(data);
   // Normalize leather_type to valid ENUM value when using _id field
   let leatherType = data.leather_type || 'cow';
   const validLeatherTypes = ['cow', 'buffalo', 'goat', 'sheep'];
@@ -133,13 +168,15 @@ export async function update(id, data, updatedBy = null) {
   }
 
   const [result] = await pool.query(
-    `UPDATE products SET code=?, name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, hsn_code=?, status=?, category_id=?, group_id=?, leather_type_id=?, uom_id=?, thickness_id=?, color_id=?, finish_type_id=?, grade_id=?, hsn_code_id=?, standard_size_id=?, updated_by=? WHERE id=?`,
-    [data.code, data.name, data.category || null, leatherType, data.uom || null, data.thickness || null,
+    `UPDATE products SET code=?, name=?, category=?, leather_type=?, uom=?, thickness=?, color=?, finish_type=?, description=?, standard_size=?, grade=?, hsn_code=?, status=?, category_id=?, group_id=?, leather_type_id=?, uom_id=?, secondary_uom_id=?, thickness_id=?, color_id=?, finish_type_id=?, grade_id=?, hsn_code_id=?, standard_size_id=?, customer_id=?, updated_by=? WHERE id=?`,
+    [data.code, productName, data.category || null, leatherType, data.uom || null, data.thickness || null,
      data.color || null, data.finish_type || null, data.description, data.standard_size || null,
      grade, data.hsn_code || null, data.status,
      data.category_id || null, data.group_id || null, data.leather_type_id || null, data.uom_id || null,
+     data.secondary_uom_id || null,
      data.thickness_id || null, data.color_id || null, data.finish_type_id || null,
      data.grade_id || null, data.hsn_code_id || null, data.standard_size_id || null,
+     data.customer_id || null,
      updatedBy, id]
   );
   return result.affectedRows > 0;
@@ -176,9 +213,25 @@ export async function getStats() {
 
 export async function getDropdown() {
   const [rows] = await pool.query(
-    `SELECT id, code, name, leather_type, thickness, uom, leather_type_id, uom_id, thickness_id, finish_type_id, color_id FROM products WHERE status='Active' ORDER BY name ASC LIMIT 500`
+    `SELECT p.id, p.code, p.name, p.leather_type, p.thickness, p.uom,
+      p.leather_type_id, p.uom_id, p.thickness_id, p.finish_type_id, p.color_id, p.group_id,
+      lt.name AS leather_type_name, u.name AS uom_name,
+      th.name AS thickness_name, c.name AS color_name, ft.name AS finish_type_name,
+      gm.gst_rate AS group_gst_rate
+    FROM products p
+    LEFT JOIN leather_types lt ON p.leather_type_id = lt.id
+    LEFT JOIN uom u ON p.uom_id = u.id
+    LEFT JOIN thickness th ON p.thickness_id = th.id
+    LEFT JOIN colors c ON p.color_id = c.id
+    LEFT JOIN finish_types ft ON p.finish_type_id = ft.id
+    LEFT JOIN group_master gm ON p.group_id = gm.id
+    WHERE p.status='Active' ORDER BY p.name ASC LIMIT 500`
   );
-  return rows;
+  // Build a display name concatenating product name with color and finish
+  return rows.map(r => {
+    const parts = [r.name, r.color_name, r.finish_type_name].filter(Boolean);
+    return { ...r, display_name: parts.join(' - ') };
+  });
 }
 
 export async function softDelete(id) {

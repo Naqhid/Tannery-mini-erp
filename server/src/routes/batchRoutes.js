@@ -13,6 +13,9 @@ router.get('/', batchController.getAll);
 // GET /api/batches/stats - Get batch statistics
 router.get('/stats', batchController.getStats);
 
+// GET /api/batches/tracking - Search batch for tracking page
+router.get('/tracking', batchController.searchForTracking);
+
 // GET /api/batches/:id - Get batch by ID
 router.get('/:id', batchController.getById);
 

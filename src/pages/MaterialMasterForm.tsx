@@ -18,6 +18,9 @@ interface MaterialData {
   group_id: string;
   type: string;
   uom: string;
+  primary_uom_id: string;
+  secondary_uom_id: string;
+  currency: string;
   chemical_group: string;
   color: string;
   ph_value: string;
@@ -29,6 +32,10 @@ interface MaterialData {
   storage_condition: string;
   hazardous: boolean;
   default_warehouse: string;
+  opening_stock: string;
+  opening_stock_uom: string;
+  rate: string;
+  standard_cost: string;
   current_stock: string;
   reorder_level: string;
   maximum_level: string;
@@ -42,17 +49,26 @@ interface MaterialData {
 }
 
 const empty: MaterialData = {
-  code: '', name: '', category: '', group_id: '', type: 'Chemical', uom: '', chemical_group: '',
+  code: '', name: '', category: '', group_id: '', type: 'Wet-end', uom: '',
+  primary_uom_id: '', secondary_uom_id: '', currency: 'INR', chemical_group: '',
   color: '', ph_value: '', flash_point: '', hsn_code: '', hsn_code_display: '', cas_number: '',
   shelf_life: '', storage_condition: '', hazardous: false, default_warehouse: '',
+  opening_stock: '0', opening_stock_uom: '', rate: '0', standard_cost: '0',
   current_stock: '0.00', reorder_level: '0.00', maximum_level: '0.00',
   preferred_supplier_id: '', lead_time: '',
   description: '', application: '', remarks: '', attachment_path: '', status: 'Active',
 };
 
-const MATERIAL_TYPES = ['Chemical', 'Auxiliary', 'Packing Material'];
+const MATERIAL_TYPES = ['Wet-end', 'Finishing'];
+const CURRENCY_OPTIONS = [
+  { value: 'INR', label: 'INR - Indian Rupee' },
+  { value: 'USD', label: 'USD - US Dollar' },
+  { value: 'EUR', label: 'EUR - Euro' },
+  { value: 'GBP', label: 'GBP - British Pound' },
+];
 const STORAGE_CONDITIONS = ['Room Temperature', 'Cool & Dry', 'Refrigerated', 'Flammable Storage', 'Ventilated Area'];
-const WAREHOUSES = ['Main Warehouse', 'Chemical Store', 'Finished Goods Store', 'Raw Material Store'];
+
+interface Warehouse { id: number; name: string; code?: string; }
 
 export default function MaterialMasterForm() {
   const { id } = useParams<{ id: string }>();
@@ -61,6 +77,7 @@ export default function MaterialMasterForm() {
 
   const dropdowns = useDropdowns(['uom', 'product-categories', 'group-master']);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [form, setForm] = useState<MaterialData>(empty);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -76,14 +93,31 @@ export default function MaterialMasterForm() {
     } catch { setSuppliers([]); }
   }, []);
 
+  const fetchWarehouses = useCallback(async () => {
+    try {
+      const res = await api<{ data: Warehouse[] }>('/warehouses/dropdown');
+      setWarehouses(res.data || []);
+    } catch { setWarehouses([]); }
+  }, []);
+
   const fetchMaterial = useCallback(async () => {
-    if (isNew) return;
+    if (isNew) {
+      try {
+        const res = await api<{ data: { code: string } }>('/materials/next-code');
+        if (res.data?.code) setForm((p) => ({ ...p, code: res.data.code }));
+      } catch { /* ignore preview failure */ }
+      return;
+    }
     try {
       setLoading(true);
       const res = await api<{ data: MaterialData }>(`/materials/${id}`);
       setForm({
         ...empty, ...res.data,
         hazardous: !!(res.data as any).hazardous,
+        opening_stock: String((res.data as any).opening_stock ?? '0'),
+        opening_stock_uom: String((res.data as any).opening_stock_uom ?? ''),
+        rate: String((res.data as any).rate ?? '0'),
+        standard_cost: String((res.data as any).standard_cost ?? '0'),
         current_stock: String((res.data as any).current_stock ?? '0.00'),
         reorder_level: String((res.data as any).reorder_level ?? '0.00'),
         maximum_level: String((res.data as any).maximum_level ?? '0.00'),
@@ -91,12 +125,15 @@ export default function MaterialMasterForm() {
         lead_time: String((res.data as any).lead_time ?? ''),
         preferred_supplier_id: String((res.data as any).preferred_supplier_id ?? ''),
         group_id: String((res.data as any).group_id ?? ''),
+        primary_uom_id: String((res.data as any).primary_uom_id ?? ''),
+        secondary_uom_id: String((res.data as any).secondary_uom_id ?? ''),
+        currency: (res.data as any).currency || 'INR',
       });
     } catch { toast.error('Failed to load material'); navigate('/chemical-master'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
-  useEffect(() => { fetchMaterial(); fetchSuppliers(); }, [fetchMaterial, fetchSuppliers]);
+  useEffect(() => { fetchMaterial(); fetchSuppliers(); fetchWarehouses(); }, [fetchMaterial, fetchSuppliers, fetchWarehouses]);
 
   // Filter groups based on category selection
   useEffect(() => {
@@ -107,7 +144,8 @@ export default function MaterialMasterForm() {
         const filtered = dropdowns['group-master'].data.filter(
           (g: any) => String(g.category_id) === String(cat.id)
         );
-        setFilteredGroups(filtered as unknown as GroupOption[]);
+        // Fall back to showing all groups when no group is linked to the category
+        setFilteredGroups((filtered.length > 0 ? filtered : dropdowns['group-master'].data) as unknown as GroupOption[]);
       } else {
         // Show all groups if category not matched
         setFilteredGroups(dropdowns['group-master'].data as unknown as GroupOption[]);
@@ -143,7 +181,7 @@ export default function MaterialMasterForm() {
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = 'Material name is required';
     if (!form.type) errs.type = 'Material type is required';
-    if (!form.uom) errs.uom = 'UOM is required';
+    if (!form.primary_uom_id) errs.primary_uom_id = 'Primary UOM is required';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -236,8 +274,12 @@ export default function MaterialMasterForm() {
             ]}
             value={form.group_id}
             onChange={(e) => handleGroupChange(e.target.value)}
+            addNewPath="/group-master/new"
+            addNewLabel="Add Group"
           />
-          <Select label="UOM" required options={[{ value: '', label: 'Select UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.uom} onChange={(e) => update('uom', e.target.value)} error={errors.uom} />
+          <Select label="Primary UOM" required options={[{ value: '', label: 'Select Primary UOM' }, ...(dropdowns['uom']?.options || [])]} value={form.primary_uom_id} onChange={(e) => update('primary_uom_id', e.target.value)} error={errors.primary_uom_id} addNewPath="/uom/new" addNewLabel="Add UOM" />
+          <Select label="Secondary UOM" options={[{ value: '', label: 'NA' }, ...(dropdowns['uom']?.options || [])]} value={form.secondary_uom_id} onChange={(e) => update('secondary_uom_id', e.target.value)} addNewPath="/uom/new" addNewLabel="Add UOM" />
+          <Select label="Currency" options={CURRENCY_OPTIONS} value={form.currency} onChange={(e) => update('currency', e.target.value)} />
           {/* HSN auto-populated from group */}
           <div>
             <label className="block text-xs font-medium text-gray-900 mb-1">HSN Code <span className="text-gray-400">(from Group)</span></label>
@@ -266,10 +308,18 @@ export default function MaterialMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">3. Inventory</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...WAREHOUSES.map(w => ({ value: w, label: w }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} />
-          <Input label="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
+          <Select label="Default Warehouse" options={[{ value: '', label: 'Select warehouse' }, ...warehouses.map(w => ({ value: w.name, label: w.name }))]} value={form.default_warehouse} onChange={(e) => update('default_warehouse', e.target.value)} addNewPath="/warehouse-master/new" addNewLabel="Add Warehouse" />
+          <div>
+            <Input label={`Rate (${form.currency || 'INR'})`} type="number" value={form.rate} onChange={(e) => update('rate', e.target.value)} placeholder="0.00" />
+            <p className="mt-1 text-[10px] text-gray-500">Rate per primary UOM; used to prefill Material Receipt.</p>
+          </div>
+          <div>
+            <Input label={`Opening Stock Qty${form.uom ? ` (${form.uom})` : ''}`} type="number" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} placeholder="0.000" />
+            <p className="mt-1 text-[10px] text-gray-500">Opening quantity in the primary UOM.</p>
+          </div>
+          <Input label={`Minimum Stock${form.uom ? ` (${form.uom})` : ''}`} type="number" value={form.reorder_level} onChange={(e) => update('reorder_level', e.target.value)} placeholder="0.00" />
           <Input label="Maximum Level" type="number" value={form.maximum_level} onChange={(e) => update('maximum_level', e.target.value)} placeholder="0.00" />
-          <Select label="Preferred Supplier" options={supplierOptions} value={form.preferred_supplier_id} onChange={(e) => update('preferred_supplier_id', e.target.value)} />
+          <Select label="Preferred Supplier" options={supplierOptions} value={form.preferred_supplier_id} onChange={(e) => update('preferred_supplier_id', e.target.value)} addNewPath="/supplier-master/new" addNewLabel="Add Supplier" />
           <Input label="Lead Time (Days)" type="number" value={form.lead_time} onChange={(e) => update('lead_time', e.target.value)} placeholder="Enter lead time" />
         </div>
       </div>
