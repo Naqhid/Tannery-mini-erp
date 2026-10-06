@@ -70,7 +70,8 @@ export default function CostComponentsForm() {
     if (!form.group_id) errs.group_id = 'Group is required';
     if (!form.name.trim()) errs.name = 'Cost component name is required';
     if (!form.uom_id) errs.uom_id = 'UOM is required';
-    if (form.cost_per_uom === '' || isNaN(Number(form.cost_per_uom))) errs.cost_per_uom = 'Valid cost is required';
+    if (form.cost_per_uom === '' || isNaN(Number(form.cost_per_uom))) errs.cost_per_uom = 'Cost is required';
+    else if (Number(form.cost_per_uom) <= 0) errs.cost_per_uom = 'Cost must be greater than 0';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };

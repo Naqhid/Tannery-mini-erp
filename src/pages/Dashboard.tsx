@@ -36,7 +36,7 @@ interface TopProduct { product: string; value: number; }
 interface RecentReceipt { id: number; receipt_no: string; receipt_date: string; supplier_name: string; amount: number; status: string; }
 interface QuickSummary {
   nearestDeliveryOrders: number;
-  pendingSalesOrders: number;
+  draftSalesOrders: number;
   pendingGoodsReceipt: number;
   pendingMaterialIssues: number;
   lowStockItems: number;
@@ -88,7 +88,7 @@ export default function Dashboard() {
   const [inventoryValue, setInventoryValue] = useState<InventoryValue>({ total: 0, breakdown: [] });
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [recentReceipts, setRecentReceipts] = useState<RecentReceipt[]>([]);
-  const [quickSummary, setQuickSummary] = useState<QuickSummary>({ nearestDeliveryOrders: 0, pendingSalesOrders: 0, pendingGoodsReceipt: 0, pendingMaterialIssues: 0, lowStockItems: 0, openProductionPlans: 0 });
+  const [quickSummary, setQuickSummary] = useState<QuickSummary>({ nearestDeliveryOrders: 0, draftSalesOrders: 0, pendingGoodsReceipt: 0, pendingMaterialIssues: 0, lowStockItems: 0, openProductionPlans: 0 });
 
   useEffect(() => {
     api<{ data: {
@@ -114,7 +114,7 @@ export default function Dashboard() {
 
   const kpiCards = [
     { label: 'Sales Orders', sub: 'Not shipped', value: kpiCounts.salesOrdersNotShipped, icon: <ClipboardList size={20} />, tint: 'bg-indigo-50 text-indigo-600', to: '/sales-orders' },
-    { label: 'Open Orders', sub: 'In process', value: kpiCounts.openOrders, icon: <Clock size={20} />, tint: 'bg-sky-50 text-sky-600', to: '/sales-orders' },
+    { label: 'Open Orders', sub: 'In process', value: kpiCounts.openOrders, icon: <Clock size={20} />, tint: 'bg-sky-50 text-sky-600', to: '/production-plan' },
     { label: 'Customers', sub: 'Active', value: kpiCounts.customersTotal, icon: <Users size={20} />, tint: 'bg-teal-50 text-teal-600', to: '/customer-master' },
     { label: 'Total Products', sub: 'Active', value: kpiCounts.productsTotal, icon: <Boxes size={20} />, tint: 'bg-emerald-50 text-emerald-600', to: '/product-master' },
     { label: 'Materials', sub: 'Active', value: kpiCounts.materialsActive, icon: <Package size={20} />, tint: 'bg-amber-50 text-amber-600', to: '/chemical-master' },
@@ -293,7 +293,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
               { label: 'Nearest Delivery Orders', value: quickSummary.nearestDeliveryOrders, icon: <CalendarClock size={16} />, tint: 'text-indigo-600 bg-indigo-50', to: '/sales-orders' },
-              { label: 'Pending Sales Orders', value: quickSummary.pendingSalesOrders, icon: <ShoppingCart size={16} />, tint: 'text-sky-600 bg-sky-50', to: '/sales-orders' },
+              { label: 'Draft Sales Orders', value: quickSummary.draftSalesOrders, icon: <ShoppingCart size={16} />, tint: 'text-sky-600 bg-sky-50', to: '/sales-orders' },
               { label: 'Pending Goods Receipt', value: quickSummary.pendingGoodsReceipt, icon: <Truck size={16} />, tint: 'text-teal-600 bg-teal-50', to: '/material-receipt' },
               { label: 'Pending Material Issues', value: quickSummary.pendingMaterialIssues, icon: <ClipboardList size={16} />, tint: 'text-amber-600 bg-amber-50', to: '/material-issue' },
               { label: 'Low Stock Items', value: quickSummary.lowStockItems, icon: <AlertTriangle size={16} />, tint: 'text-rose-600 bg-rose-50', to: '/chemical-master' },

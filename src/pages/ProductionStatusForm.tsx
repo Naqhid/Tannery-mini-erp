@@ -200,6 +200,9 @@ export default function ProductionStatusForm() {
       params.set('production_status_order_id', id!);
       params.set('page', String(txnPage));
       params.set('limit', '10');
+      // Show transactions with the latest date on top (descending).
+      params.set('sortBy', 'production_date');
+      params.set('sortOrder', 'desc');
       const res = await api<{ data: TransactionRow[]; total: number; totalPages: number; summary: TransactionSummary }>(`/production-status/transactions?${params.toString()}`);
       setTransactions(res.data || []);
       setTxnTotal(res.total || 0);
@@ -539,8 +542,8 @@ export default function ProductionStatusForm() {
         {isEdit && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-5 pt-4 border-t border-gray-100">
             <div className="text-center p-3 bg-slate-50 rounded-lg">
-              <p className="text-xs text-gray-500 font-medium">Opening Qty</p>
-              <p className="text-lg font-bold text-slate-700 mt-1" title="Latest transaction's opening — carries forward to the next day's opening">{formatNumber(txnSummary.latest_opening_qty)}</p>
+              <p className="text-xs text-gray-500 font-medium">Planned Qty</p>
+              <p className="text-lg font-bold text-slate-700 mt-1" title="Planned quantity for this stage (from the production plan)">{formatNumber(parseFloat(form.planned_qty) || 0)}</p>
             </div>
             <div className="text-center p-3 bg-blue-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">Input Qty</p>

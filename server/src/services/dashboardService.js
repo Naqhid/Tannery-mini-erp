@@ -91,28 +91,36 @@ async function getProductionOrders() {
 
 // ─── Highest remaining work-in-progress by production stage ───────────────────
 async function getHighestWipStages() {
+  // Per stage, use the WIP of the LATEST production transaction (most recent
+  // record by date, then id) for each plan+stage, and sum those latest WIP
+  // values across open plans. This reflects the current running WIP per stage
+  // rather than a derived "remaining" figure. Limited to the stages present.
   const [rows] = await pool.query(
     `SELECT pps.stage_name AS stage,
-       SUM(GREATEST(COALESCE(pps.planned_qty, 0) - COALESCE(stage_totals.output_qty, 0) - COALESCE(stage_totals.rejection_qty, 0), 0)) AS wip_qty,
+       SUM(COALESCE(latest.wip_qty, 0)) AS wip_qty,
        SUM(COALESCE(pps.planned_qty, 0)) AS planned_qty,
        COUNT(DISTINCT pps.plan_id) AS order_count
      FROM production_plan_stages pps
      JOIN production_plans pp ON pp.id = pps.plan_id AND pp.deleted_at IS NULL
      LEFT JOIN (
-       SELECT pso.production_plan_id, pso.process_stage,
-         SUM(t.output_qty) AS output_qty, SUM(t.rejection_qty) AS rejection_qty
+       SELECT pso.production_plan_id, pso.process_stage, t.wip_qty
        FROM production_status_orders pso
        JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
        WHERE pso.deleted_at IS NULL
-       GROUP BY pso.production_plan_id, pso.process_stage
-     ) stage_totals
-       ON stage_totals.production_plan_id = pps.plan_id
-       AND stage_totals.process_stage COLLATE utf8mb4_unicode_ci = pps.stage_name COLLATE utf8mb4_unicode_ci
+         -- Keep only the latest transaction per order (by date, then id).
+         AND t.id = (
+           SELECT t2.id FROM production_status_transactions t2
+           WHERE t2.production_status_order_id = pso.id AND t2.deleted_at IS NULL
+           ORDER BY t2.production_date DESC, t2.id DESC LIMIT 1
+         )
+     ) latest
+       ON latest.production_plan_id = pps.plan_id
+       AND latest.process_stage COLLATE utf8mb4_unicode_ci = pps.stage_name COLLATE utf8mb4_unicode_ci
      WHERE COALESCE(pp.status, '') NOT IN ('Completed', 'Cancelled', 'Canceled')
      GROUP BY pps.stage_name
      HAVING wip_qty > 0
      ORDER BY wip_qty DESC, pps.stage_name ASC
-     LIMIT 5`
+     LIMIT 4`
   );
   return rows.map((row) => ({
     stage: row.stage,
@@ -128,8 +136,11 @@ async function getKpiCounts() {
     `SELECT
        (SELECT COUNT(*) FROM sales_orders
          WHERE status NOT IN ('Shipped', 'Delivered', 'Cancelled')) AS sales_orders_not_shipped,
-       (SELECT COUNT(*) FROM sales_orders
-         WHERE status IN ('Processing', 'Confirmed')) AS open_orders,
+       -- "Open orders in process" is driven by the production plan: plans that
+       -- are still open (not completed/cancelled) are the ones in process.
+       (SELECT COUNT(*) FROM production_plans
+         WHERE deleted_at IS NULL
+           AND COALESCE(status, '') NOT IN ('Completed', 'Cancelled', 'Canceled')) AS open_orders,
        (SELECT COUNT(*) FROM customers WHERE status = 'Active') AS customers_total,
        (SELECT COUNT(*) FROM products WHERE status = 'Active') AS products_total,
        (SELECT COUNT(*) FROM materials WHERE status = 'Active') AS materials_active,
@@ -215,9 +226,9 @@ async function getQuickSummary() {
          WHERE delivery_date IS NOT NULL
            AND delivery_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
            AND status NOT IN ('Delivered', 'Cancelled')) AS nearest_delivery_orders,
-       -- Sales orders that are not yet completed (not Delivered/Cancelled).
+       -- Draft sales orders (not yet confirmed).
        (SELECT COUNT(*) FROM sales_orders
-         WHERE status NOT IN ('Delivered', 'Cancelled')) AS pending_sales_orders,
+         WHERE status = 'Draft') AS draft_sales_orders,
        (SELECT COUNT(*) FROM material_receipts WHERE status = 'Draft') AS pending_goods_receipt,
        (SELECT COUNT(*) FROM material_issues WHERE status = 'Draft') AS pending_material_issues,
        (SELECT COUNT(*) FROM materials
@@ -229,7 +240,7 @@ async function getQuickSummary() {
   );
   return {
     nearestDeliveryOrders: Number(row.nearest_delivery_orders) || 0,
-    pendingSalesOrders: Number(row.pending_sales_orders) || 0,
+    draftSalesOrders: Number(row.draft_sales_orders) || 0,
     pendingGoodsReceipt: Number(row.pending_goods_receipt) || 0,
     pendingMaterialIssues: Number(row.pending_material_issues) || 0,
     lowStockItems: Number(row.low_stock_items) || 0,

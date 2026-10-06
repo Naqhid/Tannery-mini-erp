@@ -22,6 +22,14 @@ export default function LineChart({
 }: LineChartProps) {
   const [hover, setHover] = useState<number | null>(null);
 
+  // Y-axis labels reuse the caller's value formatter (so currency charts show
+  // ₹ amounts, not bare quantities), but shortened for compact tick spacing.
+  const axisLabel = (v: number) => {
+    const formatted = formatValue(v);
+    const prefix = /^[^\d\s]/.test(formatted) ? formatted[0] : '';
+    return prefix + shortNum(v);
+  };
+
   const width = 560;
   const padX = 44;
   const padY = 20;
@@ -61,7 +69,7 @@ export default function LineChart({
           return (
             <g key={i}>
               <line x1={padX} y1={y} x2={width - padX} y2={y} stroke="#eef2f7" strokeWidth={1} />
-              <text x={padX - 6} y={y + 3} textAnchor="end" fontSize={9} fill="#94a3b8">{shortNum(t)}</text>
+              <text x={padX - 6} y={y + 3} textAnchor="end" fontSize={9} fill="#94a3b8">{axisLabel(t)}</text>
             </g>
           );
         })}
