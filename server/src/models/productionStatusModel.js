@@ -340,6 +340,27 @@ export async function createTransaction(data, userId = null) {
     throw err;
   }
 
+  // Cumulative output qty (all transactions for this order) must not exceed planned qty.
+  if (data.production_status_order_id) {
+    const [[po]] = await pool.query(
+      'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
+      [data.production_status_order_id]
+    );
+    const plannedQty = parseFloat(po?.planned_qty) || 0;
+    if (plannedQty > 0) {
+      const [[agg]] = await pool.query(
+        'SELECT COALESCE(SUM(output_qty), 0) AS total_output FROM production_status_transactions WHERE production_status_order_id = ? AND deleted_at IS NULL',
+        [data.production_status_order_id]
+      );
+      const existingOutput = parseFloat(agg?.total_output) || 0;
+      if (existingOutput + outputVal > plannedQty) {
+        const err = new Error(`Output qty cannot exceed planned qty (${plannedQty}). Already produced: ${existingOutput}`);
+        err.status = 400;
+        throw err;
+      }
+    }
+  }
+
   const transactionNo = data.transaction_no || await getNextTransactionNo();
 
   const [result] = await pool.query(
@@ -407,6 +428,20 @@ export async function updateTransaction(id, data, userId = null) {
     const err = new Error('Output + rejection cannot exceed opening + input');
     err.status = 400;
     throw err;
+  }
+
+  // Cumulative output qty (excluding this transaction) + new output must not exceed planned qty.
+  if (plannedQty > 0) {
+    const [[agg]] = await pool.query(
+      'SELECT COALESCE(SUM(output_qty), 0) AS total_output FROM production_status_transactions WHERE production_status_order_id = ? AND id <> ? AND deleted_at IS NULL',
+      [existing.production_status_order_id, id]
+    );
+    const otherOutput = parseFloat(agg?.total_output) || 0;
+    if (otherOutput + outputVal > plannedQty) {
+      const err = new Error(`Output qty cannot exceed planned qty (${plannedQty}). Already produced: ${otherOutput}`);
+      err.status = 400;
+      throw err;
+    }
   }
 
   const [result] = await pool.query(

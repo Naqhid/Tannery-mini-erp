@@ -393,6 +393,14 @@ export default function ProductionStatusForm() {
       toast.error('Output + rejection cannot exceed opening + input');
       return;
     }
+    // Cumulative output across all transactions cannot exceed the planned qty.
+    if (plannedVal > 0) {
+      const priorOutput = (txnSummary.total_output_qty || 0) - (editingTxn ? (parseFloat(String(editingTxn.output_qty)) || 0) : 0);
+      if (priorOutput + outputVal > plannedVal) {
+        toast.error(`Output qty cannot exceed planned qty (${plannedVal}). Already produced: ${priorOutput}`);
+        return;
+      }
+    }
     setTxnSaving(true);
     try {
       if (editingTxn) {
