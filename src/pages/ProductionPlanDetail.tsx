@@ -46,11 +46,12 @@ const emptyPlan: PlanData = {
   completed_qty: '0', remarks: '', status: 'Pending',
 };
 
-const STATUSES = ['Pending', 'Planned', 'In Progress', 'Completed'];
+const STATUSES = ['Pending', 'In-Process', 'Completed'];
 const STATUS_COLORS: Record<string, string> = {
   Pending: 'bg-slate-100 text-slate-700',
   Planned: 'bg-blue-100 text-blue-700',
   'In Progress': 'bg-amber-100 text-amber-700',
+  'In-Process': 'bg-amber-100 text-amber-700',
   Completed: 'bg-emerald-100 text-emerald-700',
   'On Hold': 'bg-violet-100 text-violet-700',
   Cancelled: 'bg-rose-100 text-rose-600',
@@ -152,11 +153,12 @@ export default function ProductionPlanDetail() {
           const oQty = parseFloat(s.output_qty) || 0;
           const iQty = parseFloat(s.issue_input_qty) || 0;
           const rQty = parseFloat(s.rejection_qty) || 0;
+          // Pending when no output, Completed when output meets planned,
+          // In-Process once any output is recorded.
           let stageStatus = 'Pending';
-          if (pQty === 0) stageStatus = 'Pending';
-          else if (oQty >= pQty) stageStatus = 'Completed';
-          else if (oQty > 0) stageStatus = 'In Progress';
-          else stageStatus = 'Planned';
+          if (oQty <= 0) stageStatus = 'Pending';
+          else if (pQty > 0 && oQty >= pQty) stageStatus = 'Completed';
+          else stageStatus = 'In-Process';
           return {
             _key: genKey(),
             seq: s.seq || 1,
@@ -199,8 +201,8 @@ export default function ProductionPlanDetail() {
   const derivedStatus = (() => {
     if (stages.length === 0 || totalPlanQty <= 0) return 'Pending';
     if (stages.every(s => s.status === 'Completed')) return 'Completed';
-    if (stages.some(s => s.status === 'Completed' || s.status === 'In Progress')) return 'In Progress';
-    return 'Planned';
+    if (stages.some(s => s.status === 'Completed' || s.status === 'In-Process' || s.status === 'In Progress')) return 'In-Process';
+    return 'Pending';
   })();
 
   const handleOrderChange = (value: string) => {
@@ -259,15 +261,14 @@ export default function ProductionPlanDetail() {
       const rQty = parseFloat(updated.rejection_qty) || 0;
       const pQty = parseFloat(updated.planned_qty) || 0;
       updated.wip_qty = Math.max(0, iQty - oQty - rQty);
-      // Auto-calculate status based on production progress
-      if (pQty === 0) {
+      // Auto-calculate status: Pending when no output, Completed when output
+      // meets planned, In-Process once any output is recorded.
+      if (oQty <= 0) {
         updated.status = 'Pending';
-      } else if (oQty >= pQty) {
+      } else if (pQty > 0 && oQty >= pQty) {
         updated.status = 'Completed';
-      } else if (oQty > 0) {
-        updated.status = 'In Progress';
       } else {
-        updated.status = 'Planned';
+        updated.status = 'In-Process';
       }
       return updated;
     }));

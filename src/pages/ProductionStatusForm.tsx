@@ -383,6 +383,11 @@ export default function ProductionStatusForm() {
       toast.error(`Input qty (${inputVal}) cannot exceed planned qty (${plannedVal})`);
       return;
     }
+    // Output qty cannot be greater than input qty.
+    if (outputVal > inputVal) {
+      toast.error('Output qty cannot be greater than input qty');
+      return;
+    }
     // Output cannot exceed opening + input (you can't produce more than what's in the stage).
     if (outputVal + rejectionVal > openingVal + inputVal) {
       toast.error('Output + rejection cannot exceed opening + input');

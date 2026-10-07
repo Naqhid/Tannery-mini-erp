@@ -194,10 +194,12 @@ export async function recalcOrderTotals(orderId) {
   const [[plan]] = await pool.query(`SELECT COALESCE(SUM(planned_qty),0) AS planned_qty FROM production_plan_stages WHERE plan_id=(SELECT production_plan_id FROM production_status_orders WHERE id=? LIMIT 1)`, [orderId]);
   const plannedQty = Number(plan?.planned_qty || 0);
   const balanceQty = Math.max(0, plannedQty - completedQty);
+  // Daily Production status: Pending when no output, In-Process once any output
+  // is recorded, Completed when output reaches the planned qty.
   let status = 'Pending';
-  if (plannedQty > 0 && completedQty === 0) status = 'Planned';
-  else if (completedQty > 0 && completedQty < plannedQty) status = 'In Progress';
+  if (completedQty <= 0) status = 'Pending';
   else if (plannedQty > 0 && completedQty >= plannedQty) status = 'Completed';
+  else status = 'In-Process';
 
   // Don't overwrite status if already posted
   const [[current]] = await pool.query('SELECT posted_at FROM production_status_orders WHERE id=?', [orderId]);
@@ -321,11 +323,17 @@ export async function createTransaction(data, userId = null) {
     }
   }
 
-  // Output + rejection must not exceed opening + input.
+  // Output qty must not be greater than input qty.
   const openingVal = parseFloat(data.opening_qty) || 0;
   const inputVal = parseFloat(data.input_qty) || 0;
   const outputVal = parseFloat(data.output_qty) || 0;
   const rejectionVal = parseFloat(data.rejection_qty) || 0;
+  if (outputVal > inputVal) {
+    const err = new Error('Output qty cannot be greater than input qty');
+    err.status = 400;
+    throw err;
+  }
+  // Output + rejection must not exceed opening + input.
   if (outputVal + rejectionVal > openingVal + inputVal) {
     const err = new Error('Output + rejection cannot exceed opening + input');
     err.status = 400;
@@ -384,11 +392,17 @@ export async function updateTransaction(id, data, userId = null) {
     throw err;
   }
 
-  // Output + rejection must not exceed opening + input.
+  // Output qty must not be greater than input qty.
   const openingVal = parseFloat(data.opening_qty) || 0;
   const inputVal = parseFloat(data.input_qty) || 0;
   const outputVal = parseFloat(data.output_qty) || 0;
   const rejectionVal = parseFloat(data.rejection_qty) || 0;
+  if (outputVal > inputVal) {
+    const err = new Error('Output qty cannot be greater than input qty');
+    err.status = 400;
+    throw err;
+  }
+  // Output + rejection must not exceed opening + input.
   if (outputVal + rejectionVal > openingVal + inputVal) {
     const err = new Error('Output + rejection cannot exceed opening + input');
     err.status = 400;

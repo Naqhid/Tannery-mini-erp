@@ -243,7 +243,7 @@ export default function ProductionPlan() {
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
             <SearchableSelect
-              options={[{ value: '', label: 'All' }, ...['Pending', 'In Progress', 'Completed'].map((s) => ({ value: s, label: s }))]}
+              options={[{ value: '', label: 'All' }, ...['Pending', 'In-Process', 'Completed'].map((s) => ({ value: s, label: s }))]}
               value={status}
               onChange={setStatus}
               placeholder="All"

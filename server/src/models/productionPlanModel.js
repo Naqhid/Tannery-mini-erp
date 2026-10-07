@@ -78,8 +78,8 @@ export async function getAll({ search, status, plan_id, customer_id, product_id,
        GREATEST(0, COALESCE(pp.planned_qty, 0) - ${measurementOutputSql}) AS balance_qty,
        CASE
          WHEN ${stageCountSql} > 0 AND ${stagesCompletedSql} = ${stageCountSql} THEN 'Completed'
-         WHEN ${stagesWithOutputSql} > 0 THEN 'In Progress'
-         ELSE 'Planned'
+         WHEN ${stagesWithOutputSql} > 0 THEN 'In-Process'
+         ELSE 'Pending'
        END AS status,
        c.id AS customer_id, c.name AS customer_name,
        p.id AS product_id, p.name AS product_name, p.code AS product_code,
@@ -190,8 +190,8 @@ export async function getStats() {
     `SELECT
        COUNT(*) AS total,
        SUM(status = 'Draft') AS draft,
-       SUM(status = 'Planned') AS planned,
-       SUM(status = 'In Progress') AS in_progress,
+       SUM(status = 'Pending' OR status = 'Planned') AS planned,
+       SUM(status = 'In-Process' OR status = 'In Progress') AS in_progress,
        SUM(status = 'Completed') AS completed
      FROM production_plans WHERE deleted_at IS NULL`
   );
@@ -212,7 +212,36 @@ function calcDerived(data) {
   return { noOfBatches, balanceQty, outputPercent, wipQty };
 }
 
+/**
+ * Enforce that planned qty is never zero on a production plan.
+ * - If stages are supplied, each stage's planned_qty must be > 0.
+ * - If no stages are supplied, the plan-level planned_qty must be > 0.
+ * Throws a 400 error when the rule is violated.
+ */
+function validatePlannedQty(data, stages = []) {
+  if (Array.isArray(stages) && stages.length > 0) {
+    const bad = stages.find((s) => (parseFloat(s.planned_qty) || 0) <= 0);
+    if (bad) {
+      const err = new Error(
+        `Planned qty must be greater than 0 for stage "${bad.stage_name || 'unnamed'}"`
+      );
+      err.status = 400;
+      throw err;
+    }
+    return;
+  }
+  if ((parseFloat(data.planned_qty) || 0) <= 0) {
+    const err = new Error('Planned qty must be greater than 0');
+    err.status = 400;
+    throw err;
+  }
+}
+
 export async function create(data, items = [], stages = [], createdBy = null) {
+  // Planned qty must not be zero. When stages are provided, every stage must
+  // have a planned qty > 0; otherwise the plan-level planned_qty must be > 0.
+  validatePlannedQty(data, stages);
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -360,6 +389,9 @@ export async function create(data, items = [], stages = [], createdBy = null) {
 }
 
 export async function update(id, data, items = [], stages = [], updatedBy = null) {
+  // Planned qty must not be zero (see create()).
+  validatePlannedQty(data, stages);
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
