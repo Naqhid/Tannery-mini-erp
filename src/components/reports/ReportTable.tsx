@@ -72,7 +72,7 @@ export default function ReportTable<T>({
                               ? <ChevronUp size={13} className="text-blue-600 shrink-0" />
                               : <ChevronDown size={13} className="text-blue-600 shrink-0" />
                           ) : (
-                            <ChevronsUpDown size={13} className="text-gray-300 shrink-0" />
+                            <ChevronsUpDown size={13} className="text-gray-500 shrink-0" />
                           )
                         )}
                       </div>
