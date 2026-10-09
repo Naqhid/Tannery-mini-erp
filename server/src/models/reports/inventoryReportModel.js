@@ -20,10 +20,21 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
     : '';
   if (warehouse_id) params.push(warehouse_id);
 
-  const allowed = ['material_name', 'material_code', 'opening_qty', 'receipt_qty', 'issue_qty', 'transfer_qty', 'outbound_qty', 'closing_qty', 'closing_value'];
+  const sortMap = {
+    material_code: 'm.code',
+    material_name: 'm.name',
+    group_name: 'g.name',
+    uom: 'm.uom',
+    opening_qty: 'opening_qty',
+    receipt_qty: 'receipt_qty',
+    issue_qty: 'issue_qty',
+    transfer_qty: 'transfer_qty',
+    outbound_qty: 'outbound_qty',
+    closing_qty: 'closing_qty',
+    closing_value: 'closing_value',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const col = allowed.includes(sortBy) ? sortBy : 'material_name';
-  const orderClause = col === 'material_name' && !sortBy ? 'm.name ASC' : `${col} ${ord}`;
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'm.name ASC';
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
@@ -119,10 +130,18 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
     const t = `%${search}%`; params.push(t, t);
   }
 
-  const allowed = ['material_name', 'material_code', 'closing_qty', 'avg_rate', 'stock_value'];
+  const sortMap = {
+    material_code: 'm.code',
+    material_name: 'm.name',
+    group_name: 'g.name',
+    warehouse_name: 'w.name',
+    uom: 'ws.uom',
+    closing_qty: 'closing_qty',
+    avg_rate: 'avg_rate',
+    stock_value: 'stock_value',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const col = allowed.includes(sortBy) ? sortBy : null;
-  const orderClause = col ? `${col} ${ord}` : 'stock_value DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'stock_value DESC';
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
@@ -170,9 +189,24 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
     const t = `%${search}%`; params.push(t, t, t);
   }
 
-  const allowed = ['receipt_no', 'receipt_date', 'supplier_name', 'material_name', 'amount'];
+  // Map every displayed column key to a safe ORDER BY expression so all
+  // columns are sortable from the UI without risking ambiguous-column errors.
+  const sortMap = {
+    receipt_no: 'mr.receipt_no',
+    receipt_date: 'mr.receipt_date',
+    po_no: 'mr.purchase_order_no',
+    supplier_name: 's.name',
+    warehouse_name: 'w.name',
+    material_code: 'm.code',
+    material_name: 'm.name',
+    uom: 'mri.uom',
+    qty: 'qty',
+    rate: 'rate',
+    amount: 'amount',
+    tax_total_gst: 'tax_total_gst',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'mr.receipt_date DESC, mr.id DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'mr.receipt_date DESC, mr.id DESC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -237,9 +271,20 @@ export async function issueRegister({ from_date, to_date, warehouse_id, process_
     const t = `%${search}%`; params.push(t, t, t);
   }
 
-  const allowed = ['issue_no', 'issue_date', 'process_stage', 'material_name', 'amount'];
+  const sortMap = {
+    issue_no: 'mi.issue_no',
+    issue_date: 'mi.issue_date',
+    plan_no: 'mi.production_batch',
+    process_stage: 'mi.process_stage',
+    article: 'mi.article',
+    material_name: 'm.name',
+    uom: 'mii.uom',
+    qty: 'qty',
+    rate: 'rate',
+    amount: 'amount',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'mi.issue_date DESC, mi.id DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'mi.issue_date DESC, mi.id DESC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -286,9 +331,22 @@ export async function stockMovement({ from_date, to_date, warehouse_id, material
     const t = `%${search}%`; params.push(t, t);
   }
 
-  const allowed = ['transaction_date', 'transaction_type', 'material_name', 'reference_no'];
+  const sortMap = {
+    transaction_date: 'sl.transaction_date',
+    transaction_type: 'sl.transaction_type',
+    reference_no: 'sl.reference_no',
+    material_code: 'm.code',
+    material_name: 'm.name',
+    warehouse_name: 'w.name',
+    uom: 'sl.uom',
+    in_qty: 'sl.in_qty',
+    out_qty: 'sl.out_qty',
+    rate: 'rate',
+    amount: 'sl.amount',
+    balance_qty: 'sl.balance_qty',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -331,9 +389,24 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
     const t = `%${search}%`; params.push(t, t, t, t, t);
   }
 
-  const allowed = ['transaction_date', 'transaction_type', 'material_name', 'reference_no', 'reference_type', 'created_at'];
+  const sortMap = {
+    transaction_date: 'sl.transaction_date',
+    reference_no: 'sl.reference_no',
+    material_code: 'm.code',
+    material_name: 'm.name',
+    uom: 'sl.uom',
+    opening_qty: 'opening_qty',
+    receipt_qty: 'receipt_qty',
+    issue_qty: 'issue_qty',
+    transfer_qty: 'transfer_qty',
+    outbound_qty: 'outbound_qty',
+    closing_qty: 'closing_qty',
+    rate: 'rate',
+    amount: 'sl.amount',
+    remarks: 'sl.remarks',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
