@@ -208,7 +208,10 @@ export async function remove(id) {
 export async function getStats() {
   const [[total]] = await pool.query('SELECT COUNT(*) AS total FROM products');
   const [[active]] = await pool.query("SELECT COUNT(*) AS total FROM products WHERE status='Active'");
-  return { total: total.total, active: active.total };
+  // Inactive = everything that is not exactly 'Active' (covers NULL / other
+  // status values too), so Total = Active + Inactive always holds.
+  const inactive = total.total - active.total;
+  return { total: total.total, active: active.total, inactive };
 }
 
 export async function getDropdown() {
