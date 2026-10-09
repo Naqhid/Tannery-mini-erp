@@ -181,6 +181,10 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
      LEFT JOIN suppliers s ON mr.supplier_id = s.id
      LEFT JOIN warehouses w ON mr.warehouse_id = w.id
      LEFT JOIN materials m ON mri.material_id = m.id
+     LEFT JOIN (
+       SELECT receipt_id, SUM(COALESCE(amount_inr, amount, 0)) AS receipt_total
+       FROM material_receipt_items GROUP BY receipt_id
+     ) rt ON rt.receipt_id = mr.id
      WHERE ${where}`;
 
   const [rows] = await pool.query(
@@ -190,11 +194,14 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
        COALESCE(mri.received_qty, mri.primary_uom_qty, 0) AS qty,
        COALESCE(mri.rate_inr, mri.rate, 0) AS rate,
        COALESCE(mri.amount_inr, mri.amount, 0) AS amount,
-       COALESCE(mri.tax_amount, 0) AS tax_amount,
-       COALESCE(mri.cgst_amount, 0) AS cgst_amount,
-       COALESCE(mri.sgst_amount, 0) AS sgst_amount,
-       COALESCE(mri.igst_amount, 0) AS igst_amount,
-       (COALESCE(mri.tax_amount, 0) + COALESCE(mri.cgst_amount, 0) + COALESCE(mri.sgst_amount, 0) + COALESCE(mri.igst_amount, 0)) AS tax_total_gst,
+       -- GST is stored on the receipt header (material_receipts), not per line
+       -- item. Allocate the header GST to each line proportionally by its
+       -- amount share so the per-row figure is meaningful and the sum matches
+       -- the receipt total.
+       (COALESCE(mr.cgst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS cgst_amount,
+       (COALESCE(mr.sgst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS sgst_amount,
+       (COALESCE(mr.igst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS igst_amount,
+       (COALESCE(mr.total_gst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS tax_total_gst,
        mr.status
      ${baseFrom}
      ORDER BY ${orderClause}
@@ -206,7 +213,7 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
   const [[totals]] = await pool.query(
     `SELECT COALESCE(SUM(COALESCE(mri.received_qty, mri.primary_uom_qty, 0)),0) AS total_qty,
        COALESCE(SUM(COALESCE(mri.amount_inr, mri.amount, 0)),0) AS total_amount,
-       COALESCE(SUM(COALESCE(mri.tax_amount, 0) + COALESCE(mri.cgst_amount, 0) + COALESCE(mri.sgst_amount, 0) + COALESCE(mri.igst_amount, 0)),0) AS total_tax_gst ${baseFrom}`, params
+       COALESCE(SUM(COALESCE(mr.total_gst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))),0) AS total_tax_gst ${baseFrom}`, params
   );
 
   return { rows, total, totals };

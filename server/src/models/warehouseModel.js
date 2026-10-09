@@ -146,12 +146,36 @@ export async function remove(id) {
        (SELECT COUNT(*) FROM stock_opening_entries WHERE warehouse_id=?) +
        (SELECT COUNT(*) FROM material_receipts WHERE warehouse_id=?) +
        (SELECT COUNT(*) FROM stock_transfers WHERE from_warehouse_id=? OR to_warehouse_id=?) +
-       (SELECT COUNT(*) FROM material_issues WHERE warehouse_id=?)
-     AS total`, [id, id, id, id, id]
+       (SELECT COUNT(*) FROM material_issues WHERE warehouse_id=?) +
+       (SELECT COUNT(*) FROM stock_ledger WHERE warehouse_id=?)
+     AS total`, [id, id, id, id, id, id]
   );
   if (txCheck.total > 0) return { deleted: false, reason: 'Warehouse has existing transactions and cannot be deleted.' };
-  const [result] = await pool.query('DELETE FROM warehouses WHERE id=?', [id]);
-  return { deleted: result.affectedRows > 0 };
+
+  // Block deletion if this warehouse is a parent of other warehouses.
+  const [[childCheck]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM warehouses WHERE parent_warehouse_id=?`, [id]
+  );
+  if (childCheck.total > 0) return { deleted: false, reason: 'Warehouse has child warehouses and cannot be deleted.' };
+
+  // No real transactions: clean up derived/config child rows, then delete the
+  // warehouse in a single transaction so it is all-or-nothing.
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query('DELETE FROM warehouse_stock WHERE warehouse_id=?', [id]);
+    await conn.query('DELETE FROM warehouse_bins WHERE warehouse_id=?', [id]);
+    await conn.query('DELETE FROM warehouse_user_access WHERE warehouse_id=?', [id]);
+    await conn.query('DELETE FROM warehouse_attachments WHERE warehouse_id=?', [id]);
+    const [result] = await conn.query('DELETE FROM warehouses WHERE id=?', [id]);
+    await conn.commit();
+    return { deleted: result.affectedRows > 0 };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function addAttachment(warehouseId, fileData, uploadedBy = null) {
