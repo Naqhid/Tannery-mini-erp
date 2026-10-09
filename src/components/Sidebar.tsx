@@ -28,6 +28,7 @@ import {
   HardDrive,
   FileSpreadsheet,
   Coins,
+  ShieldCheck,
 } from 'lucide-react';
 
 export interface ChildItem {
@@ -112,6 +113,20 @@ export const menuItems: MenuItem[] = [
       { label: 'Department Master', icon: <Building2 size={16} />, path: '/department-master' },
       { label: 'Production Plan Reports', icon: <ClipboardList size={16} />, path: '/reports/production-plan' },
       { label: 'Actual Production Reports', icon: <Factory size={16} />, path: '/reports/actual-production' },
+    ],
+  },
+  // Admin: the main transaction screens listed in workflow order so users
+  // don't have to remember the sequence. These pages also remain under their
+  // own menus (Sales, Inventory, Production, Costing) — this is a shortcut copy.
+  { label: 'Admin', icon: <ShieldCheck size={20} />, children: [
+      { label: 'Sales Order', icon: <FileText size={16} />, path: '/sales-orders' },
+      { label: 'Material Receipt', icon: <Truck size={16} />, path: '/material-receipt' },
+      { label: 'Production Plan', icon: <ClipboardList size={16} />, path: '/production-plan' },
+      { label: 'Material Issue', icon: <Factory size={16} />, path: '/material-issue' },
+      { label: 'Daily Production', icon: <ClipboardList size={16} />, path: '/production-status' },
+      { label: 'Machine Cost', icon: <Factory size={16} />, path: '/machine-cost' },
+      { label: 'General Cost', icon: <FileText size={16} />, path: '/general-cost' },
+      { label: 'Std. Cost Sheet', icon: <FileSpreadsheet size={16} />, path: '/standard-costing' },
     ],
   },
   { label: 'Settings', icon: <Settings size={20} />, children: [
