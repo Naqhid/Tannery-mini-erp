@@ -222,7 +222,7 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
 // ─── Material Issue Register ─────────────────────────────────────────────────
 export async function issueRegister({ from_date, to_date, warehouse_id, process_stage, origin, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
-  let where = '1=1';
+  let where = 'mi.deleted_at IS NULL';
   if (from_date) { where += ' AND mi.issue_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND mi.issue_date <= ?'; params.push(to_date); }
   if (warehouse_id) { where += ' AND mi.warehouse_id = ?'; params.push(warehouse_id); }

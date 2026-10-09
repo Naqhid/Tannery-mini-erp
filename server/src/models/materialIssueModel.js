@@ -4,7 +4,7 @@ import { getIssueItemInfo, replaceReferenceTransactions, ensureOpeningStockSeede
 import { isPlanCostLockedByPlanNo } from './standardCostModel.js';
 
 export async function getAll({ search, status, warehouse_id, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
-  let where = '1=1';
+  let where = 'mi.deleted_at IS NULL';
   const params = [];
   if (search) {
     where += ' AND (mi.issue_no LIKE ? OR mi.production_batch LIKE ? OR mi.job_order_no LIKE ? OR w.name LIKE ?)';
@@ -41,7 +41,7 @@ export async function getById(id) {
     `SELECT mi.*, w.name AS warehouse_name, w.code AS warehouse_code
      FROM material_issues mi
      LEFT JOIN warehouses w ON mi.warehouse_id = w.id
-     WHERE mi.id = ?`, [id]
+     WHERE mi.id = ? AND mi.deleted_at IS NULL`, [id]
   );
   if (!issue) return null;
   const [items] = await pool.query(
@@ -60,6 +60,8 @@ export async function getNextNo() {
     `SELECT issue_no FROM material_issues WHERE issue_no LIKE ? ORDER BY id DESC LIMIT 1`,
     [`ISS-${year}-%`]
   );
+  // Note: deleted (soft) issues are intentionally still considered here so a
+  // reused number is never generated after a soft delete.
   if (!row) return `ISS-${year}-00001`;
   const num = parseInt(row.issue_no.split('-')[2], 10) + 1;
   return `ISS-${year}-${String(num).padStart(5, '0')}`;
@@ -324,7 +326,9 @@ export async function remove(id) {
 
     if (wasPosted) {
       // Reverse the stock the posted issue consumed, then remove its ledger and
-      // transaction effects and rebuild valuation.
+      // transaction effects and rebuild valuation. The stock side-effects must
+      // be undone so inventory stays accurate even though the header is only
+      // soft-deleted.
       for (const item of items) {
         await updateStock(conn, item.warehouse_id, item.material_id, item.uom, parseFloat(item.issue_qty), 0);
       }
@@ -332,8 +336,12 @@ export async function remove(id) {
       await replaceReferenceTransactions(conn, 'material_issue', id, []);
     }
 
-    await conn.query('DELETE FROM material_issue_items WHERE issue_id=?', [id]);
-    const [result] = await conn.query('DELETE FROM material_issues WHERE id=?', [id]);
+    // Soft delete: flag the header with deleted_at instead of physically
+    // removing it. Child items are kept intact so the record can be restored
+    // and remains available for audit/history.
+    const [result] = await conn.query(
+      'UPDATE material_issues SET deleted_at = CURRENT_TIMESTAMP WHERE id=? AND deleted_at IS NULL', [id]
+    );
 
     // Rebuild valuation only for Posted issues (Draft never touched stock).
     if (wasPosted) {
@@ -358,7 +366,8 @@ export async function getStats() {
        SUM(status='Posted') AS posted,
        SUM(status='Draft') AS draft,
        SUM(grand_total) AS total_value
-     FROM material_issues`
+     FROM material_issues
+     WHERE deleted_at IS NULL`
   );
   return data;
 }
@@ -424,7 +433,7 @@ export async function getPreviousIssueByArticle(article, excludeId = null) {
   let extra = '';
   if (excludeId) { extra = ' AND mi.id <> ?'; params.push(excludeId); }
   const [[header]] = await pool.query(
-    `SELECT mi.* FROM material_issues mi WHERE mi.article=?${extra} ORDER BY mi.issue_date DESC, mi.id DESC LIMIT 1`, params
+    `SELECT mi.* FROM material_issues mi WHERE mi.article=? AND mi.deleted_at IS NULL${extra} ORDER BY mi.issue_date DESC, mi.id DESC LIMIT 1`, params
   );
   if (!header) return null;
   const [items] = await pool.query(
