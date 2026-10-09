@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import {
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, ChevronsUpDown,
 } from 'lucide-react';
 import SkeletonLoader from '../ui/SkeletonLoader';
 import EmptyState from '../ui/EmptyState';
@@ -58,18 +58,27 @@ export default function ReportTable<T>({
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                {columns.map((c) => (
-                  <th key={c.key}
-                    onClick={() => hasSorting && onSort!(c.key)}
-                    className={`px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider ${alignClass(c.align)} ${hasSorting ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}>
-                    <div className="flex items-center gap-1">
-                      {c.header}
-                      {hasSorting && sortBy === c.key && (
-                        sortOrder === 'asc' ? <ChevronUp size={12} className="text-blue-600" /> : <ChevronDown size={12} className="text-blue-600" />
-                      )}
-                    </div>
-                  </th>
-                ))}
+                {columns.map((c) => {
+                  const active = sortBy === c.key;
+                  return (
+                    <th key={c.key}
+                      onClick={() => hasSorting && onSort!(c.key)}
+                      className={`px-4 py-3.5 text-xs font-semibold uppercase tracking-wider ${active ? 'text-blue-700' : 'text-gray-600'} ${alignClass(c.align)} ${hasSorting ? 'cursor-pointer hover:bg-gray-100 transition-colors select-none' : ''}`}>
+                      <div className={`flex items-center gap-1 ${c.align === 'right' ? 'justify-end' : c.align === 'center' ? 'justify-center' : ''}`}>
+                        {c.header}
+                        {hasSorting && (
+                          active ? (
+                            sortOrder === 'asc'
+                              ? <ChevronUp size={13} className="text-blue-600 shrink-0" />
+                              : <ChevronDown size={13} className="text-blue-600 shrink-0" />
+                          ) : (
+                            <ChevronsUpDown size={13} className="text-gray-300 shrink-0" />
+                          )
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
