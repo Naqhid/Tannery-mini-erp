@@ -544,6 +544,16 @@ export default function MaterialIssueToBatchDetail() {
     const validItems = items.filter((item) => item.material_id && item.issue_qty);
     if (loading || saving || isPosted || !issue.warehouse_id || !issue.issue_date || !validItems.length) return;
 
+    // Do NOT persist anything to the server while any line exceeds available
+    // stock. Otherwise an out-of-stock entry would silently land in the DB as a
+    // Draft even though Post is rejected. The browser-local draft still keeps
+    // the user's input safe until the quantities are valid.
+    const hasStockError = validItems.some((item) => item.stock_error);
+    if (hasStockError) {
+      setDraftStatus('Not saved — insufficient stock. Fix quantities to save.');
+      return;
+    }
+
     const timer = window.setTimeout(async () => {
       if (automaticSaveInFlight.current) return;
       automaticSaveInFlight.current = true;

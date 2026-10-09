@@ -3,6 +3,22 @@ import { updateStock, addLedgerEntry, allowsNegativeStock, rebuildAndReprice } f
 import { getIssueItemInfo, replaceReferenceTransactions, ensureOpeningStockSeeded } from './materialTransactionModel.js';
 import { isPlanCostLockedByPlanNo } from './standardCostModel.js';
 
+// Reject the save when any line's issue quantity exceeds available stock, so an
+// out-of-stock material issue is never persisted — not even as a Draft. Skipped
+// for warehouses explicitly configured to allow negative stock.
+async function assertStockAvailable(conn, data, items = []) {
+  if (!data.warehouse_id || !items.length) return;
+  if (await allowsNegativeStock(data.warehouse_id)) return;
+  for (const item of items) {
+    const requested = parseFloat(item.issue_qty) || 0;
+    if (requested <= 0) continue;
+    const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
+    if (requested > info.available_qty + 0.000001) {
+      throw new Error(`Insufficient stock. Available stock: ${info.available_qty}. Requested issue quantity: ${requested}`);
+    }
+  }
+}
+
 export async function getAll({ search, status, warehouse_id, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
   let where = 'mi.deleted_at IS NULL';
   const params = [];
@@ -74,7 +90,6 @@ export async function create(data, items = [], createdBy = null) {
     const issue_no = data.issue_no || await getNextNo();
     const status = data.status || 'Draft';
 
-    // Only validate stock and compute server-side costs if posting
     if (status === 'Posted') {
       for (const item of items) {
         // Materialize master opening stock into a real transaction/ledger row
@@ -89,6 +104,11 @@ export async function create(data, items = [], createdBy = null) {
         item.unit_cost = info.avg_rate;
         item.amount = Number((requested * info.avg_rate).toFixed(2));
       }
+    } else {
+      // Even for Draft saves, never persist an issue whose quantity exceeds
+      // available stock. This keeps out-of-stock entries out of the DB entirely
+      // (the record must not be created at all when insufficient).
+      await assertStockAvailable(conn, data, items);
     }
 
     const totalCost = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
@@ -229,6 +249,13 @@ export async function update(id, data, items = [], updatedBy = null) {
         item.unit_cost = info.avg_rate;
         item.amount = Number((requested * info.avg_rate).toFixed(2));
       }
+    } else if (!wasPosted) {
+      // Pure Draft update (record was never Posted): reject if any line exceeds
+      // available stock so an out-of-stock issue is never persisted. We skip
+      // this when the record WAS Posted, because the in-transaction stock
+      // reversal above isn't yet visible to the availability read and would
+      // cause a false "insufficient" during un-posting back to Draft.
+      await assertStockAvailable(conn, data, items);
     }
 
     const totalCost = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
