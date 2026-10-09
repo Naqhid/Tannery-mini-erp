@@ -4,21 +4,71 @@ import pool from '../../config/db.js';
 // Stock summary with opening/receipt/issue/transfer/outbound/closing qty and value
 // Data source: chemical material master + stock ledger table
 export async function stockSummary({ warehouse_id, group_id, as_on_date, search, page = 1, limit = 10, sortBy, sortOrder }) {
-  const params = [];
+  // Period = the current month (or the month of as_on_date if given).
+  //  - Opening  = running balance of everything BEFORE the 1st of that month.
+  //  - Movements = receipts/issues/transfers/outbound WITHIN the month, up to
+  //                the as-on date (defaults to today).
+  //  - Closing  = opening + receipt - issue - transfer - outbound.
+  const periodEnd = as_on_date ? new Date(as_on_date) : new Date();
+  const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), 1);
+  const startStr = toISO(periodStart);   // first day of the month
+  const endStr = toISO(periodEnd);       // as-on date (inclusive)
+
+  // Warehouse scope (shared by opening and movement joins).
+  const whClause = warehouse_id ? ' AND sl.warehouse_id = ?' : '';
+
+  // Column-list builder: opening is pre-period balance; movements are in-period.
+  const metricCols = `
+    COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.in_qty - sl.out_qty ELSE 0 END), 0) AS opening_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0) AS opening_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0) AS receipt_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0) AS receipt_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0) AS issue_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0) AS issue_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0) AS transfer_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0) AS transfer_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0) AS outbound_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value`;
+
+  // Params that fill the metric CASE expressions, in order.
+  const metricParams = [
+    startStr,                 // opening_qty  (< start)
+    startStr,                 // opening_value(< start)
+    startStr, endStr,         // receipt_qty
+    startStr, endStr,         // receipt_value
+    startStr, endStr,         // issue_qty
+    startStr, endStr,         // issue_value
+    startStr, endStr,         // transfer_qty
+    startStr, endStr,         // transfer_value
+    startStr, endStr,         // outbound_qty
+    startStr, endStr,         // outbound_value
+  ];
+
+  // Params for ONE closing block (qty or value): 1 opening boundary + 4
+  // movement ranges (receipt, issue, transfer, outbound). closing_qty and
+  // closing_value share the identical shape, so this is used twice.
+  const closingBlockParams = [
+    startStr,                 // opening (< start)
+    startStr, endStr,         // receipt
+    startStr, endStr,         // issue
+    startStr, endStr,         // transfer
+    startStr, endStr,         // outbound
+  ];
+  const closingParams = [...closingBlockParams, ...closingBlockParams]; // qty + value
+
+  // WHERE for the materials master (drives which items are listed).
   let where = "m.status = 'Active'";
-  if (group_id) { where += ' AND m.group_id = ?'; params.push(group_id); }
+  const whereParams = [];
+  if (group_id) { where += ' AND m.group_id = ?'; whereParams.push(group_id); }
   if (search) {
     where += ' AND (m.name LIKE ? OR m.code LIKE ?)';
-    const t = `%${search}%`; params.push(t, t);
+    const t = `%${search}%`; whereParams.push(t, t);
   }
 
-  const dateFilter = as_on_date ? `AND sl.transaction_date <= ?` : '';
-  if (as_on_date) params.push(as_on_date);
-
-  const whJoin = warehouse_id
-    ? `AND sl.warehouse_id = ?`
-    : '';
-  if (warehouse_id) params.push(warehouse_id);
+  // The join carries the warehouse filter; metrics then slice by date.
+  const slJoin = `LEFT JOIN stock_ledger sl ON sl.material_id = m.id${whClause}`;
+  const joinParams = warehouse_id ? [warehouse_id] : [];
 
   const sortMap = {
     material_code: 'm.code',
@@ -44,55 +94,61 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
        m.name AS material_name,
        g.name AS group_name,
        m.uom,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Opening', 'Opening Stock') THEN sl.in_qty ELSE 0 END), 0) AS opening_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Opening', 'Opening Stock') THEN sl.amount ELSE 0 END), 0) AS opening_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0) AS receipt_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0) AS receipt_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0) AS issue_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0) AS issue_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0) AS transfer_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0) AS transfer_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0) AS outbound_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value,
-       COALESCE(SUM(sl.in_qty) - SUM(sl.out_qty), 0) AS closing_qty,
-       COALESCE(SUM(sl.amount), 0) AS closing_value
+       ${metricCols},
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0)
+       ) AS closing_qty,
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0)
+       ) AS closing_value
      FROM materials m
      LEFT JOIN group_master g ON m.group_id = g.id
-     LEFT JOIN stock_ledger sl ON sl.material_id = m.id ${dateFilter} ${whJoin}
+     ${slJoin}
      WHERE ${where}
      GROUP BY m.id, m.code, m.name, g.name, m.uom
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
-    [...params, Number(limit), Number(offset)]
+    [...metricParams, ...closingParams, ...joinParams, ...whereParams, Number(limit), Number(offset)]
   );
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(DISTINCT m.id) AS total
      FROM materials m
      LEFT JOIN group_master g ON m.group_id = g.id
-     LEFT JOIN stock_ledger sl ON sl.material_id = m.id ${dateFilter} ${whJoin}
+     ${slJoin}
      WHERE ${where}`,
-    params
+    [...joinParams, ...whereParams]
   );
 
   const [totalsRows] = await pool.query(
     `SELECT 
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Opening', 'Opening Stock') THEN sl.in_qty ELSE 0 END), 0) AS opening_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Opening', 'Opening Stock') THEN sl.amount ELSE 0 END), 0) AS opening_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0) AS receipt_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0) AS receipt_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0) AS issue_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0) AS issue_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0) AS transfer_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0) AS transfer_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0) AS outbound_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value,
-       COALESCE(SUM(sl.in_qty) - SUM(sl.out_qty), 0) AS closing_qty,
-       COALESCE(SUM(sl.amount), 0) AS closing_value
+       ${metricCols},
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0)
+       ) AS closing_qty,
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0)
+       ) AS closing_value
      FROM materials m
-     LEFT JOIN stock_ledger sl ON sl.material_id = m.id ${dateFilter} ${whJoin}
+     ${slJoin}
      WHERE ${where}`,
-    params
+    [...metricParams, ...closingParams, ...joinParams, ...whereParams]
   );
 
   const totals = {

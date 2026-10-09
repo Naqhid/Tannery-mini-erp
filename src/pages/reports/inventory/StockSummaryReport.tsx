@@ -12,10 +12,17 @@ interface Row extends Record<string, unknown> {
   outbound_qty: number; outbound_value: number; closing_qty: number; closing_value: number;
 }
 
+// Local YYYY-MM-DD for today (avoids UTC shifting the date).
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export default function StockSummaryReport({ embedded }: { embedded?: boolean }) {
   const [warehouse, setWarehouse] = useState('');
   const [group, setGroup] = useState('');
-  const [asOnDate, setAsOnDate] = useState('');
+  // Default the As-On Date to today so the report opens on the current month.
+  const [asOnDate, setAsOnDate] = useState(todayISO());
   const [opts, setOpts] = useState<{ warehouses: { id: number; name: string }[]; groups: { id: number; name: string }[] }>({ warehouses: [], groups: [] });
 
   useEffect(() => {
@@ -29,10 +36,15 @@ export default function StockSummaryReport({ embedded }: { embedded?: boolean })
     { key: 'group_name', header: 'Item Group' },
     { key: 'uom', header: 'UOM' },
     { key: 'opening_qty', header: 'Opening Qty', align: 'right', render: r => fmtQty(r.opening_qty) },
+    { key: 'opening_value', header: 'Opening Value', align: 'right', render: r => fmtNum(r.opening_value) },
     { key: 'receipt_qty', header: 'Receipt Qty', align: 'right', render: r => <span className="text-emerald-700">{fmtQty(r.receipt_qty)}</span> },
+    { key: 'receipt_value', header: 'Receipt Value', align: 'right', render: r => <span className="text-emerald-700">{fmtNum(r.receipt_value)}</span> },
     { key: 'issue_qty', header: 'Issue Qty', align: 'right', render: r => <span className="text-red-600">{fmtQty(r.issue_qty)}</span> },
+    { key: 'issue_value', header: 'Issue Value', align: 'right', render: r => <span className="text-red-600">{fmtNum(r.issue_value)}</span> },
     { key: 'transfer_qty', header: 'Transfer Qty', align: 'right', render: r => <span className="text-amber-600">{fmtQty(r.transfer_qty)}</span> },
+    { key: 'transfer_value', header: 'Transfer Value', align: 'right', render: r => <span className="text-amber-600">{fmtNum(r.transfer_value)}</span> },
     { key: 'outbound_qty', header: 'Outbound Qty', align: 'right', render: r => <span className="text-orange-600">{fmtQty(r.outbound_qty)}</span> },
+    { key: 'outbound_value', header: 'Outbound Value', align: 'right', render: r => <span className="text-orange-600">{fmtNum(r.outbound_value)}</span> },
     { key: 'closing_qty', header: 'Closing Qty', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.closing_qty)}</span> },
     { key: 'closing_value', header: 'Closing Value', align: 'right', render: r => <span className="font-semibold">{fmtNum(r.closing_value)}</span> },
   ];
@@ -66,10 +78,15 @@ export default function StockSummaryReport({ embedded }: { embedded?: boolean })
         <tr>
           <td className="px-4 py-3 text-sm font-medium" colSpan={4}>Total</td>
           <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.opening_qty)}</td>
+          <td className="px-4 py-3 text-sm text-right">{fmtNum(totals.opening_value)}</td>
           <td className="px-4 py-3 text-sm text-right text-emerald-700">{fmtQty(totals.receipt_qty)}</td>
+          <td className="px-4 py-3 text-sm text-right text-emerald-700">{fmtNum(totals.receipt_value)}</td>
           <td className="px-4 py-3 text-sm text-right text-red-600">{fmtQty(totals.issue_qty)}</td>
+          <td className="px-4 py-3 text-sm text-right text-red-600">{fmtNum(totals.issue_value)}</td>
           <td className="px-4 py-3 text-sm text-right text-amber-600">{fmtQty(totals.transfer_qty)}</td>
+          <td className="px-4 py-3 text-sm text-right text-amber-600">{fmtNum(totals.transfer_value)}</td>
           <td className="px-4 py-3 text-sm text-right text-orange-600">{fmtQty(totals.outbound_qty)}</td>
+          <td className="px-4 py-3 text-sm text-right text-orange-600">{fmtNum(totals.outbound_value)}</td>
           <td className="px-4 py-3 text-sm text-right font-semibold">{fmtQty(totals.closing_qty)}</td>
           <td className="px-4 py-3 text-sm text-right font-semibold">{fmtNum(totals.closing_value)}</td>
         </tr>
