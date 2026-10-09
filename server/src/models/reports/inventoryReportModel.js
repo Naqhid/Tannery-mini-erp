@@ -423,12 +423,16 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
        od.delivery_challan_no,
        m.code AS material_code, m.name AS material_name,
        sl.uom,
-       CASE WHEN sl.transaction_type IN ('Opening', 'Opening Stock') THEN sl.in_qty ELSE 0 END AS opening_qty,
+       -- Opening/closing are the RUNNING balance carried across every
+       -- transaction (date-ordered), not a single row's net. balance_qty is
+       -- the running balance AFTER this transaction; opening is that balance
+       -- minus this transaction's own movement.
+       (sl.balance_qty - (sl.in_qty - sl.out_qty)) AS opening_qty,
        CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END AS receipt_qty,
        CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END AS issue_qty,
        CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END AS transfer_qty,
        CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END AS outbound_qty,
-       sl.in_qty - sl.out_qty AS closing_qty,
+       sl.balance_qty AS closing_qty,
        sl.unit_cost AS rate, sl.amount,
        sl.remarks, u.full_name AS created_by_name, sl.created_at
      ${baseFrom}
@@ -440,14 +444,28 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${baseFrom}`, params);
   const [[totals]] = await pool.query(
     `SELECT 
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Opening', 'Opening Stock') THEN sl.in_qty ELSE 0 END),0) AS total_opening,
        COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END),0) AS total_receipt,
        COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END),0) AS total_issue,
        COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END),0) AS total_transfer,
        COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END),0) AS total_outbound,
-       COALESCE(SUM(sl.in_qty - sl.out_qty),0) AS total_closing,
        COALESCE(SUM(sl.amount),0) AS total_amount ${baseFrom}`, params
   );
+
+  // Opening = running balance BEFORE the earliest transaction in the filtered
+  // range; Closing = running balance AFTER the latest. Summing running balances
+  // would be meaningless, so take the boundary rows (date, then id order).
+  const [[firstRow]] = await pool.query(
+    `SELECT (sl.balance_qty - (sl.in_qty - sl.out_qty)) AS opening_qty
+     ${baseFrom}
+     ORDER BY sl.transaction_date ASC, sl.id ASC LIMIT 1`, params
+  );
+  const [[lastRow]] = await pool.query(
+    `SELECT sl.balance_qty AS closing_qty
+     ${baseFrom}
+     ORDER BY sl.transaction_date DESC, sl.id DESC LIMIT 1`, params
+  );
+  totals.total_opening = Number(firstRow?.opening_qty || 0);
+  totals.total_closing = Number(lastRow?.closing_qty || 0);
 
   return { rows, total, totals };
 }
