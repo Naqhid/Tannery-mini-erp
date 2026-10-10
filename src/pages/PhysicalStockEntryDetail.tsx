@@ -62,6 +62,7 @@ export default function PhysicalStockEntryDetail() {
   const [locationRacks, setLocationRacks] = useState<LocationRackOption[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [posting, setPosting] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
@@ -169,17 +170,19 @@ export default function PhysicalStockEntryDetail() {
     setItems([{ _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, avg_rate: 0, variance_value: 0, remarks: '' }]);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (status: 'Draft' | 'Completed' = 'Draft') => {
     if (!entry.warehouse_id) { toast.error('Warehouse is required'); return; }
     if (!entry.entry_date) { toast.error('Entry date is required'); return; }
     if (!entry.stock_date) { toast.error('Physical Stock Date is required'); return; }
     const validItems = items.filter(i => i.material_id && i.physical_qty);
     if (!validItems.length) { toast.error('At least one item is required'); return; }
 
-    setSaving(true);
+    const posting = status === 'Completed';
+    if (posting) setPosting(true); else setSaving(true);
     try {
       const payload = {
         ...entry,
+        status,
         warehouse_id: Number(entry.warehouse_id),
         location_id: entry.location_id ? Number(entry.location_id) : null,
         items: validItems.map((i, idx) => ({
@@ -192,20 +195,21 @@ export default function PhysicalStockEntryDetail() {
           system_qty: i.system_qty,
           physical_qty: parseFloat(i.physical_qty),
           variance_qty: i.variance_qty,
+          avg_rate: i.avg_rate,
           variance_value: i.variance_value,
           remarks: i.remarks || null,
         })),
       };
       if (isNew) {
         await api('/physical-stock-entries', { method: 'POST', body: JSON.stringify(payload) });
-        toast.success('Physical stock entry created!');
+        toast.success(posting ? 'Physical stock entry posted to stock ledger!' : 'Physical stock entry created!');
       } else {
         await api(`/physical-stock-entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
-        toast.success('Physical stock entry updated!');
+        toast.success(posting ? 'Physical stock entry posted to stock ledger!' : 'Physical stock entry updated!');
       }
       navigate('/physical-stock-entry');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
-    finally { setSaving(false); }
+    finally { if (posting) setPosting(false); else setSaving(false); }
   };
 
   // Summary calculations
@@ -242,9 +246,14 @@ export default function PhysicalStockEntryDetail() {
             <X className="w-4 h-4" /> Cancel
           </button>
           {!isReadOnly && (
-            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
-            </button>
+            <>
+              <button onClick={() => handleSave('Draft')} disabled={saving || posting} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={() => handleSave('Completed')} disabled={saving || posting} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50" title="Save and post variances to the stock ledger as Stock Adjustment">
+                <Save className="w-4 h-4" /> {posting ? 'Posting...' : 'Post'}
+              </button>
+            </>
           )}
         </div>
       </div>

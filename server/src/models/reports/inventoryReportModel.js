@@ -29,7 +29,9 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
     COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0) AS transfer_qty,
     COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0) AS transfer_value,
     COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0) AS outbound_qty,
-    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value`;
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN sl.in_qty - sl.out_qty ELSE 0 END), 0) AS adjustment_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN (CASE WHEN sl.in_qty > 0 THEN sl.amount ELSE -sl.amount END) ELSE 0 END), 0) AS adjustment_value`;
 
   // Params that fill the metric CASE expressions, in order.
   const metricParams = [
@@ -43,17 +45,20 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
     startStr, endStr,         // transfer_value
     startStr, endStr,         // outbound_qty
     startStr, endStr,         // outbound_value
+    startStr, endStr,         // adjustment_qty
+    startStr, endStr,         // adjustment_value
   ];
 
-  // Params for ONE closing block (qty or value): 1 opening boundary + 4
-  // movement ranges (receipt, issue, transfer, outbound). closing_qty and
-  // closing_value share the identical shape, so this is used twice.
+  // Params for ONE closing block (qty or value): 1 opening boundary + 5
+  // movement ranges (receipt, issue, transfer, outbound, adjustment).
+  // closing_qty and closing_value share the identical shape, so used twice.
   const closingBlockParams = [
     startStr,                 // opening (< start)
     startStr, endStr,         // receipt
     startStr, endStr,         // issue
     startStr, endStr,         // transfer
     startStr, endStr,         // outbound
+    startStr, endStr,         // adjustment
   ];
   const closingParams = [...closingBlockParams, ...closingBlockParams]; // qty + value
 
@@ -101,6 +106,7 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
        ) AS closing_qty,
        (
          COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0)
@@ -108,6 +114,7 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN (CASE WHEN sl.in_qty > 0 THEN sl.amount ELSE -sl.amount END) ELSE 0 END), 0)
        ) AS closing_value
      FROM materials m
      LEFT JOIN group_master g ON m.group_id = g.id
@@ -137,6 +144,7 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
        ) AS closing_qty,
        (
          COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0)
@@ -144,6 +152,7 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0)
          - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN (CASE WHEN sl.in_qty > 0 THEN sl.amount ELSE -sl.amount END) ELSE 0 END), 0)
        ) AS closing_value
      FROM materials m
      ${slJoin}
@@ -162,6 +171,8 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
     transfer_value: Number(totalsRows[0]?.transfer_value || 0),
     outbound_qty: Number(totalsRows[0]?.outbound_qty || 0),
     outbound_value: Number(totalsRows[0]?.outbound_value || 0),
+    adjustment_qty: Number(totalsRows[0]?.adjustment_qty || 0),
+    adjustment_value: Number(totalsRows[0]?.adjustment_value || 0),
     closing_qty: Number(totalsRows[0]?.closing_qty || 0),
     closing_value: Number(totalsRows[0]?.closing_value || 0),
   };
