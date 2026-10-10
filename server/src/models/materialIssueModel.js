@@ -399,6 +399,42 @@ export async function getStats() {
   return data;
 }
 
+// Bulk set status (Draft/Posted) for several issues at once. Each record is
+// processed through the normal update() path so stock validation, ledger
+// writes and valuation rebuilds behave exactly like a single-record post.
+// Returns { success, failed: [{ id, error }] }.
+export async function bulkSetStatus(ids, status, updatedBy = null) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const existing = await getById(id);
+      if (!existing) { failed.push({ id, error: 'Not found' }); continue; }
+      if (existing.status === status) { success++; continue; } // already in target state
+      const { items = [], ...header } = existing;
+      await update(id, { ...header, status }, items, updatedBy);
+      success++;
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}
+
+export async function bulkDelete(ids) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const ok = await remove(id);
+      if (ok) success++; else failed.push({ id, error: 'Not found' });
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}
+
 // --- Batches Dropdown for Material Issue ---
 export async function getBatchesDropdown() {
   const [rows] = await pool.query(

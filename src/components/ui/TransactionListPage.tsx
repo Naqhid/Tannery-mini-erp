@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import {
   Plus, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown,
   ChevronsUpDown, RefreshCw, X, Trash2, CheckSquare, Filter, Edit2,
+  Save, Send,
 } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
 import EmptyState from './EmptyState';
@@ -57,6 +58,9 @@ interface TransactionListPageProps {
   deleteTitle?: string;
   deleteMessage?: string;
   enableBulkDelete?: boolean;
+  // When true, show bulk "Save as Draft" and "Post Selected" actions that call
+  // `${apiEndpoint}/bulk-status` with { ids, status }.
+  enableBulkStatus?: boolean;
   searchPlaceholder?: string;
   rowActions?: (row: any) => React.ReactNode;
   formatRow?: (row: any, col: Column, index: number) => React.ReactNode;
@@ -81,6 +85,7 @@ export default function TransactionListPage({
   deleteTitle = 'Delete Record',
   deleteMessage = 'Are you sure? This action cannot be undone.',
   enableBulkDelete = true,
+  enableBulkStatus = false,
   searchPlaceholder = 'Search...',
   rowActions,
   formatRow,
@@ -182,6 +187,25 @@ export default function TransactionListPage({
     setDeleteConfirm({ open: true, id: null, bulk: true });
   };
 
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const handleBulkStatus = async (status: 'Draft' | 'Posted') => {
+    if (selectedIds.size === 0) { toast.error('No rows selected'); return; }
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await api<{ message?: string }>(`${apiEndpoint}/bulk-status`, {
+        method: 'POST', body: JSON.stringify({ ids, status }),
+      });
+      toast.success(res.message || `${ids.length} record(s) updated`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (err) {
+      toast.error('Bulk action failed: ' + (err as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const confirmDelete = async () => {
     const { id, bulk } = deleteConfirm;
     setDeleteConfirm({ open: false, id: null });
@@ -270,12 +294,32 @@ export default function TransactionListPage({
           <span className="text-sm font-medium text-blue-800">{selectedIds.size} selected</span>
           <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 hover:underline ml-2">Clear</button>
           <div className="ml-auto flex items-center gap-2">
+            {enableBulkStatus && (
+              <>
+                <button
+                  onClick={canWrite ? () => handleBulkStatus('Draft') : undefined}
+                  disabled={isReadOnly || bulkBusy}
+                  title={isReadOnly ? 'You have read-only access' : 'Save selected as Draft'}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-lg transition-all ${isReadOnly || bulkBusy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}`}
+                >
+                  <Save size={13} /> Save Selected
+                </button>
+                <button
+                  onClick={canWrite ? () => handleBulkStatus('Posted') : undefined}
+                  disabled={isReadOnly || bulkBusy}
+                  title={isReadOnly ? 'You have read-only access' : 'Post selected'}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-500 rounded-lg transition-all ${isReadOnly || bulkBusy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-600'}`}
+                >
+                  <Send size={13} /> Post Selected
+                </button>
+              </>
+            )}
             {enableBulkDelete && (
               <button
                 onClick={canWrite ? handleBulkDelete : undefined}
-                disabled={isReadOnly}
+                disabled={isReadOnly || bulkBusy}
                 title={isReadOnly ? 'You have read-only access' : undefined}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-lg transition-all ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-rose-600'}`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-lg transition-all ${isReadOnly || bulkBusy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-rose-600'}`}
               >
                 <Trash2 size={13} /> Delete Selected
               </button>

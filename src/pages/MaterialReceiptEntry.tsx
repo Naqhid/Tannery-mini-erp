@@ -141,6 +141,7 @@ export default function MaterialReceiptEntry() {
       deleteMessage="Are you sure? This will remove the receipt entry."
       searchPlaceholder="Search receipts..."
       enableBulkDelete={true}
+      enableBulkStatus={true}
       exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />
   );

@@ -142,6 +142,7 @@ export default function MaterialIssueToBatch() {
       deleteMessage="Are you sure? This will remove the material issue entry."
       searchPlaceholder="Search issues..."
       enableBulkDelete={true}
+      enableBulkStatus={true}
       isRowActionDisabled={(row) => row.status === 'Posted' || row.status === 'posted'}
       exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />

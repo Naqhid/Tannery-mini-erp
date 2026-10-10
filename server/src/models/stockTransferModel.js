@@ -325,3 +325,37 @@ export async function getStats() {
   );
   return data;
 }
+
+// Bulk status/delete reuse the normal per-record paths so stock-ledger
+// movements (Transfer Out → out_qty, Transfer In → in_qty) stay correct.
+export async function bulkSetStatus(ids, status, updatedBy = null) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const existing = await getById(id);
+      if (!existing) { failed.push({ id, error: 'Not found' }); continue; }
+      if (existing.status === status) { success++; continue; }
+      const { items = [], ...header } = existing;
+      await update(id, { ...header, status }, items, updatedBy);
+      success++;
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}
+
+export async function bulkDelete(ids) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const ok = await remove(id);
+      if (ok) success++; else failed.push({ id, error: 'Not found' });
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}
