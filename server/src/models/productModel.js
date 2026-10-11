@@ -89,21 +89,23 @@ export async function getNextCode() {
 // and color (in that order). Falls back to the provided name when the ids are
 // not available. This keeps products.name = "Leather Finish Color" in the DB.
 async function composeProductName(data) {
+  // Prefer the user-provided name (product name is editable).
+  const provided = typeof data.name === 'string' ? data.name.trim() : '';
+  if (provided) return provided;
+
+  // Fallback: auto-compose from leather type + finish type (color excluded).
   const ids = {
     leather: data.leather_type_id || null,
     finish: data.finish_type_id || null,
-    color: data.color_id || null,
   };
-  if (!ids.leather && !ids.finish && !ids.color) return data.name || null;
+  if (!ids.leather && !ids.finish) return data.name || null;
 
   const [ltRows] = ids.leather
     ? await pool.query('SELECT name FROM leather_types WHERE id=?', [ids.leather]) : [[]];
   const [ftRows] = ids.finish
     ? await pool.query('SELECT name FROM finish_types WHERE id=?', [ids.finish]) : [[]];
-  const [cRows] = ids.color
-    ? await pool.query('SELECT name FROM colors WHERE id=?', [ids.color]) : [[]];
 
-  const parts = [ltRows?.[0]?.name, ftRows?.[0]?.name, cRows?.[0]?.name].filter(Boolean);
+  const parts = [ltRows?.[0]?.name, ftRows?.[0]?.name].filter(Boolean);
   const composed = parts.join(' ').trim();
   return composed || data.name || null;
 }
