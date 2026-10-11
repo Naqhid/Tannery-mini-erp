@@ -178,6 +178,14 @@ export default function SalesOrderDetail() {
     } catch { setProducts([]); }
   }, []);
 
+  const [colors, setColors] = useState<{ id: number; name: string }[]>([]);
+  const fetchColors = useCallback(async () => {
+    try {
+      const res = await api<{ data: { id: number; name: string }[] }>('/colors/dropdown');
+      setColors(res.data || []);
+    } catch { setColors([]); }
+  }, []);
+
   const fetchOrder = useCallback(async () => {
     if (isNew) return;
     try {
@@ -219,7 +227,7 @@ export default function SalesOrderDetail() {
     } catch { /* ignore preview failure */ }
   }, [isNew]);
 
-  useEffect(() => { fetchCustomers(); fetchProducts(); fetchOrder(); fetchNextOrderNo(); }, [fetchCustomers, fetchProducts, fetchOrder, fetchNextOrderNo]);
+  useEffect(() => { fetchCustomers(); fetchProducts(); fetchColors(); fetchOrder(); fetchNextOrderNo(); }, [fetchCustomers, fetchProducts, fetchColors, fetchOrder, fetchNextOrderNo]);
 
   const updateField = (field: keyof SalesOrderFull, value: any) => {
     setOrder(prev => {
@@ -629,6 +637,11 @@ export default function SalesOrderDetail() {
             {activeTab === 'items' && (
               <div className="space-y-5">
                 <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                  <datalist id="so-color-options">
+                    {colors.map(c => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
@@ -665,7 +678,7 @@ export default function SalesOrderDetail() {
                                   item_code: product?.code || '',
                                   item_description: product?.name || '',
                                   leather_type: product?.leather_type_name || product?.leather_type || '',
-                                  finish_color: product?.color_name || '',
+                                  // Color is entered manually (type or select); not auto-filled from product.
                                   thickness: product?.thickness_name || product?.thickness || '',
                                   uom: product?.uom_name || product?.uom || '',
                                 } : it);
@@ -686,7 +699,17 @@ export default function SalesOrderDetail() {
                             />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={colorOnly(item.finish_color)} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Color" />
+                            <input
+                              list="so-color-options"
+                              value={colorOnly(item.finish_color)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const newItems = order.items.map(it => it._key === item._key ? { ...it, finish_color: val } : it);
+                                setOrder(prev => ({ ...prev, items: newItems }));
+                              }}
+                              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-400/30"
+                              placeholder="Type or select"
+                            />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input value={item.thickness} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="mm" />
