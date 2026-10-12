@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   Factory, Search, Filter, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, RefreshCw,
-  FileSpreadsheet, Plus, Trash2,
+  FileSpreadsheet, Plus, ChevronDown, Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -62,16 +62,57 @@ export default function ProductionPlan() {
   // Delete
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; itemId?: number; plan_row?: any }>({ open: false, id: null });
 
+  // Accordion — one sale order can have multiple production plans
+  const [expandedRow, setExpandedRow] = useState<number | null>(() => {
+    const saved = sessionStorage.getItem('productionPlan_expandedRow');
+    return saved ? Number(saved) : null;
+  });
+  const [rowPlans, setRowPlans] = useState<Record<number, any[]>>({});
+  const [rowPlansLoading, setRowPlansLoading] = useState<Record<number, boolean>>({});
+
+  // Persist expandedRow to sessionStorage
+  useEffect(() => {
+    if (expandedRow !== null) {
+      sessionStorage.setItem('productionPlan_expandedRow', String(expandedRow));
+    } else {
+      sessionStorage.removeItem('productionPlan_expandedRow');
+    }
+  }, [expandedRow]);
+
+  // Fetch all plans created for a given sales-order-item row (there can be multiple)
+  const fetchRowPlans = useCallback(async (row: any) => {
+    setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: true }));
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', '100');
+      // Prefer the exact plan_id the sales-order-item already resolved — this
+      // avoids fragile article-name matching. Fall back to article/color.
+      if (row.plan_id) {
+        params.set('sales_order_no', row.sales_order_no || '');
+        if (row.article) params.set('article', row.article);
+        if (row.color) params.set('color', row.color);
+      } else {
+        if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
+        if (row.article) params.set('article', row.article);
+        if (row.color) params.set('color', row.color);
+      }
+      const res = await api<{ data: any[] }>(`/production-plans?${params}`);
+      setRowPlans((prev) => ({ ...prev, [row.item_id]: res.data || [] }));
+    } catch {
+      setRowPlans((prev) => ({ ...prev, [row.item_id]: [] }));
+    } finally {
+      setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: false }));
+    }
+  }, []);
+
   const createNewPlan = (row: any) => {
     navigate(`/production-plan/new?sales_order_id=${row.sales_order_id}&article=${encodeURIComponent(row.article || '')}&color=${encodeURIComponent(row.color || '')}&customer_id=${row.customer_id || ''}&order_qty=${row.order_qty || 0}`);
   };
 
-  const goToPlan = (row: any) => {
-    if (row.plan_id) {
-      navigate(`/production-plan/${row.plan_id}`);
-    } else {
-      createNewPlan(row);
-    }
+  const toggleRow = (row: any) => {
+    const willExpand = expandedRow !== row.item_id;
+    setExpandedRow(willExpand ? row.item_id : null);
+    if (willExpand) fetchRowPlans(row);
   };
 
   // Fetch filter options and customers
@@ -112,6 +153,16 @@ export default function ProductionPlan() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // When data finishes loading and there's a restored expandedRow, fetch its plans
+  useEffect(() => {
+    if (!loading && expandedRow !== null && data.length > 0) {
+      const row = data.find((r) => r.item_id === expandedRow);
+      if (row && !rowPlans[expandedRow]) {
+        fetchRowPlans(row);
+      }
+    }
+  }, [loading, expandedRow, data, rowPlans, fetchRowPlans]);
+
   const handleSearch = () => {
     const params: Record<string, string> = {};
     if (customerId) params.customer_id = customerId;
@@ -144,6 +195,8 @@ export default function ProductionPlan() {
     try {
       await api(`/production-plans/${deleteConfirm.id}`, { method: 'DELETE' });
       toast.success('Production plan deleted!');
+      // Refresh the expanded row's plans and the main list
+      if (deleteConfirm.plan_row) fetchRowPlans(deleteConfirm.plan_row);
       fetchData();
     } catch (err) {
       toast.error('Failed to delete: ' + (err as Error).message);
@@ -269,19 +322,21 @@ export default function ProductionPlan() {
             <colgroup>
               <col className="w-8" />
               <col className="w-8" />
+              <col className="w-[11%]" />
+              <col className="w-[13%]" />
               <col className="w-[12%]" />
-              <col className="w-[16%]" />
-              <col className="w-[14%]" />
-              <col className="w-[16%]" />
-              <col className="w-[10%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[10%]" />
+              <col className="w-[13%]" />
+              <col className="w-[8%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
             </colgroup>
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
-                <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Action</th>
+                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase" />
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sale Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer</th>
@@ -290,15 +345,17 @@ export default function ProductionPlan() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Color</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Completed Qty<br />(Sq.Ft.)</th>
+                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">WIP Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Balance Qty<br />(Sq.Ft.)</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Status</th>
+                <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 11 }).map((_, j) => (
+                    {Array.from({ length: 13 }).map((_, j) => (
                       <td key={j} className="py-3 px-3">
                         <div className="h-4 bg-gray-100 rounded animate-pulse" />
                       </td>
@@ -307,37 +364,24 @@ export default function ProductionPlan() {
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center">
+                  <td colSpan={13} className="py-16 text-center">
                     <Factory size={32} className="mx-auto text-gray-300 mb-3" />
                     <p className="text-sm font-medium text-gray-500">No production plans found</p>
                     <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or create a new plan</p>
                   </td>
                 </tr>
               ) : (
-                data.map((row, i) => (
+                data.map((row, i) => {
+                  const isExpanded = expandedRow === row.item_id;
+                  const wipQty = Math.max(0, (Number(row.planned_qty) || 0) - (Number(row.completed_qty) || 0));
+                  return (
+                  <Fragment key={row.item_id}>
                   <tr
-                    key={row.item_id}
-                    className="hover:bg-blue-50/40 transition-all cursor-pointer"
-                    onClick={() => goToPlan(row)}
+                    className={`hover:bg-blue-50/40 transition-all cursor-pointer ${isExpanded ? 'bg-blue-50/60' : ''}`}
+                    onClick={() => toggleRow(row)}
                   >
-                    <td className="py-2.5 px-3 text-center">
-                      {row.plan_id ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${row.plan_id}`); }}
-                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-all"
-                        >
-                          Open
-                        </button>
-                      ) : canWrite ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
-                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-all"
-                        >
-                          <Plus size={12} /> Plan
-                        </button>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
+                    <td className="py-2.5 px-3 text-gray-400">
+                      <ChevronDown size={14} className={`transition-transform ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
                     </td>
                     <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
                     <td className="py-2.5 px-3 text-xs font-medium text-blue-700">{row.sales_order_no || '—'}</td>
@@ -347,14 +391,120 @@ export default function ProductionPlan() {
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.color || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.order_qty)}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.completed_qty)}</td>
+                    <td className="py-2.5 px-3 text-xs text-orange-700 font-semibold text-right">{formatQty(wipQty)}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.balance_qty)}</td>
                     <td className="py-2.5 px-3 text-center">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>
                         {row.status}
                       </span>
                     </td>
+                    <td className="py-2.5 px-3 text-center">
+                      {canWrite && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
+                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-all whitespace-nowrap"
+                        >
+                          <Plus size={12} /> New Plan
+                        </button>
+                      )}
+                    </td>
                   </tr>
-                ))
+                  {isExpanded && (
+                    <tr className="bg-blue-50/30">
+                      <td colSpan={13} className="px-6 py-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Sale Order</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.sales_order_no || '—'}</p></div>
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Article Code</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.article_code || '—'}</p></div>
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">UOM</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.uom || '—'}</p></div>
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Total Planned Qty</p><p className="text-xs font-medium text-gray-800 mt-0.5">{formatQty(row.planned_qty)}</p></div>
+                        </div>
+
+                        {/* Plans created for this row (a sale order can have multiple plans) */}
+                        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-slate-50">
+                            <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                              Plans ({(rowPlans[row.item_id] || []).length})
+                            </span>
+                            {canWrite && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all"
+                              >
+                                <Plus size={12} /> Create New Plan
+                              </button>
+                            )}
+                          </div>
+                          {rowPlansLoading[row.item_id] ? (
+                            <div className="p-4 space-y-2">
+                              {[1, 2].map((k) => <div key={k} className="h-8 bg-gray-100 rounded animate-pulse" />)}
+                            </div>
+                          ) : (rowPlans[row.item_id] || []).length === 0 ? (
+                            <div className="px-4 py-6 text-center text-xs text-gray-400">
+                              No plans created yet for this item.
+                            </div>
+                          ) : (
+                            <table className="w-full text-sm table-fixed">
+                              <colgroup>
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[20%]" />
+                              </colgroup>
+                              <thead>
+                                <tr className="border-b border-gray-100">
+                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan No.</th>
+                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan Date</th>
+                                  <th className="text-right py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
+                                  <th className="text-right py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">WIP Qty</th>
+                                  <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Status</th>
+                                  <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {(rowPlans[row.item_id] || []).map((plan: any) => (
+                                  <tr key={plan.id} className="hover:bg-blue-50/40">
+                                    <td className="py-2 px-4 text-xs font-medium text-blue-700">{plan.plan_no || '—'}</td>
+                                    <td className="py-2 px-4 text-xs text-gray-700">{plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN') : '—'}</td>
+                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-right">{formatQty(plan.planned_qty)}</td>
+                                    <td className="py-2 px-4 text-xs text-orange-700 font-semibold text-right">{formatQty(plan.wip_qty)}</td>
+                                    <td className="py-2 px-4 text-center">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_COLORS[plan.status] || 'bg-gray-100 text-gray-700'}`}>
+                                        {plan.status}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-4 text-center">
+                                      <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${plan.id}`); }}
+                                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-all"
+                                        >
+                                          Open
+                                        </button>
+                                        {canWrite && (plan.status === 'Pending' || plan.status === 'Planned') && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, id: plan.id, itemId: row.item_id, plan_row: row }); }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-rose-600 bg-white border border-rose-200 rounded-md hover:bg-rose-50 transition-all"
+                                            title="Delete plan (available before production starts)"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -371,8 +521,10 @@ export default function ProductionPlan() {
               <p className="text-sm text-gray-500">No production plans found</p>
             </div>
           ) : (
-            data.map((row) => (
-              <div key={row.item_id} onClick={() => goToPlan(row)} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
+            data.map((row) => {
+              const mWip = Math.max(0, (Number(row.planned_qty) || 0) - (Number(row.completed_qty) || 0));
+              return (
+              <div key={row.item_id} className="p-4 active:bg-blue-50 transition-colors">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
@@ -384,7 +536,7 @@ export default function ProductionPlan() {
                   <span className="truncate">{row.article || '—'}</span>
                   {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
                 </div>
-                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                <div className="grid grid-cols-4 gap-2 pt-2.5 border-t border-gray-100">
                   <div className="text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
                     <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.order_qty)}</p>
@@ -394,12 +546,25 @@ export default function ProductionPlan() {
                     <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.completed_qty)}</p>
                   </div>
                   <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">WIP</p>
+                    <p className="text-xs font-bold text-orange-700 tabular-nums">{formatQty(mWip)}</p>
+                  </div>
+                  <div className="text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
                     <p className="text-xs font-bold text-amber-700 tabular-nums">{formatQty(row.balance_qty)}</p>
                   </div>
                 </div>
+                <div className="flex items-center gap-2 mt-3">
+                  {row.plan_id && (
+                    <button onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${row.plan_id}`); }} className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold text-blue-700 bg-white border border-blue-200 rounded-md">Open</button>
+                  )}
+                  {canWrite && (
+                    <button onClick={(e) => { e.stopPropagation(); createNewPlan(row); }} className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-md"><Plus size={12} /> New Plan</button>
+                  )}
+                </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
 
