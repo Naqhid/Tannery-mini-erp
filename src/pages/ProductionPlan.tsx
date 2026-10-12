@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   Factory, Search, Filter, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, RefreshCw,
-  FileSpreadsheet, Plus, ChevronDown, Trash2,
+  FileSpreadsheet, Plus, Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -62,60 +62,6 @@ export default function ProductionPlan() {
   // Delete
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; itemId?: number; plan_row?: any }>({ open: false, id: null });
 
-  // Accordion
-  const [expandedRow, setExpandedRow] = useState<number | null>(() => {
-    const saved = sessionStorage.getItem('productionPlan_expandedRow');
-    return saved ? Number(saved) : null;
-  });
-  const [rowPlans, setRowPlans] = useState<Record<number, any[]>>({});
-  const [rowPlansLoading, setRowPlansLoading] = useState<Record<number, boolean>>({});
-
-  // Persist expandedRow to sessionStorage
-  useEffect(() => {
-    if (expandedRow !== null) {
-      sessionStorage.setItem('productionPlan_expandedRow', String(expandedRow));
-    } else {
-      sessionStorage.removeItem('productionPlan_expandedRow');
-    }
-  }, [expandedRow]);
-
-  // Fetch all plans created for a given sales-order-item row (there can be multiple)
-  // Declared before the effects that depend on it to avoid a temporal-dead-zone
-  // "Cannot access before initialization" crash in the minified build.
-  const fetchRowPlans = useCallback(async (row: any) => {
-    setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: true }));
-    try {
-      const params = new URLSearchParams();
-      params.set('limit', '100');
-      // Prefer the exact plan_id the sales-order-item already resolved — this
-      // avoids fragile article-name matching (e.g. "Sheep  Softy Black" on the
-      // order item vs "Sheep Softy" on the plan). Fall back to article/color.
-      if (row.plan_id) {
-        params.set('plan_id', String(row.plan_id));
-      } else {
-        if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
-        if (row.article) params.set('article', row.article);
-        if (row.color) params.set('color', row.color);
-      }
-      const res = await api<{ data: any[] }>(`/production-plans?${params}`);
-      setRowPlans((prev) => ({ ...prev, [row.item_id]: res.data || [] }));
-    } catch {
-      setRowPlans((prev) => ({ ...prev, [row.item_id]: [] }));
-    } finally {
-      setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: false }));
-    }
-  }, []);
-
-  // When data finishes loading and there's a restored expandedRow, fetch its plans
-  useEffect(() => {
-    if (!loading && expandedRow !== null && data.length > 0) {
-      const row = data.find((r) => r.item_id === expandedRow);
-      if (row && !rowPlans[expandedRow]) {
-        fetchRowPlans(row);
-      }
-    }
-  }, [loading, expandedRow, data, rowPlans, fetchRowPlans]);
-
   const createNewPlan = (row: any) => {
     navigate(`/production-plan/new?sales_order_id=${row.sales_order_id}&article=${encodeURIComponent(row.article || '')}&color=${encodeURIComponent(row.color || '')}&customer_id=${row.customer_id || ''}&order_qty=${row.order_qty || 0}`);
   };
@@ -126,12 +72,6 @@ export default function ProductionPlan() {
     } else {
       createNewPlan(row);
     }
-  };
-
-  const toggleRow = (row: any) => {
-    const willExpand = expandedRow !== row.item_id;
-    setExpandedRow(willExpand ? row.item_id : null);
-    if (willExpand) fetchRowPlans(row);
   };
 
   // Fetch filter options and customers
@@ -204,8 +144,6 @@ export default function ProductionPlan() {
     try {
       await api(`/production-plans/${deleteConfirm.id}`, { method: 'DELETE' });
       toast.success('Production plan deleted!');
-      // Refresh the accordion plans for the affected row, and the main list
-      if (deleteConfirm.plan_row) fetchRowPlans(deleteConfirm.plan_row);
       fetchData();
     } catch (err) {
       toast.error('Failed to delete: ' + (err as Error).message);
@@ -343,7 +281,7 @@ export default function ProductionPlan() {
             </colgroup>
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase" />
+                <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Action</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sale Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer</th>
@@ -376,16 +314,30 @@ export default function ProductionPlan() {
                   </td>
                 </tr>
               ) : (
-                data.map((row, i) => {
-                  const isExpanded = expandedRow === row.item_id;
-                  return (
-                  <Fragment key={row.item_id}>
+                data.map((row, i) => (
                   <tr
-                    className={`hover:bg-blue-50/40 transition-all cursor-pointer ${isExpanded ? 'bg-blue-50/60' : ''}`}
-                    onClick={() => toggleRow(row)}
+                    key={row.item_id}
+                    className="hover:bg-blue-50/40 transition-all cursor-pointer"
+                    onClick={() => goToPlan(row)}
                   >
-                    <td className="py-2.5 px-3 text-gray-400">
-                      <ChevronDown size={14} className={`transition-transform ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                    <td className="py-2.5 px-3 text-center">
+                      {row.plan_id ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${row.plan_id}`); }}
+                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-all"
+                        >
+                          Open
+                        </button>
+                      ) : canWrite ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
+                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-all"
+                        >
+                          <Plus size={12} /> Plan
+                        </button>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
                     </td>
                     <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
                     <td className="py-2.5 px-3 text-xs font-medium text-blue-700">{row.sales_order_no || '—'}</td>
@@ -402,97 +354,7 @@ export default function ProductionPlan() {
                       </span>
                     </td>
                   </tr>
-                  {isExpanded && (
-                    <tr className="bg-blue-50/30">
-                      <td colSpan={11} className="px-6 py-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Sale Order</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.sales_order_no || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Article Code</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.article_code || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">UOM</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.uom || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Total Planned Qty</p><p className="text-xs font-medium text-gray-800 mt-0.5">{formatQty(row.planned_qty)}</p></div>
-                        </div>
-
-                        {/* Plans created for this row */}
-                        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-slate-50">
-                            <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                              Plans ({(rowPlans[row.item_id] || []).length})
-                            </span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all"
-                            >
-                              <Plus size={12} /> Create New Plan
-                            </button>
-                          </div>
-                          {rowPlansLoading[row.item_id] ? (
-                            <div className="p-4 space-y-2">
-                              {[1, 2].map((k) => <div key={k} className="h-8 bg-gray-100 rounded animate-pulse" />)}
-                            </div>
-                          ) : (rowPlans[row.item_id] || []).length === 0 ? (
-                            <div className="px-4 py-6 text-center text-xs text-gray-400">
-                              No plans created yet for this item.
-                            </div>
-                          ) : (
-                            <table className="w-full text-sm table-fixed">
-                              <colgroup>
-                                <col className="w-[20%]" />
-                                <col className="w-[20%]" />
-                                <col className="w-[20%]" />
-                                <col className="w-[20%]" />
-                                <col className="w-[20%]" />
-                              </colgroup>
-                              <thead>
-                                <tr className="border-b border-gray-100">
-                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan No.</th>
-                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan Date</th>
-                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
-                                  <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Status</th>
-                                  <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {(rowPlans[row.item_id] || []).map((plan: any) => (
-                                  <tr key={plan.id} className="hover:bg-blue-50/40">
-                                    <td className="py-2 px-4 text-xs font-medium text-blue-700">{plan.plan_no || '—'}</td>
-                                    <td className="py-2 px-4 text-xs text-gray-700">{plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN') : '—'}</td>
-                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-left">{formatQty(plan.planned_qty)}</td>
-                                    <td className="py-2 px-4 text-center">
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_COLORS[plan.status] || 'bg-gray-100 text-gray-700'}`}>
-                                        {plan.status}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 px-4 text-center">
-                                      <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${plan.id}`); }}
-                                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-all"
-                                        >
-                                          Open
-                                        </button>
-                                        {canWrite && (plan.status === 'Pending' || plan.status === 'Planned') && (
-                                          <button
-                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, id: plan.id, itemId: row.item_id, plan_row: row }); }}
-                                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-rose-600 bg-white border border-rose-200 rounded-md hover:bg-rose-50 transition-all"
-                                            title="Delete plan (available before production starts)"
-                                          >
-                                            <Trash2 size={12} />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  </Fragment>
-                  );
-                })
+                ))
               )}
             </tbody>
           </table>

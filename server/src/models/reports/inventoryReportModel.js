@@ -472,8 +472,9 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
     amount: 'sl.amount',
     remarks: 'sl.remarks',
   };
-  const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
+  const ord = sortOrder === 'desc' ? 'DESC' : 'ASC';
+  // Default to ascending date order so the oldest/opening date shows first.
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'sl.transaction_date ASC, sl.id ASC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -494,7 +495,20 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
        -- transaction (date-ordered), not a single row's net. balance_qty is
        -- the running balance AFTER this transaction; opening is that balance
        -- minus this transaction's own movement.
-       (sl.balance_qty - (sl.in_qty - sl.out_qty)) AS opening_qty,
+       -- For the FIRST transaction of a material (no earlier ledger entry for
+       -- the same material/warehouse) fall back to the material master's
+       -- opening_stock so the ledger starts from the master opening balance.
+       CASE
+         WHEN NOT EXISTS (
+           SELECT 1 FROM stock_ledger sl0
+           WHERE sl0.material_id = sl.material_id
+             AND (sl.warehouse_id IS NULL OR sl0.warehouse_id = sl.warehouse_id)
+             AND (sl0.transaction_date < sl.transaction_date
+                  OR (sl0.transaction_date = sl.transaction_date AND sl0.id < sl.id))
+         )
+         THEN COALESCE(m.opening_stock, 0)
+         ELSE (sl.balance_qty - (sl.in_qty - sl.out_qty))
+       END AS opening_qty,
        CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END AS receipt_qty,
        CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END AS issue_qty,
        CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END AS transfer_qty,
@@ -522,7 +536,17 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
   // range; Closing = running balance AFTER the latest. Summing running balances
   // would be meaningless, so take the boundary rows (date, then id order).
   const [[firstRow]] = await pool.query(
-    `SELECT (sl.balance_qty - (sl.in_qty - sl.out_qty)) AS opening_qty
+    `SELECT CASE
+         WHEN NOT EXISTS (
+           SELECT 1 FROM stock_ledger sl0
+           WHERE sl0.material_id = sl.material_id
+             AND (sl.warehouse_id IS NULL OR sl0.warehouse_id = sl.warehouse_id)
+             AND (sl0.transaction_date < sl.transaction_date
+                  OR (sl0.transaction_date = sl.transaction_date AND sl0.id < sl.id))
+         )
+         THEN COALESCE(m.opening_stock, 0)
+         ELSE (sl.balance_qty - (sl.in_qty - sl.out_qty))
+       END AS opening_qty
      ${baseFrom}
      ORDER BY sl.transaction_date ASC, sl.id ASC LIMIT 1`, params
   );

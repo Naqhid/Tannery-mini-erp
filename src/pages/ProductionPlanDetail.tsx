@@ -195,14 +195,18 @@ export default function ProductionPlanDetail() {
   const totalRejectionQty = stages.reduce((s, st) => s + (parseFloat(st.rejection_qty) || 0), 0);
   const totalWipQty = stages.reduce((s, st) => s + st.wip_qty, 0);
 
-  // Plan status derived from ACTUAL production progress (the stage statuses),
-  // so the header/status field stay consistent with the Stage Wise table.
-  // Not based on planned qty vs sales order qty.
+  // Plan Balance = Planned Qty - Output Qty (measurement/last stage output).
+  const planBalanceQty = Math.max(0, totalPlanQty - completedQty);
+
+  // Plan status derived from output qty vs planned qty:
+  //   - Completed : output qty equals planned qty (and planned > 0)
+  //   - In-Process: output qty > 0 (but less than planned)
+  //   - Pending   : output qty is 0
   const derivedStatus = (() => {
-    if (stages.length === 0 || totalPlanQty <= 0) return 'Pending';
-    if (stages.every(s => s.status === 'Completed')) return 'Completed';
-    if (stages.some(s => s.status === 'Completed' || s.status === 'In-Process' || s.status === 'In Progress')) return 'In-Process';
-    return 'Pending';
+    if (totalPlanQty <= 0) return 'Pending';
+    if (completedQty <= 0) return 'Pending';
+    if (completedQty >= totalPlanQty) return 'Completed';
+    return 'In-Process';
   })();
 
   const handleOrderChange = (value: string) => {
@@ -605,12 +609,19 @@ export default function ProductionPlanDetail() {
       {/* Summary */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <h3 className="text-sm font-bold text-gray-700 mb-4">Summary</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-12 bg-blue-500 rounded-full" />
             <div>
               <p className="text-[11px] text-gray-500 uppercase font-medium">Sale Order Qty</p>
               <p className="text-xl font-black text-gray-900">{fmtCurrency(salesOrderQty)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-12 bg-indigo-500 rounded-full" />
+            <div>
+              <p className="text-[11px] text-gray-500 uppercase font-medium">Planned Qty</p>
+              <p className="text-xl font-black text-indigo-700">{fmtCurrency(totalPlanQty)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -621,10 +632,17 @@ export default function ProductionPlanDetail() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className="w-1.5 h-12 bg-orange-500 rounded-full" />
+            <div>
+              <p className="text-[11px] text-gray-500 uppercase font-medium">WIP Qty</p>
+              <p className="text-xl font-black text-orange-700">{fmtCurrency(totalWipQty)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
             <div className="w-1.5 h-12 bg-amber-500 rounded-full" />
             <div>
-              <p className="text-[11px] text-gray-500 uppercase font-medium">Balance Qty</p>
-              <p className="text-xl font-black text-amber-700">{fmtCurrency(balanceQty)}</p>
+              <p className="text-[11px] text-gray-500 uppercase font-medium">Plan Balance</p>
+              <p className="text-xl font-black text-amber-700">{fmtCurrency(planBalanceQty)}</p>
             </div>
           </div>
         </div>
@@ -705,10 +723,12 @@ export default function ProductionPlanDetail() {
               </table>
 
               {/* Summary */}
-              <div className="grid grid-cols-3 gap-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="grid grid-cols-5 gap-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Sale Order Qty</p><p className="text-lg font-black text-gray-900">{fmtCurrency(salesOrderQty)}</p></div>
+                <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Planned Qty</p><p className="text-lg font-black text-indigo-700">{fmtCurrency(totalPlanQty)}</p></div>
                 <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Completed Qty</p><p className="text-lg font-black text-emerald-700">{fmtCurrency(completedQty)}</p></div>
-                <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Balance Qty</p><p className="text-lg font-black text-amber-700">{fmtCurrency(balanceQty)}</p></div>
+                <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">WIP Qty</p><p className="text-lg font-black text-orange-700">{fmtCurrency(totalWipQty)}</p></div>
+                <div className="text-center"><p className="text-xs text-gray-500 uppercase font-medium">Plan Balance</p><p className="text-lg font-black text-amber-700">{fmtCurrency(planBalanceQty)}</p></div>
               </div>
 
               {/* Signature area */}

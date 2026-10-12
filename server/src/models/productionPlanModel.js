@@ -47,25 +47,6 @@ export async function getAll({ search, status, plan_id, customer_id, product_id,
         )
     ), 0)`;
 
-  // Per-stage Daily Production output for this plan (one row per stage),
-  // used to derive status across ALL stages of the plan.
-  const stageOutputCte = `
-    SELECT s.plan_id, s.stage_name, s.planned_qty AS stage_planned,
-      COALESCE((
-        SELECT SUM(t.output_qty)
-        FROM production_status_orders pso
-        JOIN production_status_transactions t
-          ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
-        WHERE pso.production_plan_id = s.plan_id AND pso.deleted_at IS NULL
-          AND pso.process_stage COLLATE utf8mb4_unicode_ci = s.stage_name COLLATE utf8mb4_unicode_ci
-      ), 0) AS stage_output
-    FROM production_plan_stages s`;
-
-  // Count of stages, stages with output > 0, and stages meeting planned qty.
-  const stageCountSql = `(SELECT COUNT(*) FROM production_plan_stages s0 WHERE s0.plan_id = pp.id)`;
-  const stagesWithOutputSql = `(SELECT COUNT(*) FROM (${stageOutputCte}) so1 WHERE so1.plan_id = pp.id AND so1.stage_output > 0)`;
-  const stagesCompletedSql = `(SELECT COUNT(*) FROM (${stageOutputCte}) so2 WHERE so2.plan_id = pp.id AND so2.stage_planned > 0 AND so2.stage_output >= so2.stage_planned)`;
-
   const [rows] = await pool.query(
     `SELECT pp.id, pp.plan_no, pp.plan_date, pp.planned_start_date, pp.planned_end_date,
        pp.order_qty, pp.planned_qty, pp.batch_qty, pp.no_of_batches,
@@ -77,9 +58,9 @@ export async function getAll({ search, status, plan_id, customer_id, product_id,
        GREATEST(0, COALESCE(pp.planned_qty, 0) - ${measurementOutputSql}) AS wip_qty,
        GREATEST(0, COALESCE(pp.planned_qty, 0) - ${measurementOutputSql}) AS balance_qty,
        CASE
-         WHEN ${stageCountSql} > 0 AND ${stagesCompletedSql} = ${stageCountSql} THEN 'Completed'
-         WHEN ${stagesWithOutputSql} > 0 THEN 'In-Process'
-         ELSE 'Pending'
+         WHEN ${measurementOutputSql} <= 0 THEN 'Pending'
+         WHEN COALESCE(pp.planned_qty, 0) > 0 AND ${measurementOutputSql} >= COALESCE(pp.planned_qty, 0) THEN 'Completed'
+         ELSE 'In-Process'
        END AS status,
        c.id AS customer_id, c.name AS customer_name,
        p.id AS product_id, p.name AS product_name, p.code AS product_code,
