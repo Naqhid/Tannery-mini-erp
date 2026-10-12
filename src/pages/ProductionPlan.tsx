@@ -322,16 +322,15 @@ export default function ProductionPlan() {
             <colgroup>
               <col className="w-8" />
               <col className="w-8" />
-              <col className="w-[11%]" />
-              <col className="w-[13%]" />
               <col className="w-[12%]" />
-              <col className="w-[13%]" />
+              <col className="w-[14%]" />
+              <col className="w-[14%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
               <col className="w-[8%]" />
-              <col className="w-[9%]" />
-              <col className="w-[9%]" />
-              <col className="w-[9%]" />
-              <col className="w-[9%]" />
-              <col className="w-[9%]" />
               <col className="w-[9%]" />
             </colgroup>
             <thead>
@@ -340,7 +339,6 @@ export default function ProductionPlan() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sale Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Article</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Color</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty<br />(Sq.Ft.)</th>
@@ -355,7 +353,7 @@ export default function ProductionPlan() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 13 }).map((_, j) => (
+                    {Array.from({ length: 12 }).map((_, j) => (
                       <td key={j} className="py-3 px-3">
                         <div className="h-4 bg-gray-100 rounded animate-pulse" />
                       </td>
@@ -364,7 +362,7 @@ export default function ProductionPlan() {
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <Factory size={32} className="mx-auto text-gray-300 mb-3" />
                     <p className="text-sm font-medium text-gray-500">No production plans found</p>
                     <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or create a new plan</p>
@@ -386,7 +384,6 @@ export default function ProductionPlan() {
                     <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
                     <td className="py-2.5 px-3 text-xs font-medium text-blue-700">{row.sales_order_no || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-800">{row.customer_name || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.customer_order_no || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.article || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.color || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.order_qty)}</td>
@@ -411,9 +408,10 @@ export default function ProductionPlan() {
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-50/30">
-                      <td colSpan={13} className="px-6 py-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <td colSpan={12} className="px-6 py-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                           <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Sale Order</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.sales_order_no || '—'}</p></div>
+                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Customer Order No.</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.customer_order_no || '—'}</p></div>
                           <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Article Code</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.article_code || '—'}</p></div>
                           <div><p className="text-[10px] text-gray-400 uppercase font-semibold">UOM</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.uom || '—'}</p></div>
                           <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Total Planned Qty</p><p className="text-xs font-medium text-gray-800 mt-0.5">{formatQty(row.planned_qty)}</p></div>
