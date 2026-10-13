@@ -343,7 +343,6 @@ export default function ProductionPlan() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Color</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Completed Qty<br />(Sq.Ft.)</th>
-                <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">WIP Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Balance Qty<br />(Sq.Ft.)</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Status</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Action</th>
@@ -353,7 +352,7 @@ export default function ProductionPlan() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 12 }).map((_, j) => (
+                    {Array.from({ length: 11 }).map((_, j) => (
                       <td key={j} className="py-3 px-3">
                         <div className="h-4 bg-gray-100 rounded animate-pulse" />
                       </td>
@@ -362,7 +361,7 @@ export default function ProductionPlan() {
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-16 text-center">
+                  <td colSpan={11} className="py-16 text-center">
                     <Factory size={32} className="mx-auto text-gray-300 mb-3" />
                     <p className="text-sm font-medium text-gray-500">No production plans found</p>
                     <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or create a new plan</p>
@@ -371,7 +370,6 @@ export default function ProductionPlan() {
               ) : (
                 data.map((row, i) => {
                   const isExpanded = expandedRow === row.item_id;
-                  const wipQty = Math.max(0, (Number(row.planned_qty) || 0) - (Number(row.completed_qty) || 0));
                   return (
                   <Fragment key={row.item_id}>
                   <tr
@@ -388,7 +386,6 @@ export default function ProductionPlan() {
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.color || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.order_qty)}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.completed_qty)}</td>
-                    <td className="py-2.5 px-3 text-xs text-orange-700 font-semibold text-right">{formatQty(wipQty)}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.balance_qty)}</td>
                     <td className="py-2.5 px-3 text-center">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-700'}`}>
@@ -408,21 +405,19 @@ export default function ProductionPlan() {
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-50/30">
-                      <td colSpan={12} className="px-6 py-4">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Sale Order</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.sales_order_no || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Customer Order No.</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.customer_order_no || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Article Code</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.article_code || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">UOM</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.uom || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Total Planned Qty</p><p className="text-xs font-medium text-gray-800 mt-0.5">{formatQty(row.planned_qty)}</p></div>
-                        </div>
-
+                      <td colSpan={11} className="px-6 py-4">
                         {/* Plans created for this row (a sale order can have multiple plans) */}
                         <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
                           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-slate-50">
-                            <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                              Plans ({(rowPlans[row.item_id] || []).length})
-                            </span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                                Plans ({(rowPlans[row.item_id] || []).length})
+                              </span>
+                              <span className="text-[11px] text-gray-500">
+                                <span className="font-semibold text-gray-400 uppercase">Customer Order No.</span>
+                                <span className="ml-1.5 font-medium text-gray-800">{row.customer_order_no || '—'}</span>
+                              </span>
+                            </div>
                             {canWrite && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
