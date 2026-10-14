@@ -196,12 +196,13 @@ export async function getIssueItemInfo({ warehouseId, itemId, date }) {
   const conn = await pool.getConnection();
   try {
     // Availability is STRICTLY scoped to the selected warehouse. We use this
-    // warehouse's latest transaction balance only — never another warehouse's.
-    // Opening stock is already represented as a warehouse-scoped 'OPENING'
-    // transaction (written by the material master into the default warehouse),
-    // so it is naturally picked up here for the correct warehouse. This
-    // guarantees Warehouse A can never consume Warehouse B's stock.
-    const latest = await getLatestForItem(conn, { warehouseId, itemId, date });
+    // warehouse's CURRENT total on hand (the latest transaction balance,
+    // regardless of the requested date) so newly added stock is always
+    // available for issuing even if the issue/entry date is earlier than the
+    // adjustment date. Opening stock is already represented as a
+    // warehouse-scoped 'OPENING' transaction, so it is naturally included.
+    // This guarantees Warehouse A can never consume Warehouse B's stock.
+    const latest = await getLatestBalance(conn, { warehouseId, itemId });
 
     if (latest) {
       return {
