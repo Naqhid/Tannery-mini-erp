@@ -137,9 +137,9 @@ export default function PhysicalStockEntryDetail() {
         if (it._key !== rowKey) return it;
         const systemQty = info.data.available_qty || 0;
         const avgRate = info.data.avg_rate || 0;
-        const physQty = parseFloat(it.physical_qty) || 0;
-        const variance = physQty - systemQty;
-        return { ...it, system_qty: systemQty, avg_rate: avgRate, variance_qty: variance, variance_value: parseFloat((variance * avgRate).toFixed(2)) };
+        const addQty = parseFloat(it.physical_qty) || 0;
+        // Additive: entered qty is added to current stock.
+        return { ...it, system_qty: systemQty, avg_rate: avgRate, variance_qty: addQty, variance_value: parseFloat((addQty * avgRate).toFixed(2)) };
       }));
     } catch {}
   };
@@ -149,9 +149,10 @@ export default function PhysicalStockEntryDetail() {
       if (it._key !== key) return it;
       const updated = { ...it, [field]: value };
       if (field === 'physical_qty') {
-        const phys = parseFloat(value) || 0;
-        updated.variance_qty = phys - updated.system_qty;
-        updated.variance_value = parseFloat((updated.variance_qty * updated.avg_rate).toFixed(2));
+        // Additive: entered qty is the amount to add (variance == add qty).
+        const addQty = parseFloat(value) || 0;
+        updated.variance_qty = addQty;
+        updated.variance_value = parseFloat((addQty * updated.avg_rate).toFixed(2));
       }
       return updated;
     }));
@@ -317,11 +318,11 @@ export default function PhysicalStockEntryDetail() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 min-w-[180px]">Item Name <span className="text-red-500">*</span></th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">UOM</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Location/Rack</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">System Qty</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Physical Qty <span className="text-red-500">*</span></th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Qty</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Current Stock</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Add Qty <span className="text-red-500">*</span></th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">New Stock</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Avg Rate</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Value</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Add Value</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600">Action</th>
               </tr>
             </thead>
@@ -355,8 +356,8 @@ export default function PhysicalStockEntryDetail() {
                   <td className="px-4 py-3">
                     <input type="number" step="0.01" value={item.physical_qty} onChange={e => updateItem(item._key, 'physical_qty', e.target.value)} className="w-full px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
                   </td>
-                  <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_qty < 0 ? 'text-red-600' : item.variance_qty > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
-                    {item.variance_qty > 0 ? '+' : ''}{fmt(item.variance_qty)}
+                  <td className="px-4 py-3 text-right text-xs font-medium text-blue-700">
+                    {fmt(item.system_qty + item.variance_qty)}
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-gray-700">{fmt(item.avg_rate)}</td>
                   <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_value < 0 ? 'text-red-600' : item.variance_value > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
