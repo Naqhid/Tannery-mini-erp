@@ -205,14 +205,23 @@ export default function PhysicalStockEntryDetail() {
           remarks: i.remarks || null,
         })),
       };
+      let savedId = id;
       if (isNew) {
-        await api('/physical-stock-entries', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await api<{ data: { id: number } }>('/physical-stock-entries', { method: 'POST', body: JSON.stringify(payload) });
+        savedId = res.data?.id ? String(res.data.id) : undefined;
         toast.success(posting ? 'Physical stock entry posted to stock ledger!' : 'Physical stock entry created!');
       } else {
         await api(`/physical-stock-entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
         toast.success(posting ? 'Physical stock entry posted to stock ledger!' : 'Physical stock entry updated!');
       }
-      navigate('/physical-stock-entry');
+      if (posting) {
+        // Only leave the screen after posting.
+        navigate('/physical-stock-entry');
+      } else if (isNew && savedId) {
+        // On Save (draft) of a new entry, stay on the screen but switch to the
+        // created record so further edits update instead of creating duplicates.
+        navigate(`/physical-stock-entry/${savedId}`, { replace: true });
+      }
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
     finally { if (posting) setPosting(false); else setSaving(false); }
   };
