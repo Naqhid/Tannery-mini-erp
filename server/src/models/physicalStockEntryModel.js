@@ -117,7 +117,7 @@ export async function getById(id) {
     `SELECT psei.*,
        m.code AS material_code, m.name AS material_name
      FROM physical_stock_entry_items psei
-     LEFT JOIN materials m ON psei.item_code = m.code
+     LEFT JOIN materials m ON psei.item_code COLLATE utf8mb4_unicode_ci = m.code COLLATE utf8mb4_unicode_ci
      WHERE psei.entry_id = ?
      ORDER BY psei.seq ASC`,
     [id]
@@ -473,7 +473,7 @@ export async function exportData(entryId) {
     `SELECT psei.*,
        m.name AS material_name
      FROM physical_stock_entry_items psei
-     LEFT JOIN materials m ON psei.item_code = m.code
+     LEFT JOIN materials m ON psei.item_code COLLATE utf8mb4_unicode_ci = m.code COLLATE utf8mb4_unicode_ci
      WHERE psei.entry_id = ?
      ORDER BY psei.seq ASC`,
     [entryId]
