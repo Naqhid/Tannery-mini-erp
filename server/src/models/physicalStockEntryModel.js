@@ -180,7 +180,7 @@ export async function create(data, items = [], createdBy = null) {
         batch_no, from_item_code, to_item_code, item_group, item_id, uom,
         reference_no, total_items, matched_items, variance_items,
         total_variance_qty, total_variance_value, status, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         entry_no,
         data.entry_date || new Date().toISOString().split('T')[0],
