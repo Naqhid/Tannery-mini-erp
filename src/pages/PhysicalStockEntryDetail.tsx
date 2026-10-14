@@ -99,20 +99,24 @@ export default function PhysicalStockEntryDetail() {
         remarks: d.remarks || '',
       });
       if (d.items?.length) {
-        setItems(d.items.map((it: any) => ({
-          _key: genKey(),
-          material_id: String(it.material_id || ''),
-          material_code: it.material_code || it.item_code || '',
-          material_name: it.material_name || it.item_description || '',
-          uom: it.uom || '',
-          location: it.location || it.location_rack || '',
-          system_qty: parseFloat(it.system_qty) || 0,
-          physical_qty: String(it.physical_qty || ''),
-          variance_qty: (parseFloat(it.physical_qty) || 0) - (parseFloat(it.system_qty) || 0),
-          avg_rate: parseFloat(it.avg_rate) || 0,
-          variance_value: parseFloat(it.variance_value) || 0,
-          remarks: it.remarks || '',
-        })));
+        setItems(d.items.map((it: any) => {
+          const addQty = parseFloat(it.physical_qty) || 0;
+          return {
+            _key: genKey(),
+            material_id: String(it.material_id || ''),
+            material_code: it.material_code || it.item_code || '',
+            material_name: it.material_name || it.item_description || '',
+            uom: it.uom || '',
+            location: it.location || it.location_rack || '',
+            system_qty: parseFloat(it.system_qty) || 0,
+            physical_qty: String(it.physical_qty || ''),
+            // Additive: variance == entered add qty.
+            variance_qty: addQty,
+            avg_rate: parseFloat(it.avg_rate) || 0,
+            variance_value: parseFloat(it.variance_value) || 0,
+            remarks: it.remarks || '',
+          };
+        }));
       }
     } catch { toast.error('Failed to load entry'); }
     finally { setLoading(false); }

@@ -115,7 +115,7 @@ export async function getById(id) {
 
   const [items] = await pool.query(
     `SELECT psei.*,
-       m.code AS material_code, m.name AS material_name
+       m.id AS material_id, m.code AS material_code, m.name AS material_name
      FROM physical_stock_entry_items psei
      LEFT JOIN materials m ON psei.item_code COLLATE utf8mb4_unicode_ci = m.code COLLATE utf8mb4_unicode_ci
      WHERE psei.entry_id = ?
