@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import { addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
+import { replaceReferenceTransactions, recalculateMaterialTransactions } from './materialTransactionModel.js';
 
 const ALLOWED_SORT = ['id', 'entry_no', 'entry_date', 'stock_date', 'status', 'total_items', 'created_at'];
 
@@ -17,8 +18,14 @@ async function postAdjustmentToLedger(conn, entryId, entry, items, createdBy) {
   await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['physical_stock', entryId]);
 
   const warehouseId = entry.warehouse_id || null;
+  const txnDate = entry.stock_date || entry.entry_date || new Date().toISOString().split('T')[0];
   const affected = new Map();
   for (const p of prev) affected.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
+
+  // Rows for the material_transactions system (System B — what the material
+  // issue "available stock" is calculated from). Positive add → receipt_qty,
+  // negative → issue_qty.
+  const mtRows = [];
 
   for (const item of items) {
     const materialId = item.material_id || null;
@@ -32,9 +39,10 @@ async function postAdjustmentToLedger(conn, entryId, entry, items, createdBy) {
     const unitCost = Number(parseFloat(item.avg_rate) || 0);
     const inQty = addQty > 0 ? addQty : 0;
     const outQty = addQty < 0 ? Math.abs(addQty) : 0;
+    const amount = Number((Math.abs(addQty) * unitCost).toFixed(2));
 
     await addLedgerEntry(conn, {
-      transaction_date: entry.stock_date || entry.entry_date || new Date().toISOString().split('T')[0],
+      transaction_date: txnDate,
       transaction_type: 'Stock Adjustment',
       reference_type: 'physical_stock',
       reference_id: entryId,
@@ -46,18 +54,51 @@ async function postAdjustmentToLedger(conn, entryId, entry, items, createdBy) {
       in_qty: inQty,
       out_qty: outQty,
       unit_cost: unitCost,
-      amount: Number((Math.abs(addQty) * unitCost).toFixed(2)),
+      amount,
       balance_qty: 0, // recomputed by rebuildAndReprice
       remarks: `Physical stock adjustment (${entry.entry_no || ''})`,
       created_by: createdBy,
     });
+
+    mtRows.push({
+      transaction_date: txnDate,
+      transaction_type: 'Stock Adjustment',
+      reference_no: entry.entry_no || null,
+      warehouse_id: warehouseId,
+      item_id: materialId,
+      batch_no: item.batch_no || null,
+      receipt_qty: inQty,
+      opening_stock: null,
+      opening_value: null,
+      receipt_value: inQty > 0 ? amount : 0,
+      issue_qty: outQty,
+      issue_value: outQty > 0 ? amount : 0,
+    });
+
     affected.set(`${warehouseId}:${materialId}`, { w: warehouseId, m: materialId });
   }
+
+  // System B: mirror the adjustment into material_transactions so the material
+  // issue "available stock" reflects it. replaceReferenceTransactions also
+  // recalculates balances for the affected items.
+  await replaceReferenceTransactions(conn, 'physical_stock', entryId, mtRows);
 
   // Rebuild date-ordered valuation + warehouse_stock for every touched pair.
   for (const p of affected.values()) {
     await rebuildAndReprice(conn, p.w, p.m);
   }
+}
+
+// Remove the material_transactions rows written for a physical stock entry and
+// recalculate balances. Mirrors the stock_ledger reversal on delete/un-post.
+async function removeAdjustmentTransactions(conn, entryId) {
+  const [old] = await conn.query(
+    'SELECT DISTINCT warehouse_id, item_id FROM material_transactions WHERE reference_type=? AND reference_id=?',
+    ['physical_stock', entryId]
+  );
+  if (!old.length) return;
+  await conn.query('DELETE FROM material_transactions WHERE reference_type=? AND reference_id=?', ['physical_stock', entryId]);
+  for (const r of old) await recalculateMaterialTransactions(conn, r.warehouse_id, r.item_id);
 }
 
 export async function getAll({ search, entry_no, warehouse_id, status, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
@@ -357,6 +398,7 @@ export async function update(id, data, items = [], updatedBy = null) {
         await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['physical_stock', id]);
         for (const p of prev) await rebuildAndReprice(conn, p.warehouse_id, p.material_id);
       }
+      await removeAdjustmentTransactions(conn, id);
     }
 
     await conn.commit();
@@ -383,6 +425,7 @@ export async function softDelete(id) {
       await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['physical_stock', id]);
       for (const p of prev) await rebuildAndReprice(conn, p.warehouse_id, p.material_id);
     }
+    await removeAdjustmentTransactions(conn, id);
     const [result] = await conn.query(
       `UPDATE physical_stock_entries SET deleted_at = CURRENT_TIMESTAMP, status = 'Cancelled' WHERE id = ? AND deleted_at IS NULL`,
       [id]
@@ -417,6 +460,7 @@ export async function bulkSoftDelete(ids) {
       );
       for (const p of prev) await rebuildAndReprice(conn, p.warehouse_id, p.material_id);
     }
+    for (const entryId of ids) await removeAdjustmentTransactions(conn, entryId);
 
     const [result] = await conn.query(
       `UPDATE physical_stock_entries SET deleted_at = CURRENT_TIMESTAMP, status = 'Cancelled' WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
