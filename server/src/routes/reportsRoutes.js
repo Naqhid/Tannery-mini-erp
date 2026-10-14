@@ -42,6 +42,7 @@ router.get('/costing/filters', cost.filters);
 router.get('/costing/wip-cost-sheet', validatePagination, cost.wipCostSheet);
 router.get('/costing/full-order-cost-sheet', validatePagination, cost.fullOrderCostSheet);
 router.get('/costing/stage-cost-summary', validatePagination, cost.stageCostSummary);
+router.get('/costing/wip-cost-summary', validatePagination, cost.wipCostSummary);
 router.get('/costing/standard-vs-actual', validatePagination, cost.standardVsActual);
 
 export default router;

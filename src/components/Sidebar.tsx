@@ -76,6 +76,7 @@ export const menuItems: MenuItem[] = [
       { label: 'Standard Cost (BOM)', icon: <FileText size={16} />, path: '/standard-cost-bom' },
       { label: 'Costing Report', icon: <ClipboardList size={16} />, path: '/costing-report' },
       { label: 'Stage Costing Reports', icon: <FileBarChart size={16} />, path: '/reports/stage-costing' },
+      { label: 'WIP Cost Summary Report', icon: <FileBarChart size={16} />, path: '/reports/wip-cost-summary' },
       { label: 'Material Requirement', icon: <ListChecks size={16} />, path: '/material-requirement' },
     ],
   },

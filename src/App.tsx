@@ -102,6 +102,7 @@ import ProductionPlanReports from './pages/reports/ProductionPlanReports';
 import ActualProductionReports from './pages/reports/ActualProductionReports';
 import SalesOrderReports from './pages/reports/SalesOrderReports';
 import StageCostingReports from './pages/reports/StageCostingReports';
+import WipCostSummaryReport from './pages/reports/costing/WipCostSummaryReport';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -263,6 +264,7 @@ function App() {
             <Route path="reports/actual-production" element={<ActualProductionReports />} />
             <Route path="reports/sales-order" element={<SalesOrderReports />} />
             <Route path="reports/stage-costing" element={<StageCostingReports />} />
+            <Route path="reports/wip-cost-summary" element={<WipCostSummaryReport />} />
             <Route path="inventory-reports" element={<Navigate to="/reports/inventory" replace />} />
             <Route path="cost-analysis" element={<Navigate to="/reports/stage-costing" replace />} />
             {/* Settings */}
