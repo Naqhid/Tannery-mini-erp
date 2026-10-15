@@ -357,11 +357,29 @@ export async function wipCostSummary({ stage, search, page = 1, limit = 10 }) {
      HAVING wip_qty > 0`;
 
   // Step 2 — attach the per-UOM / per-piece unit costs for each order+stage.
-  // Unit material issue cost = Σ issue amount / Σ issue qty for the order+stage.
+  // Unit material cost = Σ issue amount (issue value) / Σ planned qty for the
+  // order+stage. Planned qty comes from production_plan_stages for the matching
+  // stage across all plans of the order (mirrors the sample costing sheet:
+  // "issue value / planned qty").
   const matUnitCost = `
     COALESCE((
-      SELECT CASE WHEN SUM(mii.issue_qty) > 0
-                  THEN SUM(mii.amount) / SUM(mii.issue_qty) ELSE 0 END
+      SELECT CASE WHEN (
+                   SELECT SUM(COALESCE(s2.planned_qty,0))
+                   FROM production_plan_stages s2
+                   JOIN production_plans ppp ON s2.plan_id = ppp.id AND ppp.deleted_at IS NULL
+                   LEFT JOIN sales_orders sso ON ppp.sales_order_id = sso.id
+                   WHERE COALESCE(sso.order_no, ppp.plan_no) ${CO} = g.order_no ${CO}
+                     AND s2.stage_name ${CO} = g.process_stage ${CO}
+                 ) > 0
+                  THEN SUM(mii.amount) / (
+                   SELECT SUM(COALESCE(s2.planned_qty,0))
+                   FROM production_plan_stages s2
+                   JOIN production_plans ppp ON s2.plan_id = ppp.id AND ppp.deleted_at IS NULL
+                   LEFT JOIN sales_orders sso ON ppp.sales_order_id = sso.id
+                   WHERE COALESCE(sso.order_no, ppp.plan_no) ${CO} = g.order_no ${CO}
+                     AND s2.stage_name ${CO} = g.process_stage ${CO}
+                 )
+                  ELSE 0 END
       FROM material_issues mi2
       JOIN material_issue_items mii ON mii.issue_id = mi2.id
       JOIN production_plans pp2 ON mi2.production_batch ${CO} = pp2.plan_no ${CO}
