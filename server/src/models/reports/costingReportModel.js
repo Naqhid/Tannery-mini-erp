@@ -335,7 +335,18 @@ export async function wipCostSummary({ stage, search, page = 1, limit = 10 }) {
         MIN(pp.article) AS article,
         MIN(pp.color) AS color,
         s.stage_name AS process_stage,
-        MIN(COALESCE(s.seq, 0)) AS stage_seq,
+        -- Order stages by the company-wide production sequence defined in the
+        -- master process_stages table (Wet End -> Measurement -> Finishing ->
+        -- Packing), falling back to the plan's own stage seq only when the
+        -- stage is not in the master. This keeps every order's stages in the
+        -- same canonical order regardless of how each plan was created.
+        MIN(COALESCE(
+          (SELECT ps.seq FROM process_stages ps
+            WHERE ps.name ${CO} = s.stage_name ${CO}
+            ORDER BY (ps.status='Active') DESC, ps.id ASC LIMIT 1),
+          s.seq,
+          999999
+        )) AS stage_seq,
         SUM(GREATEST(0, COALESCE(s.planned_qty,0) - COALESCE(s.output_qty,0))) AS wip_qty
      FROM production_plan_stages s
      JOIN production_plans pp ON s.plan_id = pp.id AND pp.deleted_at IS NULL
