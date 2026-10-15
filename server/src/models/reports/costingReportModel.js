@@ -403,7 +403,10 @@ export async function wipCostSummary({ stage, search, page = 1, limit = 10 }) {
         g.wip_qty * (${machUnitCost}) AS machine_wip_cost,
         g.wip_qty * ((${matUnitCost}) + (${genUnitCost}) + (${machUnitCost})) AS total_wip_cost
      FROM ( ${grouped} ) g
-     ORDER BY g.order_no ASC, g.stage_seq ASC`,
+     -- Primary sort by the canonical production stage sequence (Wet End ->
+     -- Measurement -> Finishing -> Packing from master process_stages), then
+     -- by sales order within each stage.
+     ORDER BY g.stage_seq ASC, g.order_no ASC`,
     params
   );
 
