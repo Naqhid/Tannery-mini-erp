@@ -53,6 +53,7 @@ import machineCostRoutes from './machineCostRoutes.js';
 import productionStatusRoutes from './productionStatusRoutes.js';
 import costingReportRoutes from './costingReportRoutes.js';
 import reportsRoutes from './reportsRoutes.js';
+import materialRequirementRoutes from './materialRequirementRoutes.js';
 
 const router = Router();
 
@@ -150,6 +151,9 @@ router.use('/costing-report', costingReportRoutes);
 
 // New consolidated Reports module (Inventory / Production / Sales / Costing)
 router.use('/reports', reportsRoutes);
+
+// Material Requirement (Sale Order → BOM requirement calculation)
+router.use('/material-requirement', materialRequirementRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);

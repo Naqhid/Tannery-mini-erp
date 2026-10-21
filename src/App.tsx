@@ -16,6 +16,7 @@ import ProductMasterForm from './pages/ProductMasterForm';
 import CustomerMaster from './pages/CustomerMaster';
 import CustomerMasterForm from './pages/CustomerMasterForm';
 import PlaceholderPage from './pages/PlaceholderPage';
+import MaterialRequirement from './pages/MaterialRequirement';
 // New Master Pages
 import ProductCategory from './pages/ProductCategory';
 import ProductCategoryForm from './pages/ProductCategoryForm';
@@ -213,7 +214,7 @@ function App() {
             <Route path="production-status" element={<ProductionStatus />} />
             <Route path="production-status/new" element={<ProductionStatusForm />} />
             <Route path="production-status/:id" element={<ProductionStatusForm />} />
-            <Route path="material-requirement" element={<PlaceholderPage />} />
+            <Route path="material-requirement" element={<MaterialRequirement />} />
             <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
             <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />
             <Route path="physical-stock-entry/:id" element={<PhysicalStockEntryDetail />} />
