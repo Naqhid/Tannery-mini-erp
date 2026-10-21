@@ -8,6 +8,8 @@ interface LineChartProps {
   color?: string;
   /** Formats the Y-axis / tooltip value. */
   formatValue?: (n: number) => string;
+  /** When true, draws the value above each data point. */
+  showValueLabels?: boolean;
 }
 
 /**
@@ -19,6 +21,7 @@ export default function LineChart({
   height = 220,
   color = '#1e3a8a',
   formatValue = (n) => new Intl.NumberFormat('en-IN').format(Math.round(n)),
+  showValueLabels = false,
 }: LineChartProps) {
   const [hover, setHover] = useState<number | null>(null);
 
@@ -87,6 +90,18 @@ export default function LineChart({
         {points.map((p, i) => (
           <g key={i}>
             <text x={p.x} y={height - 4} textAnchor="middle" fontSize={9} fill="#94a3b8">{p.label}</text>
+            {showValueLabels && (
+              <text
+                x={p.x}
+                y={Math.max(padY + 9, p.y - 9)}
+                textAnchor="middle"
+                fontSize={9}
+                fontWeight="bold"
+                fill="#475569"
+              >
+                {formatValue(p.value)}
+              </text>
+            )}
             <circle cx={p.x} cy={p.y} r={hover === i ? 5 : 3.5} fill="#fff" stroke={color} strokeWidth={2} />
             <rect
               x={p.x - (innerW / Math.max(1, points.length)) / 2}

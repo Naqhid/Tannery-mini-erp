@@ -156,16 +156,18 @@ async function getKpiCounts() {
   };
 }
 
-// ─── Sales order value trend (ALL orders, grouped by month, live) ────────────
+// ─── Sales order quantity trend (last 6 months, grouped by month, live) ──────
 async function getSalesOrderTrend() {
   const [rows] = await pool.query(
-    `SELECT DATE_FORMAT(order_date, '%Y-%m') AS ym,
-       DATE_FORMAT(order_date, '%b %Y') AS label,
-       COALESCE(SUM(grand_total), 0) AS value,
-       COUNT(*) AS order_count
-     FROM sales_orders
-     GROUP BY DATE_FORMAT(order_date, '%Y-%m'), DATE_FORMAT(order_date, '%b %Y')
-     ORDER BY DATE_FORMAT(order_date, '%Y-%m') ASC`
+    `SELECT DATE_FORMAT(so.order_date, '%Y-%m') AS ym,
+       DATE_FORMAT(so.order_date, '%b %Y') AS label,
+       COALESCE(SUM(soi.quantity), 0) AS value,
+       COUNT(DISTINCT so.id) AS order_count
+     FROM sales_orders so
+     LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+     WHERE so.order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01')
+     GROUP BY DATE_FORMAT(so.order_date, '%Y-%m'), DATE_FORMAT(so.order_date, '%b %Y')
+     ORDER BY DATE_FORMAT(so.order_date, '%Y-%m') ASC`
   );
   return rows.map(r => ({ label: r.label, value: Number(r.value) || 0, orderCount: Number(r.order_count) || 0 }));
 }
@@ -186,11 +188,11 @@ async function getInventoryValue() {
   return { total, breakdown };
 }
 
-// ─── Top 5 products by sales order value (live) ──────────────────────────────
+// ─── Top 5 products by sales order quantity (live) ───────────────────────────
 async function getTopProducts() {
   const [rows] = await pool.query(
     `SELECT soi.item_description AS product,
-       COALESCE(SUM(soi.quantity * COALESCE(soi.unit_price, 0)), 0) AS value
+       COALESCE(SUM(soi.quantity), 0) AS value
      FROM sales_order_items soi
      WHERE soi.item_description IS NOT NULL AND soi.item_description <> ''
      GROUP BY soi.item_description

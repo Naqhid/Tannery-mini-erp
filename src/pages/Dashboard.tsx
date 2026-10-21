@@ -44,6 +44,7 @@ interface QuickSummary {
 }
 
 const fmtMoney = (n: number) => '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
+const fmtQty = (n: number) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
 
 interface RecentOrder { id: number; order_no: string; customer_name: string; product: string; total_quantity: number; status: string; order_date: string; }
 interface LowStockItem { id: number; item: string; qty: string; threshold: string; status: string; percent: number; }
@@ -143,8 +144,8 @@ export default function Dashboard() {
 
       {/* Charts row: Sales trend · Inventory value · Top products */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-        <Card className="xl:col-span-1" title="Sales Order Value" subtitle="All orders by month">
-          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtMoney} color="#4f46e5" />
+        <Card className="xl:col-span-1" title="Sales Order Quantity" subtitle="Total quantity · last 6 months">
+          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtQty} color="#4f46e5" showValueLabels />
         </Card>
 
         <Card title="Inventory Value" subtitle="Live stock valuation by type"
@@ -172,8 +173,8 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <Card title="Top 5 Products" subtitle="By sales order value">
-          <DonutChart data={topProducts.map((p) => ({ label: p.product, value: p.value }))} formatValue={fmtMoney} />
+        <Card title="Top 5 Products" subtitle="By sales order quantity">
+          <DonutChart data={topProducts.map((p) => ({ label: p.product, value: p.value }))} formatValue={fmtQty} />
         </Card>
       </div>
 
