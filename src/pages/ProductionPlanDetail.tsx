@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Save, ArrowLeft, Printer, Plus, Edit2, MoreHorizontal, Send, Trash2 } from 'lucide-react';
+import { Save, ArrowLeft, Printer, Plus, Send, Trash2 } from 'lucide-react';
 import api from '../lib/api';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { usePermission } from '../lib/usePermission';
@@ -93,7 +93,6 @@ export default function ProductionPlanDetail() {
   const [deleteStageKey, setDeleteStageKey] = useState<string | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showRouteCard, setShowRouteCard] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
@@ -547,25 +546,11 @@ export default function ProductionPlanDetail() {
             onClick={() => setShowPrintPreview(true)}>
             <Printer size={13} /> Print
           </button>
-          <div className="relative">
-            <button
-              onClick={() => setShowMoreMenu((v) => !v)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-              <MoreHorizontal size={13} /> More
-            </button>
-            {showMoreMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)} />
-                <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
-                  <button
-                    onClick={() => { setShowMoreMenu(false); setShowRouteCard(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 text-left">
-                    <Printer size={13} /> Print Route Card
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <button
+            onClick={() => setShowRouteCard(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+            <Printer size={13} /> Print Route Card
+          </button>
           <button
             onClick={canWrite ? handleSave : undefined}
             disabled={saving || isReadOnly}
