@@ -5,6 +5,7 @@ import { Save, ArrowLeft, Printer, Plus, Edit2, MoreHorizontal, Send, Trash2 } f
 import api from '../lib/api';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { usePermission } from '../lib/usePermission';
+import Barcode128, { barcode128Svg } from '../components/Barcode128';
 
 interface Customer { id: number; name: string; }
 interface SalesOrder { id: number; order_no: string; customer_id?: number; customer_name?: string; order_qty?: number; }
@@ -57,6 +58,19 @@ const STATUS_COLORS: Record<string, string> = {
   Cancelled: 'bg-rose-100 text-rose-600',
 };
 
+// Hourly production slots for the Route Card (9 AM to 6 PM). 1-2 is the lunch break.
+const ROUTE_CARD_HOURS: { label: string; lunch?: boolean }[] = [
+  { label: '9 - 10' },
+  { label: '10 - 11' },
+  { label: '11 - 12' },
+  { label: '12 - 1' },
+  { label: '1 - 2', lunch: true },
+  { label: '2 - 3' },
+  { label: '3 - 4' },
+  { label: '4 - 5' },
+  { label: '5 - 6' },
+];
+
 let _kc = 0;
 const genKey = () => `stg_${++_kc}_${Date.now()}`;
 const fmt = (n: number) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n || 0);
@@ -78,6 +92,8 @@ export default function ProductionPlanDetail() {
   const [saving, setSaving] = useState(false);
   const [deleteStageKey, setDeleteStageKey] = useState<string | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showRouteCard, setShowRouteCard] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
@@ -389,6 +405,118 @@ export default function ProductionPlanDetail() {
     setTimeout(handleSave, 100);
   };
 
+  // ─── Route Card ────────────────────────────────────────────────────────────
+  // Stages that actually get a sheet: those with a planned qty > 0.
+  const routeCardStages = stages.filter((s) => (parseFloat(s.planned_qty) || 0) > 0);
+  const customerName = customers.find((c) => String(c.id) === plan.customer_id)?.name || '—';
+  const orderNo = salesOrders.find((s) => String(s.id) === plan.sales_order_id)?.order_no || '—';
+
+  // Build the printable Route Card HTML: one sheet per stage, plan info shared.
+  const buildRouteCardHtml = () => {
+    const esc = (v: any) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+    const barcode = barcode128Svg(plan.plan_no || '', { height: 46, barWidth: 1.5, showText: true });
+
+    const hourRows = ROUTE_CARD_HOURS.map((h) => h.lunch
+      ? `<tr class="lunch"><td class="hr">${esc(h.label)}</td><td colspan="3" class="lunch-cell">LUNCH</td></tr>`
+      : `<tr><td class="hr">${esc(h.label)}</td><td></td><td></td><td></td></tr>`
+    ).join('');
+
+    const sheets = routeCardStages.map((s, i) => `
+      <section class="sheet${i > 0 ? ' page-break' : ''}">
+        <div class="title">Leather Tannery ERP — Route Card</div>
+        <table class="info">
+          <tr>
+            <td class="lbl">Barcode (Plan No)</td>
+            <td class="barcode">${barcode}</td>
+            <td class="lbl">Plan No</td><td>${esc(plan.plan_no)}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Plan Date</td><td>${esc(plan.plan_date || '—')}</td>
+            <td class="lbl">Customer</td><td>${esc(customerName)}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Article</td><td>${esc(plan.article || '—')}</td>
+            <td class="lbl">Color</td><td>${esc(plan.color || '—')}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Order No</td><td>${esc(orderNo)}</td>
+            <td class="lbl">UOM</td><td>${esc(s.uom || '—')}</td>
+          </tr>
+        </table>
+
+        <table class="stage">
+          <tr>
+            <td class="stage-lbl">Stage</td>
+            <td class="stage-val">${esc(s.stage_name || '—')}</td>
+            <td class="stage-lbl">Planned Qty</td>
+            <td class="stage-val">${esc(fmt(parseFloat(s.planned_qty) || 0))} ${esc(s.uom || '')}</td>
+          </tr>
+        </table>
+
+        <table class="hours">
+          <thead>
+            <tr>
+              <th>Prod. Hour</th>
+              <th>Input Qty</th>
+              <th>Output Qty</th>
+              <th>Rejection Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${hourRows}
+            <tr class="total">
+              <td>Total</td><td></td><td></td><td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="sign">
+          <div>Operator</div><div>Supervisor</div><div>QC</div>
+        </div>
+      </section>`).join('');
+
+    return `<!doctype html><html><head><meta charset="utf-8"/>
+      <title>Route Card — ${esc(plan.plan_no)}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; padding: 16px; }
+        .sheet { padding: 8px 4px 24px; }
+        .page-break { page-break-before: always; }
+        .title { text-align: center; font-size: 16px; font-weight: 700; border: 1px solid #000; padding: 8px; margin-bottom: 0; }
+        table { width: 100%; border-collapse: collapse; }
+        .info td { border: 1px solid #000; padding: 6px 8px; font-size: 12px; vertical-align: middle; }
+        .info .lbl { font-weight: 700; background: #f3f4f6; width: 15%; white-space: nowrap; }
+        .info .barcode { text-align: center; }
+        .info .barcode svg { height: 56px; }
+        .stage { margin-top: -1px; }
+        .stage td { border: 1px solid #000; padding: 10px 8px; }
+        .stage .stage-lbl { font-weight: 700; font-size: 15px; background: #fde68a; width: 15%; white-space: nowrap; }
+        .stage .stage-val { font-weight: 800; font-size: 18px; background: #fff7cc; }
+        .hours { margin-top: 10px; }
+        .hours th { background: #1e3a8a; color: #fff; border: 1px solid #000; padding: 7px 8px; font-size: 12px; }
+        .hours td { border: 1px solid #000; padding: 9px 8px; font-size: 12px; height: 22px; }
+        .hours .hr { font-weight: 600; width: 22%; }
+        .hours .lunch td, .hours tr.lunch { background: #f3f4f6; }
+        .hours .lunch-cell { text-align: center; font-weight: 700; letter-spacing: 2px; color: #6b7280; }
+        .hours .total td { font-weight: 800; background: #e5e7eb; }
+        .sign { display: flex; justify-content: space-between; margin-top: 40px; font-size: 12px; }
+        .sign div { border-top: 1px solid #000; padding-top: 4px; width: 28%; text-align: center; }
+        @page { size: A4; margin: 12mm; }
+      </style></head>
+      <body>${sheets || '<p style="text-align:center">No planned stages to print.</p>'}</body></html>`;
+  };
+
+  const handlePrintRouteCard = () => {
+    const w = window.open('', '_blank', 'width=900,height=1000');
+    if (!w) { toast.error('Please allow pop-ups to print the Route Card'); return; }
+    w.document.open();
+    w.document.write(buildRouteCardHtml());
+    w.document.close();
+    w.focus();
+    // Give the barcode SVG a tick to render before invoking print.
+    setTimeout(() => { w.print(); }, 300);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -419,9 +547,25 @@ export default function ProductionPlanDetail() {
             onClick={() => setShowPrintPreview(true)}>
             <Printer size={13} /> Print
           </button>
-          <button className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-            <MoreHorizontal size={13} /> More
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowMoreMenu((v) => !v)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+              <MoreHorizontal size={13} /> More
+            </button>
+            {showMoreMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)} />
+                <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+                  <button
+                    onClick={() => { setShowMoreMenu(false); setShowRouteCard(true); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 text-left">
+                    <Printer size={13} /> Print Route Card
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={canWrite ? handleSave : undefined}
             disabled={saving || isReadOnly}
@@ -737,6 +881,115 @@ export default function ProductionPlanDetail() {
                 <div><div className="border-t border-gray-400 pt-1 mt-8">Checked By</div></div>
                 <div><div className="border-t border-gray-400 pt-1 mt-8">Approved By</div></div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Route Card Preview Modal */}
+      {showRouteCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowRouteCard(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-base font-bold text-gray-900">Route Card — {routeCardStages.length} stage sheet(s)</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintRouteCard}
+                  disabled={routeCardStages.length === 0}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+                  <Printer size={14} /> Print
+                </button>
+                <button onClick={() => setShowRouteCard(false)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-200 transition-colors">
+                  <span className="text-lg leading-none">×</span>
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-6 flex-1 bg-gray-100 space-y-6">
+              {routeCardStages.length === 0 && (
+                <p className="text-center text-sm text-gray-500 py-10">No planned stages to print. Add a stage with a planned qty first.</p>
+              )}
+              {routeCardStages.map((s) => (
+                <div key={s._key} className="bg-white border border-gray-800 mx-auto max-w-2xl text-gray-900">
+                  <div className="text-center text-base font-bold border-b border-gray-800 py-2">Leather Tannery ERP — Route Card</div>
+                  {/* Plan info */}
+                  <table className="w-full border-collapse text-xs">
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 w-[15%] whitespace-nowrap">Barcode (Plan No)</td>
+                        <td className="border border-gray-800 px-2 py-1.5 text-center"><Barcode128 value={plan.plan_no || ''} height={44} barWidth={1.4} /></td>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 whitespace-nowrap">Plan No</td>
+                        <td className="border border-gray-800 px-2 py-1.5">{plan.plan_no || '—'}</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 whitespace-nowrap">Plan Date</td>
+                        <td className="border border-gray-800 px-2 py-1.5">{plan.plan_date || '—'}</td>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 whitespace-nowrap">Customer</td>
+                        <td className="border border-gray-800 px-2 py-1.5">{customerName}</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 whitespace-nowrap">Article</td>
+                        <td className="border border-gray-800 px-2 py-1.5">{plan.article || '—'}</td>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 whitespace-nowrap">Color</td>
+                        <td className="border border-gray-800 px-2 py-1.5">{plan.color || '—'}</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 whitespace-nowrap">Order No</td>
+                        <td className="border border-gray-800 px-2 py-1.5">{orderNo}</td>
+                        <td className="border border-gray-800 px-2 py-1.5 font-bold bg-gray-100 whitespace-nowrap">UOM</td>
+                        <td className="border border-gray-800 px-2 py-1.5">{s.uom || '—'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {/* Highlighted stage + planned qty */}
+                  <table className="w-full border-collapse -mt-px">
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-800 px-2 py-2.5 font-bold text-sm bg-amber-200 w-[15%] whitespace-nowrap">Stage</td>
+                        <td className="border border-gray-800 px-2 py-2.5 font-extrabold text-lg bg-amber-50">{s.stage_name || '—'}</td>
+                        <td className="border border-gray-800 px-2 py-2.5 font-bold text-sm bg-amber-200 whitespace-nowrap">Planned Qty</td>
+                        <td className="border border-gray-800 px-2 py-2.5 font-extrabold text-lg bg-amber-50">{fmt(parseFloat(s.planned_qty) || 0)} {s.uom || ''}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {/* Hourly table */}
+                  <table className="w-full border-collapse mt-2.5 text-xs">
+                    <thead>
+                      <tr className="bg-blue-900 text-white">
+                        <th className="border border-gray-800 px-2 py-1.5 w-[22%]">Prod. Hour</th>
+                        <th className="border border-gray-800 px-2 py-1.5">Input Qty</th>
+                        <th className="border border-gray-800 px-2 py-1.5">Output Qty</th>
+                        <th className="border border-gray-800 px-2 py-1.5">Rejection Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ROUTE_CARD_HOURS.map((h) => h.lunch ? (
+                        <tr key={h.label} className="bg-gray-100">
+                          <td className="border border-gray-800 px-2 py-2 font-semibold">{h.label}</td>
+                          <td className="border border-gray-800 px-2 py-2 text-center font-bold tracking-widest text-gray-500" colSpan={3}>LUNCH</td>
+                        </tr>
+                      ) : (
+                        <tr key={h.label}>
+                          <td className="border border-gray-800 px-2 py-2 font-semibold">{h.label}</td>
+                          <td className="border border-gray-800 px-2 py-2">&nbsp;</td>
+                          <td className="border border-gray-800 px-2 py-2">&nbsp;</td>
+                          <td className="border border-gray-800 px-2 py-2">&nbsp;</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-gray-200 font-extrabold">
+                        <td className="border border-gray-800 px-2 py-2">Total</td>
+                        <td className="border border-gray-800 px-2 py-2">&nbsp;</td>
+                        <td className="border border-gray-800 px-2 py-2">&nbsp;</td>
+                        <td className="border border-gray-800 px-2 py-2">&nbsp;</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="flex justify-between px-4 py-6 text-xs text-gray-600">
+                    <div className="border-t border-gray-800 pt-1 w-[28%] text-center">Operator</div>
+                    <div className="border-t border-gray-800 pt-1 w-[28%] text-center">Supervisor</div>
+                    <div className="border-t border-gray-800 pt-1 w-[28%] text-center">QC</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
