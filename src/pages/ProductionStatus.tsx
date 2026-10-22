@@ -59,6 +59,7 @@ export default function ProductionStatus() {
   const [deletingId, setDeletingId] = useState<OrderRow | null>(null);
   const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
   const [planSearch, setPlanSearch] = useState('');
+  const [saleOrderSearch, setSaleOrderSearch] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
@@ -68,6 +69,7 @@ export default function ProductionStatus() {
       if (processStage !== 'All') params.set('process_stage', processStage);
       if (statusFilter !== 'All') params.set('status_filter', statusFilter);
       if (planSearch.trim()) params.set('plan_no', planSearch.trim());
+      if (saleOrderSearch.trim()) params.set('sale_order_no', saleOrderSearch.trim());
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) { params.set('sortBy', sortBy); params.set('sortOrder', sortOrder); }
@@ -81,10 +83,10 @@ export default function ProductionStatus() {
     } finally {
       setLoading(false);
     }
-  }, [processStage, statusFilter, planSearch, currentPage, pageSize, sortBy, sortOrder, activeTab]);
+  }, [processStage, statusFilter, planSearch, saleOrderSearch, currentPage, pageSize, sortBy, sortOrder, activeTab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { setCurrentPage(1); }, [processStage, statusFilter, planSearch, sortBy, sortOrder, activeTab]);
+  useEffect(() => { setCurrentPage(1); }, [processStage, statusFilter, planSearch, saleOrderSearch, sortBy, sortOrder, activeTab]);
 
   // Load process stages from master
   useEffect(() => {
@@ -181,6 +183,16 @@ export default function ProductionStatus() {
               value={planSearch}
               onChange={e => setPlanSearch(e.target.value)}
               placeholder="Search plan no..."
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[180px]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Search Sale Order No</label>
+            <input
+              type="text"
+              value={saleOrderSearch}
+              onChange={e => setSaleOrderSearch(e.target.value)}
+              placeholder="Search sale order no..."
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[180px]"
             />
           </div>

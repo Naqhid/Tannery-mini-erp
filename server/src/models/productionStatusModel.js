@@ -21,7 +21,7 @@ async function syncLinkedSalesOrderStatus(orderId) {
 
 // ─── Orders (main list) ──────────────────────────────────────────────────────
 
-export async function getOrders({ process_stage, show_completed, status_filter, search, plan_no, has_transactions, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function getOrders({ process_stage, show_completed, status_filter, search, plan_no, sale_order_no, has_transactions, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
   let where = 'o.deleted_at IS NULL AND o.production_plan_id IS NOT NULL';
 
@@ -44,6 +44,14 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
   if (plan_no) {
     where += ' AND o.order_no LIKE ?';
     params.push(`%${plan_no}%`);
+  }
+  if (sale_order_no) {
+    where += ` AND EXISTS (
+      SELECT 1 FROM production_plans pp
+      JOIN sales_orders so ON so.id = pp.sales_order_id
+      WHERE pp.id = o.production_plan_id AND so.order_no LIKE ?
+    )`;
+    params.push(`%${sale_order_no}%`);
   }
   if (search) {
     where += ' AND (o.order_no LIKE ? OR o.article LIKE ? OR o.color LIKE ? OR o.customer_name LIKE ?)';
