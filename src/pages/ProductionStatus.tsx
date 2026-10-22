@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, ArrowUp, ArrowDown, ChevronsUpDown,
-  Factory, Download, Pencil, Trash2,
+  Factory, Download, Pencil, Trash2, ChevronDown, FileText,
 } from 'lucide-react';
 import SkeletonLoader from '../components/ui/SkeletonLoader';
 import EmptyState from '../components/ui/EmptyState';
@@ -15,6 +15,7 @@ import { toast } from 'react-toastify';
 interface OrderRow {
   id: number;
   order_no: string;
+  sale_order_no: string | null;
   customer_name: string;
   article: string;
   color: string;
@@ -22,6 +23,7 @@ interface OrderRow {
   issued_qty: number;
   completed_qty: number;
   balance_qty: number;
+  rejection_qty?: number;
   status: string;
   uom: string;
   plan_date: string;
@@ -57,6 +59,7 @@ export default function ProductionStatus() {
   const [deletingId, setDeletingId] = useState<OrderRow | null>(null);
   const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
   const [planSearch, setPlanSearch] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     try {
@@ -111,8 +114,8 @@ export default function ProductionStatus() {
   };
 
   const handleExport = () => {
-    const headers = ['Plan No', 'Customer', 'Article', 'Color', 'Planned Qty', 'Completed Qty', 'Balance Qty', 'Status'];
-    const csvRows = rows.map(r => [r.order_no, r.customer_name, r.article, r.color, r.issued_qty, r.completed_qty, r.balance_qty, r.status].join(','));
+    const headers = ['Sale Order No', 'Plan No', 'Customer', 'Article', 'Color', 'Planned Qty', 'Completed Qty', 'Balance Qty', 'Status'];
+    const csvRows = rows.map(r => [r.sale_order_no || '', r.order_no, r.customer_name, r.article, r.color, r.issued_qty, r.completed_qty, r.balance_qty, r.status].join(','));
     const csv = [headers.join(','), ...csvRows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -126,6 +129,22 @@ export default function ProductionStatus() {
   };
 
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
+
+  // Group rows by their linked sale order no (preserving current row order).
+  const groupedRows = (() => {
+    const map = new Map<string, OrderRow[]>();
+    for (const r of rows) {
+      const key = r.sale_order_no || '— No Sale Order —';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
+    }
+    return Array.from(map.entries());
+  })();
+
+  const toggleGroup = (key: string) =>
+    setExpandedGroups(prev => ({ ...prev, [key]: !(prev[key] ?? true) }));
+
+  const isGroupOpen = (key: string) => expandedGroups[key] ?? true;
 
   const selectedStageUom = processStage !== 'All'
     ? (stageOptions.find(s => s.name === processStage)?.uom || '')
@@ -247,40 +266,77 @@ export default function ProductionStatus() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((row, idx) => (
-                  <tr
-                    key={row.id}
-                    className={`transition-colors hover:bg-blue-50/60 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
-                    onClick={() => navigate(`/production-status/${row.id}`)}
-                  >
-                    <td className="px-3 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-600">{row.plan_date ? new Date(row.plan_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-700">{(row as any).customer_name || '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-600">{(row as any).process_stage || '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.issued_qty)}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
-                    <td className="px-3 py-3.5 text-sm text-rose-600 font-semibold text-right tabular-nums">{formatNumber((row as any).rejection_qty || 0)}</td>
-                    <td className={`px-3 py-3.5 text-sm font-semibold text-right tabular-nums ${Number(row.balance_qty) < 0 ? 'text-rose-600' : 'text-amber-700'}`}>{formatNumber(row.balance_qty)}</td>
-                    <td className="px-3 py-3.5 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); navigate(`/production-status/${row.id}`); }}
-                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors" title="Edit">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); setDeletingId(row); }}
-                          className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors" title="Delete">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {groupedRows.map(([saleOrderNo, groupRows]) => {
+                  const open = isGroupOpen(saleOrderNo);
+                  const groupInput = groupRows.reduce((s, r) => s + Number(r.issued_qty || 0), 0);
+                  const groupOutput = groupRows.reduce((s, r) => s + Number(r.completed_qty || 0), 0);
+                  return (
+                    <Fragment key={saleOrderNo}>
+                      {/* Sale Order group header */}
+                      <tr
+                        className="bg-indigo-50/70 hover:bg-indigo-100/70 cursor-pointer border-t border-indigo-100 select-none"
+                        onClick={() => toggleGroup(saleOrderNo)}
+                      >
+                        <td colSpan={11} className="px-3 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <ChevronDown
+                                size={16}
+                                className={`text-indigo-600 transition-transform ${open ? '' : '-rotate-90'}`}
+                              />
+                              <FileText size={14} className="text-indigo-500" />
+                              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sale Order</span>
+                              <span className="text-sm font-mono font-bold text-indigo-700">{saleOrderNo}</span>
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700">
+                                {groupRows.length} {groupRows.length === 1 ? 'plan' : 'plans'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4 text-xs text-gray-600">
+                              <span>Input: <span className="font-semibold text-gray-900 tabular-nums">{formatNumber(groupInput)}</span></span>
+                              <span>Output: <span className="font-semibold text-gray-900 tabular-nums">{formatNumber(groupOutput)}</span></span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Plan rows for this sale order */}
+                      {open && groupRows.map((row, idx) => (
+                        <tr
+                          key={row.id}
+                          className={`transition-colors hover:bg-blue-50/60 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
+                          onClick={() => navigate(`/production-status/${row.id}`)}
+                        >
+                          <td className="px-3 py-3.5 text-sm text-blue-700 font-mono font-medium pl-8">{row.order_no || '—'}</td>
+                          <td className="px-3 py-3.5 text-sm text-gray-600">{row.plan_date ? new Date(row.plan_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
+                          <td className="px-3 py-3.5 text-sm text-gray-700">{row.customer_name || '—'}</td>
+                          <td className="px-3 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
+                          <td className="px-3 py-3.5 text-sm text-gray-600">{row.process_stage || '—'}</td>
+                          <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.issued_qty)}</td>
+                          <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
+                          <td className="px-3 py-3.5 text-sm text-rose-600 font-semibold text-right tabular-nums">{formatNumber(row.rejection_qty || 0)}</td>
+                          <td className={`px-3 py-3.5 text-sm font-semibold text-right tabular-nums ${Number(row.balance_qty) < 0 ? 'text-rose-600' : 'text-amber-700'}`}>{formatNumber(row.balance_qty)}</td>
+                          <td className="px-3 py-3.5 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button onClick={(e) => { e.stopPropagation(); navigate(`/production-status/${row.id}`); }}
+                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors" title="Edit">
+                                <Pencil size={14} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setDeletingId(row); }}
+                                className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors" title="Delete">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -82,9 +82,18 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
   //   Input  = o.issued_qty (stored)
   //   Output = completed_qty (measurement output alias below)
   //   WIP    = Input − Output − Rejection (can be negative, e.g. over-production)
+  // Sale order number linked via the production plan.
+  const saleOrderNoSql = `(
+    SELECT so.order_no FROM production_plans pp
+    JOIN sales_orders so ON so.id = pp.sales_order_id
+    WHERE pp.id = o.production_plan_id
+    LIMIT 1
+  )`;
+
   const [rows] = await pool.query(
     `SELECT o.*, ${measurementCompletedSql} AS completed_qty,
        ${stageRejectionSql} AS rejection_qty,
+       ${saleOrderNoSql} AS sale_order_no,
        (COALESCE(o.issued_qty,0) - ${measurementCompletedSql} - ${stageRejectionSql}) AS balance_qty
        FROM production_status_orders o
        WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
