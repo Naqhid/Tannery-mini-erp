@@ -318,6 +318,26 @@ export async function getNextTransactionNo() {
   return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
+/**
+ * Resolve the planned qty for a production status order.
+ * `planned_qty` is not a stored column on production_status_orders; it is
+ * derived from the matching stage row in production_plan_stages.
+ */
+async function getPlannedQtyForOrder(orderId) {
+  const [[row]] = await pool.query(
+    `SELECT COALESCE((
+       SELECT s.planned_qty FROM production_plan_stages s
+       WHERE s.plan_id = o.production_plan_id
+         AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+       ORDER BY s.seq ASC LIMIT 1
+     ), 0) AS planned_qty
+     FROM production_status_orders o
+     WHERE o.id = ? AND o.deleted_at IS NULL`,
+    [orderId]
+  );
+  return parseFloat(row?.planned_qty) || 0;
+}
+
 export async function createTransaction(data, userId = null) {
   // Input qty must always be greater than 0 (output cannot be recorded without input).
   if ((parseFloat(data.input_qty) || 0) <= 0) {
@@ -328,11 +348,7 @@ export async function createTransaction(data, userId = null) {
 
   // Input qty must not exceed the stage planned qty.
   if (data.production_status_order_id) {
-    const [[order]] = await pool.query(
-      'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
-      [data.production_status_order_id]
-    );
-    const plannedQty = parseFloat(order?.planned_qty) || 0;
+    const plannedQty = await getPlannedQtyForOrder(data.production_status_order_id);
     if (plannedQty > 0 && (parseFloat(data.input_qty) || 0) > plannedQty) {
       const err = new Error(`Input qty cannot exceed planned qty (${plannedQty})`);
       err.status = 400;
@@ -359,11 +375,7 @@ export async function createTransaction(data, userId = null) {
 
   // Cumulative output qty (all transactions for this order) must not exceed planned qty.
   if (data.production_status_order_id) {
-    const [[po]] = await pool.query(
-      'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
-      [data.production_status_order_id]
-    );
-    const plannedQty = parseFloat(po?.planned_qty) || 0;
+    const plannedQty = await getPlannedQtyForOrder(data.production_status_order_id);
     if (plannedQty > 0) {
       const [[agg]] = await pool.query(
         'SELECT COALESCE(SUM(output_qty), 0) AS total_output FROM production_status_transactions WHERE production_status_order_id = ? AND deleted_at IS NULL',
@@ -419,11 +431,7 @@ export async function updateTransaction(id, data, userId = null) {
   if (!existing) return false;
 
   // Input qty must not exceed the stage planned qty.
-  const [[order]] = await pool.query(
-    'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
-    [existing.production_status_order_id]
-  );
-  const plannedQty = parseFloat(order?.planned_qty) || 0;
+  const plannedQty = await getPlannedQtyForOrder(existing.production_status_order_id);
   if (plannedQty > 0 && (parseFloat(data.input_qty) || 0) > plannedQty) {
     const err = new Error(`Input qty cannot exceed planned qty (${plannedQty})`);
     err.status = 400;
