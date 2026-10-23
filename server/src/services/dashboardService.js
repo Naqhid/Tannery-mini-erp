@@ -19,16 +19,39 @@ async function getRecentOrders() {
   return rows;
 }
 
+// Live stock per material, derived from stock_ledger (single source of truth):
+// the latest running balance per (warehouse, material), summed across all
+// warehouses. Exposes material_id, live_qty and live_value. Used by every
+// dashboard stock metric so the whole dashboard reads the ledger, not the
+// decoupled materials.current_stock master field.
+const LEDGER_LIVE_STOCK = `(
+  SELECT sl.material_id,
+         SUM(sl.balance_qty) AS live_qty,
+         SUM(sl.balance_value) AS live_value
+    FROM stock_ledger sl
+    JOIN (
+      SELECT warehouse_id, material_id, MAX(transaction_date) AS md
+        FROM stock_ledger GROUP BY warehouse_id, material_id
+    ) ld ON ld.warehouse_id=sl.warehouse_id AND ld.material_id=sl.material_id AND ld.md=sl.transaction_date
+    JOIN (
+      SELECT warehouse_id, material_id, transaction_date, MAX(id) AS mid
+        FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date
+    ) li ON li.warehouse_id=sl.warehouse_id AND li.material_id=sl.material_id
+        AND li.transaction_date=sl.transaction_date AND li.mid=sl.id
+   GROUP BY sl.material_id
+)`;
+
 // ─── Low stock alerts (materials at/below reorder level) ──────────────────────
 async function getLowStock() {
   const [rows] = await pool.query(
     `SELECT m.id, m.name AS item, m.uom,
-       m.current_stock AS current_qty, m.reorder_level AS threshold
+       COALESCE(ls.live_qty, 0) AS current_qty, m.reorder_level AS threshold
      FROM materials m
+     LEFT JOIN ${LEDGER_LIVE_STOCK} ls ON ls.material_id = m.id
      WHERE m.status = 'Active'
        AND COALESCE(m.reorder_level, 0) > 0
-       AND COALESCE(m.current_stock, 0) <= m.reorder_level
-     ORDER BY (m.current_stock / NULLIF(m.reorder_level, 0)) ASC
+       AND COALESCE(ls.live_qty, 0) <= m.reorder_level
+     ORDER BY (COALESCE(ls.live_qty, 0) / NULLIF(m.reorder_level, 0)) ASC
      `
   );
   return rows.map(r => {
@@ -175,11 +198,12 @@ async function getSalesOrderTrend() {
 // ─── Inventory value by material type (live valuation) ───────────────────────
 async function getInventoryValue() {
   const [rows] = await pool.query(
-    `SELECT COALESCE(NULLIF(TRIM(type), ''), 'Other') AS category,
-       COALESCE(SUM(COALESCE(current_stock, 0) * COALESCE(rate, 0)), 0) AS value
-     FROM materials
-     WHERE status = 'Active'
-     GROUP BY COALESCE(NULLIF(TRIM(type), ''), 'Other')
+    `SELECT COALESCE(NULLIF(TRIM(m.type), ''), 'Other') AS category,
+       COALESCE(SUM(COALESCE(ls.live_value, 0)), 0) AS value
+     FROM materials m
+     LEFT JOIN ${LEDGER_LIVE_STOCK} ls ON ls.material_id = m.id
+     WHERE m.status = 'Active'
+     GROUP BY COALESCE(NULLIF(TRIM(m.type), ''), 'Other')
      HAVING value > 0
      ORDER BY value DESC`
   );
@@ -233,9 +257,10 @@ async function getQuickSummary() {
          WHERE status = 'Draft') AS draft_sales_orders,
        (SELECT COUNT(*) FROM material_receipts WHERE status = 'Draft') AS pending_goods_receipt,
        (SELECT COUNT(*) FROM material_issues WHERE status = 'Draft') AS pending_material_issues,
-       (SELECT COUNT(*) FROM materials
-         WHERE status = 'Active' AND COALESCE(reorder_level,0) > 0
-           AND COALESCE(current_stock,0) <= reorder_level) AS low_stock_items,
+       (SELECT COUNT(*) FROM materials m
+         LEFT JOIN ${LEDGER_LIVE_STOCK} ls ON ls.material_id = m.id
+         WHERE m.status = 'Active' AND COALESCE(m.reorder_level,0) > 0
+           AND COALESCE(ls.live_qty,0) <= m.reorder_level) AS low_stock_items,
        (SELECT COUNT(*) FROM production_plans
          WHERE deleted_at IS NULL
            AND COALESCE(status,'') NOT IN ('Completed','Cancelled','Canceled')) AS open_production_plans`

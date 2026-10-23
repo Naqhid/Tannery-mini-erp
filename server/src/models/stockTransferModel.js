@@ -75,11 +75,14 @@ export async function create(data, items = [], createdBy = null) {
     const totalQty = items.reduce((s, i) => s + (parseFloat(i.transfer_qty) || 0), 0);
     const totalAmount = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
 
-    // Validate stock availability
+    // Validate stock availability — live stock comes from the stock_ledger
+    // (single source of truth): the latest running balance for this pair.
     const canNegative = await allowsNegativeStock(data.from_warehouse_id);
     for (const item of items) {
       const [[stock]] = await conn.query(
-        'SELECT current_qty FROM warehouse_stock WHERE warehouse_id=? AND material_id=? FOR UPDATE',
+        `SELECT balance_qty AS current_qty FROM stock_ledger
+          WHERE warehouse_id=? AND material_id=?
+          ORDER BY transaction_date DESC, id DESC LIMIT 1`,
         [data.from_warehouse_id, item.material_id]
       );
       const available = stock ? parseFloat(stock.current_qty) : 0;

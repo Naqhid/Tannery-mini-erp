@@ -184,6 +184,26 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
 // Same source as summary but focussed on value; positive qty only.
 export async function stockValuation({ warehouse_id, group_id, origin, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
+  // Live stock is derived from stock_ledger (single source of truth): the latest
+  // running balance per (warehouse, material). `ledgerStock` exposes the same
+  // column names the rest of this query used from the old warehouse_stock table
+  // (id, warehouse_id, material_id, uom, current_qty, avg_unit_cost) so the
+  // filters/sorts below keep working unchanged.
+  const ledgerStock = `(
+    SELECT sl.id, sl.warehouse_id, sl.material_id, sl.uom,
+           sl.balance_qty AS current_qty,
+           CASE WHEN sl.balance_qty <> 0 THEN sl.balance_value / sl.balance_qty ELSE 0 END AS avg_unit_cost
+      FROM stock_ledger sl
+      JOIN (
+        SELECT warehouse_id, material_id, MAX(transaction_date) AS md
+          FROM stock_ledger GROUP BY warehouse_id, material_id
+      ) ld ON ld.warehouse_id=sl.warehouse_id AND ld.material_id=sl.material_id AND ld.md=sl.transaction_date
+      JOIN (
+        SELECT warehouse_id, material_id, transaction_date, MAX(id) AS mid
+          FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date
+      ) li ON li.warehouse_id=sl.warehouse_id AND li.material_id=sl.material_id
+          AND li.transaction_date=sl.transaction_date AND li.mid=sl.id
+  )`;
   let where = 'ws.current_qty <> 0';
   if (warehouse_id) { where += ' AND ws.warehouse_id = ?'; params.push(warehouse_id); }
   if (group_id) { where += ' AND m.group_id = ?'; params.push(group_id); }
@@ -216,7 +236,7 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
        g.name AS group_name, w.name AS warehouse_name, ws.uom,
        ws.current_qty AS closing_qty, ws.avg_unit_cost AS avg_rate,
        (ws.current_qty * ws.avg_unit_cost) AS stock_value
-     FROM warehouse_stock ws
+     FROM ${ledgerStock} ws
      JOIN materials m ON ws.material_id = m.id
      LEFT JOIN group_master g ON m.group_id = g.id
      LEFT JOIN warehouses w ON ws.warehouse_id = w.id
@@ -227,12 +247,12 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
   );
 
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM warehouse_stock ws
+    `SELECT COUNT(*) AS total FROM ${ledgerStock} ws
      JOIN materials m ON ws.material_id = m.id WHERE ${where}`, params
   );
   const [[totals]] = await pool.query(
     `SELECT COALESCE(SUM(ws.current_qty * ws.avg_unit_cost),0) AS total_value
-     FROM warehouse_stock ws JOIN materials m ON ws.material_id = m.id WHERE ${where}`, params
+     FROM ${ledgerStock} ws JOIN materials m ON ws.material_id = m.id WHERE ${where}`, params
   );
 
   return { rows, total, totals };
@@ -584,80 +604,53 @@ export async function getInventoryFilters() {
 }
 
 // ─── Inventory Consistency Check (READ-ONLY DIAGNOSTIC) ──────────────────────
-// Compares the current on-hand quantity across the three stock tables:
-//   1. warehouse_stock.current_qty          (the live balance table)
-//   2. latest material_transactions.balance_qty per (warehouse, item)
-//   3. running SUM(in_qty - out_qty) from stock_ledger per (warehouse, material)
-// and flags any (warehouse, material) where they disagree.
-//
-// This does NOT modify any data. It only reports discrepancies so an operator
-// can investigate. No automatic repair is performed.
+// stock_ledger is now the SINGLE SOURCE OF TRUTH, so there are no longer three
+// tables to reconcile. This is a self-consistency check on the ledger: for each
+// (warehouse, material) it compares (first-row opening + SUM in − SUM out)
+// against the stamped balance_qty on the latest row. A mismatch means a rebuild
+// (rebuildAndReprice) hasn't been run for that pair. Does NOT modify any data.
 export async function inventoryConsistencyCheck({ tolerance = 0.001 } = {}) {
-  // 1) warehouse_stock balances
-  const [wsRows] = await pool.query(
-    `SELECT ws.warehouse_id, ws.material_id, ws.current_qty
-     FROM warehouse_stock ws`
-  );
-
-  // 2) latest material_transactions balance per (warehouse, item)
-  const [mtRows] = await pool.query(
-    `SELECT t.warehouse_id, t.item_id AS material_id, t.balance_qty
-     FROM material_transactions t
-     JOIN (
-       SELECT warehouse_id, item_id, MAX(transaction_date) AS max_date
-       FROM material_transactions
-       GROUP BY warehouse_id, item_id
-     ) latest
-       ON latest.warehouse_id = t.warehouse_id
-      AND latest.item_id = t.item_id
-      AND latest.max_date = t.transaction_date
-     JOIN (
-       SELECT warehouse_id, item_id, transaction_date, MAX(transaction_id) AS max_id
-       FROM material_transactions
-       GROUP BY warehouse_id, item_id, transaction_date
-     ) latest_id
-       ON latest_id.warehouse_id = t.warehouse_id
-      AND latest_id.item_id = t.item_id
-      AND latest_id.transaction_date = t.transaction_date
-      AND latest_id.max_id = t.transaction_id`
-  );
-
-  // 3) stock_ledger running balance per (warehouse, material)
-  const [slRows] = await pool.query(
+  // Running net movement per (warehouse, material).
+  const [moveRows] = await pool.query(
     `SELECT warehouse_id, material_id,
-            COALESCE(SUM(in_qty),0) - COALESCE(SUM(out_qty),0) AS ledger_qty
-     FROM stock_ledger
-     WHERE warehouse_id IS NOT NULL AND material_id IS NOT NULL
-     GROUP BY warehouse_id, material_id`
+            COALESCE(SUM(in_qty),0) - COALESCE(SUM(out_qty),0) AS move_qty
+       FROM stock_ledger
+      WHERE warehouse_id IS NOT NULL AND material_id IS NOT NULL
+      GROUP BY warehouse_id, material_id`
   );
 
-  // Build lookup maps keyed by "warehouse:material"
-  const key = (w, m) => `${w}:${m}`;
-  const wsMap = new Map(wsRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.current_qty) || 0]));
-  const mtMap = new Map(mtRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.balance_qty) || 0]));
-  const slMap = new Map(slRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.ledger_qty) || 0]));
+  // Latest stamped balance + first-row opening per (warehouse, material).
+  const [balRows] = await pool.query(
+    `SELECT sl.warehouse_id, sl.material_id, sl.balance_qty,
+            (SELECT f.opening_qty FROM stock_ledger f
+              WHERE f.warehouse_id=sl.warehouse_id AND f.material_id=sl.material_id
+              ORDER BY f.transaction_date ASC, f.id ASC LIMIT 1) AS opening_qty
+       FROM stock_ledger sl
+       JOIN (
+         SELECT warehouse_id, material_id, MAX(transaction_date) AS md
+           FROM stock_ledger GROUP BY warehouse_id, material_id
+       ) ld ON ld.warehouse_id=sl.warehouse_id AND ld.material_id=sl.material_id AND ld.md=sl.transaction_date
+       JOIN (
+         SELECT warehouse_id, material_id, transaction_date, MAX(id) AS mid
+           FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date
+       ) li ON li.warehouse_id=sl.warehouse_id AND li.material_id=sl.material_id
+           AND li.transaction_date=sl.transaction_date AND li.mid=sl.id`
+  );
 
-  // Union of all keys present in any table
-  const allKeys = new Set([...wsMap.keys(), ...mtMap.keys(), ...slMap.keys()]);
+  const key = (w, m) => `${w}:${m}`;
+  const moveMap = new Map(moveRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.move_qty) || 0]));
+  const openMap = new Map(balRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.opening_qty) || 0]));
+  const balMap = new Map(balRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.balance_qty) || 0]));
+
+  const allKeys = new Set([...balMap.keys()]);
 
   const discrepancies = [];
   for (const k of allKeys) {
     const [warehouse_id, material_id] = k.split(':').map(Number);
-    const wsQty = wsMap.has(k) ? wsMap.get(k) : null;
-    const mtQty = mtMap.has(k) ? mtMap.get(k) : null;
-    const slQty = slMap.has(k) ? slMap.get(k) : null;
-
-    const types = [];
-    const diff = (a, b) => a != null && b != null && Math.abs(a - b) > tolerance;
-    if (diff(wsQty, mtQty)) types.push('warehouse_stock != material_transactions');
-    if (diff(wsQty, slQty)) types.push('warehouse_stock != stock_ledger');
-    if (diff(mtQty, slQty)) types.push('material_transactions != stock_ledger');
-    // Presence mismatches (row missing from one table but not another)
-    const present = [wsQty, mtQty, slQty].filter(v => v != null).length;
-    if (present > 0 && present < 3) types.push('missing_in_one_or_more_tables');
-
-    if (types.length > 0) {
-      discrepancies.push({ warehouse_id, material_id, wsQty, mtQty, slQty, types });
+    const stamped = balMap.get(k);
+    const expected = (openMap.get(k) || 0) + (moveMap.get(k) || 0);
+    if (Math.abs(stamped - expected) > tolerance) {
+      discrepancies.push({ warehouse_id, material_id, stamped, expected });
     }
   }
 
@@ -686,15 +679,10 @@ export async function inventoryConsistencyCheck({ tolerance = 0.001 } = {}) {
       material_name: m.name || null,
       warehouse_id: d.warehouse_id,
       warehouse_name: w.name || null,
-      warehouse_stock_qty: d.wsQty,
-      material_transaction_qty: d.mtQty,
-      stock_ledger_qty: d.slQty,
-      difference: {
-        ws_vs_mt: d.wsQty != null && d.mtQty != null ? Number((d.wsQty - d.mtQty).toFixed(3)) : null,
-        ws_vs_sl: d.wsQty != null && d.slQty != null ? Number((d.wsQty - d.slQty).toFixed(3)) : null,
-        mt_vs_sl: d.mtQty != null && d.slQty != null ? Number((d.mtQty - d.slQty).toFixed(3)) : null,
-      },
-      discrepancy_type: d.types.join('; '),
+      stock_ledger_qty: Number(d.stamped.toFixed(3)),
+      expected_qty: Number(d.expected.toFixed(3)),
+      difference: Number((d.stamped - d.expected).toFixed(3)),
+      discrepancy_type: 'stock_ledger balance_qty != opening + in - out (rebuild needed)',
     };
   });
 

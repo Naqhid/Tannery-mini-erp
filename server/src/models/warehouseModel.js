@@ -163,7 +163,6 @@ export async function remove(id) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.query('DELETE FROM warehouse_stock WHERE warehouse_id=?', [id]);
     await conn.query('DELETE FROM warehouse_bins WHERE warehouse_id=?', [id]);
     await conn.query('DELETE FROM warehouse_user_access WHERE warehouse_id=?', [id]);
     await conn.query('DELETE FROM warehouse_attachments WHERE warehouse_id=?', [id]);

@@ -1,0 +1,139 @@
+-- Migration 069: Correct live stock to the authoritative values.
+-- =============================================================================
+-- Background: before stock_ledger became the single source of truth, the live
+-- server kept stock in THREE places that had drifted apart. The correct live
+-- stock was the one the material-issue "Available" check used — i.e. the latest
+-- material_transactions.balance_qty per (warehouse, item). The old
+-- warehouse_stock values (and therefore the migrated ledger balances) were
+-- wrong for some items (e.g. material 210 @ warehouse 8 = 10, correct = 6).
+--
+-- This migration brings every (warehouse, material) ledger balance to the
+-- correct value WITHOUT breaking the ledger's internal math. For each item it
+-- inserts ONE 'Stock Adjustment' row equal to (target - current_ledger_balance)
+-- dated today. A follow-up rebuild (run by the app / verify script) recomputes
+-- opening/in/out/balance so everything stays consistent AND the adjustment
+-- survives future transactions.
+--
+-- Source of truth: live server material_transactions latest balance per
+-- (warehouse, item), exported on 2026-10-23. warehouse_id = 0 rows are invalid
+-- (no such warehouse) and are intentionally excluded.
+--
+-- Idempotent: adjustment rows are tagged reference_type='stock_correction',
+-- reference_no='SC-069'. Re-running first deletes any prior SC-069 rows so it
+-- never double-applies.
+-- =============================================================================
+
+-- 1) Load the authoritative targets into a temp table.
+DROP TEMPORARY TABLE IF EXISTS _live_stock_target;
+CREATE TEMPORARY TABLE _live_stock_target (
+  warehouse_id INT NOT NULL,
+  material_id  INT NOT NULL,
+  target_qty   DECIMAL(14,3) NOT NULL,
+  avg_rate     DECIMAL(18,6) NOT NULL DEFAULT 0,
+  PRIMARY KEY (warehouse_id, material_id)
+);
+
+INSERT INTO _live_stock_target (warehouse_id, material_id, target_qty, avg_rate) VALUES
+(8,1,14.700,390.000000),(8,2,14.000,322.000000),(8,3,27.500,125.000000),(8,4,11.300,80.000000),
+(8,5,25.500,171.000000),(8,6,16.900,315.000000),(8,7,13.700,430.000000),(8,8,37.500,272.000000),
+(8,9,109.050,272.000000),(8,10,128.950,143.971631),(8,11,141.500,187.000000),(8,12,30.000,124.000000),
+(8,13,33.000,602.000000),(8,14,150.000,222.000000),(8,15,9.400,287.000000),(8,16,1.600,262.000000),
+(8,17,5.000,575.000000),(8,18,3.000,465.000000),(8,19,5.500,446.000000),(8,20,85.000,379.000000),
+(8,21,1.800,232.000000),(8,22,21.300,236.000000),(8,23,10.900,173.000000),(8,24,0.500,206.000000),
+(8,25,6.000,321.000000),(8,26,3.000,560.000000),(8,27,2.500,236.000000),(8,28,2.400,226.000000),
+(8,29,197.000,85.689737),(8,30,176.500,63.466667),(8,31,111.500,146.315789),(8,32,59.700,317.480315),
+(8,33,119.500,269.473684),(8,34,67.500,248.888889),(8,35,140.980,63.810470),(8,36,18.650,1397.319035),
+(8,37,14.500,362.068966),(8,38,139.500,51.433692),(8,39,2.500,920.000000),(8,40,0.000,699.954545),
+(8,41,71.750,216.000000),(8,42,126.550,45.165685),(8,43,159.500,230.000000),(8,44,50.000,307.000000),
+(8,45,74.300,169.000000),(7,46,50.000,171.000000),(8,46,18.250,280.000000),(8,47,91.300,58.600201),
+(8,48,54.700,176.000000),(8,49,118.200,53.518212),(7,50,60.000,121.000000),(8,50,35.250,141.166667),
+(8,51,158.200,47.110619),(8,52,95.500,139.560209),(8,53,21.500,272.000000),(8,54,42.750,129.438596),
+(8,55,5.000,125.000000),(8,56,156.500,64.408946),(8,57,20.000,180.000000),(8,58,38.900,206.000000),
+(8,59,11.500,278.000000),(8,60,11.300,265.000000),(8,61,11.950,185.000000),(8,62,10.500,145.000000),
+(8,63,11.400,148.000000),(8,64,17.000,195.000000),(8,65,15.900,125.000000),(8,66,61.000,125.000000),
+(8,67,14.400,264.000000),(8,68,20.300,304.000000),(8,69,39.500,121.139241),(8,70,11.000,0.000000),
+(8,71,43.500,308.000000),(8,72,5.750,248.739130),(8,73,0.600,824.050000),(8,74,0.500,523.480000),
+(8,75,0.350,1031.428571),(8,76,3.220,847.090909),(8,77,0.600,449.250000),(8,78,5.250,1159.000000),
+(8,79,0.250,657.400000),(8,80,0.600,494.433333),(8,81,2.600,821.038462),(8,82,3.700,897.181081),
+(8,83,1.500,773.960000),(8,84,2.950,963.000000),(8,85,2.100,808.523810),(8,86,0.400,860.000000),
+(8,87,0.450,1218.000000),(8,88,1.800,520.480000),(8,89,4.950,1313.000000),(8,90,0.850,600.000000),
+(8,91,0.850,626.000000),(8,92,0.220,4123.000000),(8,93,0.200,372.200000),(8,94,0.090,729.000000),
+(8,95,0.300,504.433333),(8,96,0.650,437.615385),(8,97,1.700,479.617647),(8,98,0.100,647.700000),
+(8,99,0.400,660.725000),(8,100,1.800,581.572222),(8,101,1.100,1280.581818),(8,102,0.550,0.000000),
+(8,103,0.310,0.000000),(8,104,0.850,451.329412),(8,105,0.000,0.000000),(8,106,47.500,503.072211),
+(8,107,73.750,628.962712),(8,108,72.750,525.773196),(8,109,8.650,229.764162),(8,110,5.250,356.923810),
+(8,111,3.500,745.880000),(8,112,8.800,586.579545),(8,113,5.300,703.800000),(8,114,10.000,273.000000),
+(8,115,79.000,173.400000),(8,116,60.000,416.875000),(8,117,7.000,537.000000),(7,118,120.000,150.000000),
+(8,118,110.000,150.000000),(8,119,36.400,111.274451),(8,120,134.200,638.208633),(7,121,120.000,150.000000),
+(8,121,45.000,150.000000),(8,122,100.000,150.000000),(8,123,183.600,177.000000),(8,124,68.000,314.000000),
+(8,125,70.640,652.611628),(7,126,5.000,1564.000000),(8,126,5.850,1564.000000),(8,127,1.500,672.000000),
+(8,128,1.300,930.000000),(8,129,1.800,589.000000),(8,130,1.800,1650.000000),(8,131,2.200,904.000000),
+(8,132,2.000,841.000000),(8,133,0.500,332.000000),(8,134,4.500,620.000000),(8,135,4.800,683.000000),
+(8,136,4.800,662.000000),(8,137,4.900,494.000000),(8,138,3.500,504.000000),(8,139,44.400,646.875000),
+(8,140,2.700,623.000000),(8,141,0.800,436.000000),(8,142,53.500,691.000000),(8,143,6.200,295.000000),
+(8,144,6.000,494.000000),(8,145,6.500,40.000000),(8,146,3.800,523.000000),(8,147,15.800,18.227848),
+(8,148,2.500,479.000000),(8,149,2.500,323.000000),(8,150,0.900,0.000000),(8,151,0.800,585.000000),
+(8,152,48.000,348.000000),(8,153,1.800,0.000000),(8,154,3.800,364.000000),(8,155,2.800,0.000000),
+(8,156,6.900,475.000000),(8,157,7.300,377.000000),(8,158,3.570,3746.296919),(8,159,2.600,0.000000),
+(8,160,1.500,0.000000),(8,161,1.000,0.000000),(8,162,2.000,456.000000),(8,163,1.000,0.000000),
+(8,164,0.900,0.000000),(8,165,0.250,587.000000),(8,166,0.350,469.000000),(8,167,35.500,484.859155),
+(8,168,16.500,233.181818),(8,169,3.500,536.000000),(8,170,21.000,244.000000),(7,171,30.000,184.000000),
+(8,171,22.200,184.000000),(8,172,77.000,381.000000),(8,173,68.000,811.000000),(8,174,3.000,436.000000),
+(8,175,0.700,700.000000),(8,176,0.350,0.000000),(8,177,0.600,234.000000),(8,178,140.700,192.013289),
+(8,179,0.300,510.000000),(8,180,10.000,602.000000),(8,181,1.400,0.000000),(8,182,193.250,711.000000),
+(8,183,11.500,504.000000),(8,184,4.200,1098.000000),(8,185,3.500,753.000000),(8,186,4.700,1323.000000),
+(8,187,5.700,1319.000000),(8,188,1.500,777.000000),(8,189,4.500,437.000000),(8,190,11.050,493.000000),
+(8,191,3.000,383.000000),(7,192,30.000,276.000000),(8,192,7.800,276.000000),(8,193,5.000,550.000000),
+(8,194,0.400,1422.000000),(8,195,0.800,12711.000000),(8,196,0.690,1469.000000),(8,197,0.500,5654.000000),
+(8,198,0.650,1418.000000),(8,199,0.700,946.000000),(8,200,0.100,0.000000),(8,201,0.750,0.000000),
+(8,202,0.500,0.000000),(8,203,0.230,0.000000),(8,204,0.400,0.000000),(8,205,0.250,0.000000),
+(8,206,0.500,0.000000),(8,207,1.000,1699.000000),(8,208,1.000,2034.000000),(8,209,532.500,87.337058),
+(8,210,6.000,379.000000),(7,211,2139.000,71.187239),(8,213,12.000,131.160000),(8,214,2.000,665.370000),
+(8,215,10.000,407.150000),(8,216,5.300,603.000000),(8,217,3.600,794.000000),(8,218,3.515,499.500000),
+(8,219,2.200,371.000000),(8,220,1.000,364.000000),(8,221,1.000,710.000000),(8,222,1.000,507.000000),
+(8,223,1.000,725.000000),(8,224,1.000,518.000000),(8,225,1.000,497.000000),(7,226,120.000,199.000000),
+(8,226,102.000,199.000000),(7,227,120.000,150.000000),(8,227,115.000,150.000000),(8,228,5.000,261.000000),
+(8,229,5.000,960.000000),(8,230,500.000,105.250000),(8,231,6.200,864.214839),(8,232,2.000,1035.000000),
+(8,233,20.000,10.000000),(8,234,10.000,148.000000),(8,235,0.400,195.000000),(8,236,0.220,602.000000),
+(8,237,0.000,504.000000),(8,249,1.000,0.000000);
+
+-- 2) Remove any previous run of this correction so it is idempotent.
+DELETE FROM stock_ledger WHERE reference_type='stock_correction' AND reference_no='SC-069';
+
+-- 3) Current ledger balance per (warehouse, material) = latest row's balance_qty.
+DROP TEMPORARY TABLE IF EXISTS _cur_bal;
+CREATE TEMPORARY TABLE _cur_bal AS
+SELECT sl.warehouse_id, sl.material_id, sl.balance_qty AS cur_qty, sl.uom
+FROM stock_ledger sl
+JOIN (SELECT warehouse_id, material_id, MAX(transaction_date) md
+        FROM stock_ledger GROUP BY warehouse_id, material_id) d
+  ON d.warehouse_id=sl.warehouse_id AND d.material_id=sl.material_id AND d.md=sl.transaction_date
+JOIN (SELECT warehouse_id, material_id, transaction_date, MAX(id) mid
+        FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date) i
+  ON i.warehouse_id=sl.warehouse_id AND i.material_id=sl.material_id
+ AND i.transaction_date=sl.transaction_date AND i.mid=sl.id;
+
+-- 4) Insert ONE Stock Adjustment row per item for (target - current), only where
+--    the difference is material (> 0.0005) and the (warehouse, material) is valid.
+--    Positive diff → in_qty; negative diff → out_qty. unit_cost = target avg_rate.
+INSERT INTO stock_ledger
+  (transaction_date, transaction_type, reference_type, reference_id, reference_no,
+   warehouse_id, material_id, uom, in_qty, in_value, out_qty, out_value,
+   unit_cost, amount, opening_qty, opening_value, balance_qty, balance_value, remarks, created_by)
+SELECT
+  CURDATE(), 'Stock Adjustment', 'stock_correction', 0, 'SC-069',
+  t.warehouse_id, t.material_id, cb.uom,
+  CASE WHEN (t.target_qty - COALESCE(cb.cur_qty,0)) > 0 THEN (t.target_qty - COALESCE(cb.cur_qty,0)) ELSE 0 END,
+  CASE WHEN (t.target_qty - COALESCE(cb.cur_qty,0)) > 0 THEN ROUND((t.target_qty - COALESCE(cb.cur_qty,0)) * t.avg_rate, 2) ELSE 0 END,
+  CASE WHEN (t.target_qty - COALESCE(cb.cur_qty,0)) < 0 THEN ABS(t.target_qty - COALESCE(cb.cur_qty,0)) ELSE 0 END,
+  CASE WHEN (t.target_qty - COALESCE(cb.cur_qty,0)) < 0 THEN ROUND(ABS(t.target_qty - COALESCE(cb.cur_qty,0)) * t.avg_rate, 2) ELSE 0 END,
+  t.avg_rate, ROUND(ABS(t.target_qty - COALESCE(cb.cur_qty,0)) * t.avg_rate, 2),
+  0, 0, 0, 0,
+  'Live-stock correction to material_transactions balance (SC-069)', NULL
+FROM _live_stock_target t
+LEFT JOIN _cur_bal cb ON cb.warehouse_id=t.warehouse_id AND cb.material_id=t.material_id
+JOIN warehouses w ON w.id = t.warehouse_id
+WHERE ABS(t.target_qty - COALESCE(cb.cur_qty,0)) > 0.0005;
+
+DROP TEMPORARY TABLE IF EXISTS _live_stock_target;
+DROP TEMPORARY TABLE IF EXISTS _cur_bal;

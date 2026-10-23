@@ -86,7 +86,9 @@ async function insertOutboundItems(conn, id, data, items, userId) {
     const qty = itemQty(item);
     if (qty <= 0) throw new Error('Outbound quantity must be greater than zero.');
     const [[stock]] = await conn.query(
-      'SELECT current_qty FROM warehouse_stock WHERE warehouse_id = ? AND material_id = ? FOR UPDATE',
+      `SELECT balance_qty AS current_qty FROM stock_ledger
+        WHERE warehouse_id = ? AND material_id = ?
+        ORDER BY transaction_date DESC, id DESC LIMIT 1`,
       [data.from_warehouse_id, item.material_id]
     );
     const available = asNumber(stock?.current_qty);

@@ -1,6 +1,5 @@
 import pool from '../config/db.js';
 import { addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
-import { replaceReferenceTransactions, recalculateMaterialTransactions } from './materialTransactionModel.js';
 
 const ALLOWED_SORT = ['id', 'entry_no', 'entry_date', 'stock_date', 'status', 'total_items', 'created_at'];
 
@@ -21,11 +20,6 @@ async function postAdjustmentToLedger(conn, entryId, entry, items, createdBy) {
   const txnDate = entry.stock_date || entry.entry_date || new Date().toISOString().split('T')[0];
   const affected = new Map();
   for (const p of prev) affected.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
-
-  // Rows for the material_transactions system (System B — what the material
-  // issue "available stock" is calculated from). Positive add → receipt_qty,
-  // negative → issue_qty.
-  const mtRows = [];
 
   for (const item of items) {
     const materialId = item.material_id || null;
@@ -60,45 +54,20 @@ async function postAdjustmentToLedger(conn, entryId, entry, items, createdBy) {
       created_by: createdBy,
     });
 
-    mtRows.push({
-      transaction_date: txnDate,
-      transaction_type: 'Stock Adjustment',
-      reference_no: entry.entry_no || null,
-      warehouse_id: warehouseId,
-      item_id: materialId,
-      batch_no: item.batch_no || null,
-      receipt_qty: inQty,
-      opening_stock: null,
-      opening_value: null,
-      receipt_value: inQty > 0 ? amount : 0,
-      issue_qty: outQty,
-      issue_value: outQty > 0 ? amount : 0,
-    });
-
     affected.set(`${warehouseId}:${materialId}`, { w: warehouseId, m: materialId });
   }
 
-  // System B: mirror the adjustment into material_transactions so the material
-  // issue "available stock" reflects it. replaceReferenceTransactions also
-  // recalculates balances for the affected items.
-  await replaceReferenceTransactions(conn, 'physical_stock', entryId, mtRows);
-
-  // Rebuild date-ordered valuation + warehouse_stock for every touched pair.
+  // Rebuild date-ordered valuation from the stock ledger for every touched pair.
   for (const p of affected.values()) {
     await rebuildAndReprice(conn, p.w, p.m);
   }
 }
 
-// Remove the material_transactions rows written for a physical stock entry and
-// recalculate balances. Mirrors the stock_ledger reversal on delete/un-post.
-async function removeAdjustmentTransactions(conn, entryId) {
-  const [old] = await conn.query(
-    'SELECT DISTINCT warehouse_id, item_id FROM material_transactions WHERE reference_type=? AND reference_id=?',
-    ['physical_stock', entryId]
-  );
-  if (!old.length) return;
-  await conn.query('DELETE FROM material_transactions WHERE reference_type=? AND reference_id=?', ['physical_stock', entryId]);
-  for (const r of old) await recalculateMaterialTransactions(conn, r.warehouse_id, r.item_id);
+// No-op: stock_ledger is the single source of truth. The delete/un-post paths
+// already remove this entry's stock_ledger rows and call rebuildAndReprice, so
+// there is nothing else to reverse. Kept for backward-compatible call sites.
+async function removeAdjustmentTransactions() {
+  // Intentionally empty — material_transactions no longer exists.
 }
 
 export async function getAll({ search, entry_no, warehouse_id, status, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
