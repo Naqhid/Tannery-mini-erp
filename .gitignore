@@ -10,3 +10,7 @@ tannery_mini_erp_*.sql
 
 # Local Downloads scratch folder (not part of the project)
 Downloads/
+
+# Local scratch SQL diagnostics
+_diag*.sql
+_diag*.txt

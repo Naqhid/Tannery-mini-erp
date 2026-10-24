@@ -511,27 +511,27 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
        od.delivery_challan_no,
        m.code AS material_code, m.name AS material_name,
        sl.uom,
-       -- Opening/closing are the RUNNING balance carried across every
-       -- transaction (date-ordered), not a single row's net. balance_qty is
-       -- the running balance AFTER this transaction; opening is that balance
-       -- minus this transaction's own movement.
-       -- For the FIRST transaction of a material (no earlier ledger entry for
-       -- the same material/warehouse) fall back to the material master's
-       -- opening_stock so the ledger starts from the master opening balance.
-       CASE
-         WHEN NOT EXISTS (
-           SELECT 1 FROM stock_ledger sl0
-           WHERE sl0.material_id = sl.material_id
-             AND (sl.warehouse_id IS NULL OR sl0.warehouse_id = sl.warehouse_id)
-             AND (sl0.transaction_date < sl.transaction_date
-                  OR (sl0.transaction_date = sl.transaction_date AND sl0.id < sl.id))
-         )
-         THEN COALESCE(m.opening_stock, 0)
-         ELSE (sl.balance_qty - (sl.in_qty - sl.out_qty))
-       END AS opening_qty,
-       CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END AS receipt_qty,
-       CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END AS issue_qty,
-       CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END AS transfer_qty,
+       -- stock_ledger is the single source of truth: opening_qty and balance_qty
+       -- are the STORED running balances (before / after this row), maintained
+       -- per (warehouse, material) by the date-ordered rebuild. Read them
+       -- directly — do NOT recompute or fall back to the master (that caused a
+       -- wrong opening on Transfer In rows).
+       sl.opening_qty AS opening_qty,
+       -- A receipt and a Transfer IN both add stock; a Stock Adjustment can add
+       -- (in_qty) or remove (out_qty). Map each movement to the right column so
+       -- the row reads correctly regardless of which warehouse it belongs to.
+       -- Transfer IN (stock arriving at the destination warehouse) is shown as
+       -- a RECEIPT for that warehouse. Only Transfer OUT (leaving the source
+       -- warehouse) is shown in the Transfer Qty column.
+       CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty
+            WHEN sl.transaction_type = 'Transfer In' THEN sl.in_qty
+            WHEN sl.transaction_type = 'Stock Adjustment' AND sl.in_qty > 0 THEN sl.in_qty
+            ELSE 0 END AS receipt_qty,
+       CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty
+            WHEN sl.transaction_type = 'Stock Adjustment' AND sl.out_qty > 0 THEN sl.out_qty
+            ELSE 0 END AS issue_qty,
+       CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty
+            ELSE 0 END AS transfer_qty,
        CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END AS outbound_qty,
        sl.balance_qty AS closing_qty,
        sl.unit_cost AS rate, sl.amount,
@@ -545,8 +545,11 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${baseFrom}`, params);
   const [[totals]] = await pool.query(
     `SELECT 
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END),0) AS total_receipt,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END),0) AS total_issue,
+       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty
+                         WHEN sl.transaction_type = 'Transfer In' THEN sl.in_qty
+                         WHEN sl.transaction_type = 'Stock Adjustment' AND sl.in_qty > 0 THEN sl.in_qty ELSE 0 END),0) AS total_receipt,
+       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty
+                         WHEN sl.transaction_type = 'Stock Adjustment' AND sl.out_qty > 0 THEN sl.out_qty ELSE 0 END),0) AS total_issue,
        COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END),0) AS total_transfer,
        COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END),0) AS total_outbound,
        COALESCE(SUM(sl.amount),0) AS total_amount ${baseFrom}`, params
@@ -556,17 +559,7 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
   // range; Closing = running balance AFTER the latest. Summing running balances
   // would be meaningless, so take the boundary rows (date, then id order).
   const [[firstRow]] = await pool.query(
-    `SELECT CASE
-         WHEN NOT EXISTS (
-           SELECT 1 FROM stock_ledger sl0
-           WHERE sl0.material_id = sl.material_id
-             AND (sl.warehouse_id IS NULL OR sl0.warehouse_id = sl.warehouse_id)
-             AND (sl0.transaction_date < sl.transaction_date
-                  OR (sl0.transaction_date = sl.transaction_date AND sl0.id < sl.id))
-         )
-         THEN COALESCE(m.opening_stock, 0)
-         ELSE (sl.balance_qty - (sl.in_qty - sl.out_qty))
-       END AS opening_qty
+    `SELECT sl.opening_qty AS opening_qty
      ${baseFrom}
      ORDER BY sl.transaction_date ASC, sl.id ASC LIMIT 1`, params
   );

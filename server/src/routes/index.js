@@ -54,6 +54,7 @@ import productionStatusRoutes from './productionStatusRoutes.js';
 import costingReportRoutes from './costingReportRoutes.js';
 import reportsRoutes from './reportsRoutes.js';
 import materialRequirementRoutes from './materialRequirementRoutes.js';
+import materialTransferNoteRoutes from './materialTransferNoteRoutes.js';
 
 const router = Router();
 
@@ -154,6 +155,9 @@ router.use('/reports', reportsRoutes);
 
 // Material Requirement (Sale Order → BOM requirement calculation)
 router.use('/material-requirement', materialRequirementRoutes);
+
+// Material Transfer Note (Production Plan → BOM norms × planned qty)
+router.use('/material-transfer-notes', materialTransferNoteRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);
