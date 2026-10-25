@@ -26,6 +26,7 @@ export default function OpenSalesOrderReport({ embedded }: { embedded?: boolean 
     { key: 'delivery_date', header: 'Delivery', render: r => fmtDate(r.delivery_date) },
     { key: 'customer_name', header: 'Customer' },
     { key: 'article', header: 'Article' },
+    { key: 'uom', header: 'UOM', render: r => r.uom || '—' },
     { key: 'order_qty', header: 'Order Qty', align: 'right', render: r => fmtQty(r.order_qty) },
     { key: 'completed_qty', header: 'Completed', align: 'right', render: r => fmtQty(r.completed_qty) },
     { key: 'balance_qty', header: 'Balance', align: 'right', render: r => <span className="font-semibold text-amber-700">{fmtQty(r.balance_qty)}</span> },

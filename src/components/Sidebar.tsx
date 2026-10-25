@@ -96,8 +96,8 @@ export const menuItems: MenuItem[] = [
   },
   { label: 'Inventory', icon: <Package size={20} />, children: [
       { label: 'Material Receipt Entry', icon: <Truck size={16} />, path: '/material-receipt' },
-      { label: 'Material Transfer Note', icon: <ArrowLeftRight size={16} />, path: '/material-transfer-note' },
       { label: 'Material Issue to Production', icon: <Factory size={16} />, path: '/material-issue' },
+      { label: 'Material Transfer Note', icon: <ArrowLeftRight size={16} />, path: '/material-transfer-note' },
       { label: 'Stock Transfer Entry', icon: <ArrowLeftRight size={16} />, path: '/stock-transfer' },
       { label: 'Outbound Delivery', icon: <Package size={16} />, path: '/outbound-delivery' },
       { label: 'Monthly Batch Process', icon: <ClipboardList size={16} />, path: '/monthly-batch-process' },

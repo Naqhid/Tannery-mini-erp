@@ -25,10 +25,10 @@ export default function SalesOrderProductionTracking({ embedded }: { embedded?: 
     { key: 'customer_name', header: 'Customer' },
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },
-    { key: 'uom', header: 'UOM' },
-    { key: 'order_qty', header: 'Order Qty', align: 'right', render: r => fmtQty(r.order_qty) },
+    // Production output is tracked in pieces, so the UOM is always Pieces here.
+    { key: 'uom', header: 'UOM', render: () => 'Pieces' },
     { key: 'plan_qty', header: 'Plan Qty', align: 'right', render: r => fmtQty(r.plan_qty) },
-    { key: 'output_qty', header: 'Output', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.output_qty)}</span> },
+    { key: 'output_qty', header: 'Output (Pieces)', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.output_qty)}</span> },
     { key: 'wip_qty', header: 'WIP', align: 'right', render: r => fmtQty(r.wip_qty) },
     { key: 'order_balance', header: 'Order Balance', align: 'right', render: r => <span className="text-amber-700 font-semibold">{fmtQty(r.order_balance)}</span> },
     { key: 'status', header: 'Status', render: r => <StatusBadge status={r.status} /> },
