@@ -511,11 +511,18 @@ async function buildDetailFromSeed(seed) {
   // basis is the completed qty of the stage(s) measured in Square Feet (the
   // Measurement stage). If measurement has produced 0 Sq.Ft. yet, there is no
   // valid sqft basis, so Cost/Sqft must be 0 (not derived from a piece count).
-  const isSqftUom = (u) => /sq\.?\s*ft|square\s*feet|sqft/i.test(String(u || ''));
-  const measurementSqft = stages.reduce(
+  const isSqftUom = (u) => /sq\.?\s*ft|square\s*feet|sft|sqft/i.test(String(u || ''));
+  const measurementSqftFromStages = stages.reduce(
     (m, r) => isSqftUom(r.uom) ? m + (Number(r.completed_qty) || 0) : m,
     0
   );
+  // Fall back to the order's finished (measurement-stage) completed qty when no
+  // stage UOM is explicitly tagged as Sq.Ft. Otherwise Cost/Sqft would stay 0
+  // for plans whose stage UOM isn't literally "Sq.Ft." even though finished
+  // output exists.
+  const measurementSqft = measurementSqftFromStages > 0
+    ? measurementSqftFromStages
+    : (Number(completedQty) || 0);
 
   // Material Issues link by plan_no + process_stage. We aggregate across ALL
   // sibling plan numbers so material issued under any plan of this sales order
