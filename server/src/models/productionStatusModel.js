@@ -98,10 +98,19 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
     LIMIT 1
   )`;
 
+  // Latest Daily Production transaction date for this order (used by the
+  // Transaction tab's "Transaction Date" column).
+  const transactionDateSql = `(
+    SELECT MAX(t.production_date)
+    FROM production_status_transactions t
+    WHERE t.production_status_order_id = o.id AND t.deleted_at IS NULL
+  )`;
+
   const [rows] = await pool.query(
     `SELECT o.*, ${measurementCompletedSql} AS completed_qty,
        ${stageRejectionSql} AS rejection_qty,
        ${saleOrderNoSql} AS sale_order_no,
+       ${transactionDateSql} AS transaction_date,
        (COALESCE(o.issued_qty,0) - ${measurementCompletedSql} - ${stageRejectionSql}) AS balance_qty
        FROM production_status_orders o
        WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,

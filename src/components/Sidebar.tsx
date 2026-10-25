@@ -107,7 +107,6 @@ export const menuItems: MenuItem[] = [
   },
   { label: 'Production', icon: <Factory size={20} />, children: [
       { label: 'Production Plan', icon: <ClipboardList size={16} />, path: '/production-plan' },
-      { label: 'Batch Creation', icon: <ListChecks size={16} />, path: '/production-plan/new' },
       { label: 'Material Requisition Note', icon: <Layers size={16} />, path: '/batch-process' },
       { label: 'Daily Production', icon: <ClipboardList size={16} />, path: '/production-status' },
       { label: 'Process Stage', icon: <ListChecks size={16} />, path: '/process-stage' },

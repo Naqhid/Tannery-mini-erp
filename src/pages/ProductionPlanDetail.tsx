@@ -195,6 +195,26 @@ export default function ProductionPlanDetail() {
 
   useEffect(() => { fetchDropdowns(); fetchPlan(); }, [fetchDropdowns, fetchPlan]);
 
+  // For a NEW plan, seed the first stage row automatically from the master
+  // process-stage sequence once the stages have loaded, so the Process Stage is
+  // prefilled (row 1 → first stage) and never needs to be picked by the user.
+  useEffect(() => {
+    if (!isNew || processStages.length === 0) return;
+    setStages((prev) => {
+      if (prev.length > 0) return prev;
+      const ps = processStages[0];
+      return [{
+        _key: genKey(),
+        seq: Number.isFinite(Number(ps.seq)) ? Number(ps.seq) : 1,
+        stage_id: String(ps.id),
+        stage_name: ps.name || '',
+        uom: ps.uom || '',
+        planned_qty: '0', issue_input_qty: '0', output_qty: '0',
+        rejection_qty: '0', wip_qty: 0, status: 'Pending',
+      }];
+    });
+  }, [isNew, processStages]);
+
   const update = (key: string, value: any) => setPlan((p) => ({ ...p, [key]: value }));
 
   // Derived calculations
@@ -233,12 +253,28 @@ export default function ProductionPlanDetail() {
     }
   };
 
+  // The process stage for a given row position is the master process stage at
+  // that index (stages are already sorted by sequence). Returns null when the
+  // master list has no stage for that position.
+  const stageForPosition = useCallback((index: number): ProcessStage | null => {
+    return processStages[index] || null;
+  }, [processStages]);
+
   const addStage = () => {
-    setStages((prev) => [...prev, {
-      _key: genKey(), seq: prev.length + 1, stage_id: '', stage_name: '',
-      uom: '', planned_qty: '0', issue_input_qty: '0', output_qty: '0',
-      rejection_qty: '0', wip_qty: 0, status: 'Pending',
-    }]);
+    setStages((prev) => {
+      const ps = stageForPosition(prev.length);
+      return [...prev, {
+        _key: genKey(),
+        // Stage is prefilled from the master sequence for this row position —
+        // the user no longer picks it from a dropdown.
+        seq: ps && Number.isFinite(Number(ps.seq)) ? Number(ps.seq) : prev.length + 1,
+        stage_id: ps ? String(ps.id) : '',
+        stage_name: ps?.name || '',
+        uom: ps?.uom || '',
+        planned_qty: '0', issue_input_qty: '0', output_qty: '0',
+        rejection_qty: '0', wip_qty: 0, status: 'Pending',
+      }];
+    });
   };
 
   const updateStage = (key: string, field: string, value: any) => {
@@ -655,31 +691,11 @@ export default function ProductionPlanDetail() {
                 <tr key={stage._key} className="hover:bg-blue-50/30 transition-all">
                   <td className="py-3 px-3 text-center text-xs text-gray-500 font-bold">{idx + 1}</td>
                   <td className="py-3 px-3">
-                    {(() => {
-                      // Only offer stages that are valid at this point in the
-                      // sequence: a stage is selectable when every earlier-seq
-                      // master stage is already chosen. The currently selected
-                      // stage and already-chosen stages stay listed.
-                      const seqNum = (v: any) => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== '' ? n : Number.MAX_SAFE_INTEGER; };
-                      const chosenIds = new Set(stages.filter((s) => s._key !== stage._key && s.stage_id).map((s) => String(s.stage_id)));
-                      const options = processStages.filter((ps) => {
-                        if (String(ps.id) === String(stage.stage_id)) return true; // keep current
-                        if (chosenIds.has(String(ps.id))) return false;            // already used elsewhere
-                        const targetSeq = seqNum(ps.seq);
-                        // selectable only if no earlier-seq stage is still unchosen
-                        return !processStages.some((p) => seqNum(p.seq) < targetSeq && !chosenIds.has(String(p.id)));
-                      });
-                      return (
-                        <select
-                          value={stage.stage_id}
-                          onChange={(e) => updateStage(stage._key, 'stage_id', e.target.value)}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white min-w-[160px] text-blue-700 font-medium"
-                        >
-                          <option value="">Select stage</option>
-                          {options.map((ps) => <option key={ps.id} value={String(ps.id)}>{ps.name}</option>)}
-                        </select>
-                      );
-                    })()}
+                    {/* Process stage is prefilled from the master sequence for
+                        this row position — shown read-only, no dropdown. */}
+                    <div className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[160px] text-blue-700 font-medium min-h-[32px] flex items-center">
+                      {stage.stage_name || <span className="text-gray-400 font-normal italic">No stage for this sequence</span>}
+                    </div>
                   </td>
                   <td className="py-3 px-3 text-center text-xs text-gray-600 font-medium">{stage.uom || '—'}</td>
                   <td className="py-3 px-3">
