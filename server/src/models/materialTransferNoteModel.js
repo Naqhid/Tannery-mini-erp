@@ -9,10 +9,18 @@ import pool from '../config/db.js';
 const ALLOWED_SORT = ['plan_no', 'plan_date', 'planned_qty', 'status'];
 
 // Aggregate the plan's process-stage names (ordered by sequence) for display.
+// Both name sources are coerced to a common collation so a row with an empty
+// stage_name (falling back to process_stages.name) never triggers an
+// "Illegal mix of collations" error.
+const STAGE_NAME_EXPR = `COALESCE(
+  NULLIF(TRIM(CONVERT(pps.stage_name USING utf8mb4)) COLLATE utf8mb4_unicode_ci, ''),
+  CONVERT(ps.name USING utf8mb4) COLLATE utf8mb4_unicode_ci
+)`;
+
 const STAGE_NAMES_SQL = `
   COALESCE((
     SELECT GROUP_CONCAT(
-      COALESCE(NULLIF(TRIM(pps.stage_name), ''), ps.name)
+      ${STAGE_NAME_EXPR}
       ORDER BY pps.seq ASC, pps.id ASC SEPARATOR ', '
     )
     FROM production_plan_stages pps
@@ -50,7 +58,10 @@ export async function listPlans({ search, status, stage, page = 1, limit = 10, s
       SELECT 1 FROM production_plan_stages pps2
       LEFT JOIN process_stages ps2 ON pps2.stage_id = ps2.id
       WHERE pps2.plan_id = pp.id
-        AND COALESCE(NULLIF(TRIM(pps2.stage_name), ''), ps2.name) = ?
+        AND COALESCE(
+          NULLIF(TRIM(CONVERT(pps2.stage_name USING utf8mb4)) COLLATE utf8mb4_unicode_ci, ''),
+          CONVERT(ps2.name USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        ) = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
     )`;
     params.push(stage);
   }
@@ -114,14 +125,19 @@ export async function listPlans({ search, status, stage, page = 1, limit = 10, s
 }
 
 // Distinct process-stage names used by active plans — powers the Stage filter.
+// stage_name and process_stages.name can carry different collations, so both
+// are coerced to utf8mb4_unicode_ci before comparison to avoid the
+// "Illegal mix of collations" error.
 export async function getStageOptions() {
   const [rows] = await pool.query(
-    `SELECT DISTINCT COALESCE(NULLIF(TRIM(pps.stage_name), ''), ps.name) AS stage
+    `SELECT DISTINCT COALESCE(
+        NULLIF(TRIM(CONVERT(pps.stage_name USING utf8mb4)) COLLATE utf8mb4_unicode_ci, ''),
+        CONVERT(ps.name USING utf8mb4) COLLATE utf8mb4_unicode_ci
+      ) AS stage
      FROM production_plan_stages pps
      LEFT JOIN process_stages ps ON pps.stage_id = ps.id
      JOIN production_plans pp ON pps.plan_id = pp.id AND pp.deleted_at IS NULL
-     WHERE COALESCE(NULLIF(TRIM(pps.stage_name), ''), ps.name) IS NOT NULL
-       AND COALESCE(NULLIF(TRIM(pps.stage_name), ''), ps.name) <> ''
+     HAVING stage IS NOT NULL AND stage <> ''
      ORDER BY stage`
   );
   return rows.map((r) => r.stage);

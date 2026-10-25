@@ -157,11 +157,15 @@ async function getHighestWipStages() {
 async function getKpiCounts() {
   const [[row]] = await pool.query(
     `SELECT
-       (SELECT COUNT(*) FROM sales_orders
-         WHERE status NOT IN ('Shipped', 'Delivered', 'Cancelled')) AS sales_orders_not_shipped,
-       -- "Open orders in process" is driven by the production plan: plans that
-       -- are still open (not completed/cancelled) are the ones in process.
-       (SELECT COUNT(*) FROM production_plans
+       -- Total ordered quantity (not the number of orders) across sales orders
+       -- that are not yet shipped/delivered/cancelled.
+       (SELECT COALESCE(SUM(soi.quantity), 0)
+          FROM sales_orders so
+          JOIN sales_order_items soi ON soi.sales_order_id = so.id
+         WHERE so.status NOT IN ('Shipped', 'Delivered', 'Cancelled')) AS sales_orders_not_shipped,
+       -- "Open orders in process" — total planned quantity (not the number of
+       -- plans) across production plans that are still open.
+       (SELECT COALESCE(SUM(COALESCE(planned_qty, order_qty, 0)), 0) FROM production_plans
          WHERE deleted_at IS NULL
            AND COALESCE(status, '') NOT IN ('Completed', 'Cancelled', 'Canceled')) AS open_orders,
        (SELECT COUNT(*) FROM customers WHERE status = 'Active') AS customers_total,
@@ -183,16 +187,35 @@ async function getKpiCounts() {
 async function getSalesOrderTrend() {
   const [rows] = await pool.query(
     `SELECT DATE_FORMAT(so.order_date, '%Y-%m') AS ym,
-       DATE_FORMAT(so.order_date, '%b %Y') AS label,
        COALESCE(SUM(soi.quantity), 0) AS value,
        COUNT(DISTINCT so.id) AS order_count
      FROM sales_orders so
      LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
      WHERE so.order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01')
-     GROUP BY DATE_FORMAT(so.order_date, '%Y-%m'), DATE_FORMAT(so.order_date, '%b %Y')
+     GROUP BY DATE_FORMAT(so.order_date, '%Y-%m')
      ORDER BY DATE_FORMAT(so.order_date, '%Y-%m') ASC`
   );
-  return rows.map(r => ({ label: r.label, value: Number(r.value) || 0, orderCount: Number(r.order_count) || 0 }));
+
+  // Build a continuous 6-month window (oldest → current) so the chart always
+  // spans the full range. Months without any orders are shown as 0 instead of
+  // being dropped, which previously collapsed the line to just a couple of
+  // points when only recent months had orders.
+  const byMonth = new Map(rows.map((r) => [r.ym, r]));
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const out = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    const hit = byMonth.get(ym);
+    out.push({
+      label,
+      value: hit ? Number(hit.value) || 0 : 0,
+      orderCount: hit ? Number(hit.order_count) || 0 : 0,
+    });
+  }
+  return out;
 }
 
 // ─── Inventory value by material type (live valuation) ───────────────────────

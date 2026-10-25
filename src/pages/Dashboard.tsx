@@ -145,7 +145,7 @@ export default function Dashboard() {
       {/* Charts row: Sales trend · Inventory value · Top products */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
         <Card className="xl:col-span-1" title="Sales Order Quantity" subtitle="Total quantity · last 6 months">
-          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtQty} color="#4f46e5" showValueLabels />
+          <LineChart data={salesTrend.map((p) => ({ label: p.label.split(' ')[0], value: p.value }))} formatValue={fmtQty} color="#4f46e5" showValueLabels xLabelProminent />
         </Card>
 
         <Card title="Inventory Value" subtitle="Live stock valuation by type"

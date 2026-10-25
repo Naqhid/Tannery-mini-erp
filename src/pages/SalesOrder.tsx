@@ -45,7 +45,6 @@ export default function SalesOrder() {
     { label: 'Confirmed', value: stats.confirmed, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200', iconColor: 'from-emerald-500 to-green-600' },
     { label: 'Processing', value: stats.processing, color: 'text-blue-900', bg: 'bg-blue-50 border-blue-200', iconColor: 'from-blue-500 to-indigo-600' },
     { label: 'Shipped', value: stats.shipped, color: 'text-violet-900', bg: 'bg-violet-50 border-violet-200', iconColor: 'from-violet-500 to-purple-600' },
-    { label: 'Delivered', value: stats.delivered, color: 'text-purple-900', bg: 'bg-purple-50 border-purple-200', iconColor: 'from-purple-500 to-violet-600' },
   ];
 
   const filterOptions = [

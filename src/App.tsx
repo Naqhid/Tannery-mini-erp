@@ -71,6 +71,7 @@ import OutboundDeliveryDetail from './pages/OutboundDeliveryDetail';
 import MaterialIssueToBatch from './pages/MaterialIssueToBatch';
 import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
 import MaterialTransferNote from './pages/MaterialTransferNote';
+import MaterialTransferNoteDetail from './pages/MaterialTransferNoteDetail';
 // Production Plan Pages
 import ProductionPlan from './pages/ProductionPlan';
 import ProductionPlanDetail from './pages/ProductionPlanDetail';
@@ -243,6 +244,7 @@ function App() {
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-transfer-note" element={<MaterialTransferNote />} />
+            <Route path="material-transfer-note/:planId" element={<MaterialTransferNoteDetail />} />
             <Route path="monthly-batch-process" element={<MonthlyBatchProcess />} />
             {/* Purchase */}
             <Route path="supplier-pricing-history" element={<SupplierPricingHistory />} />

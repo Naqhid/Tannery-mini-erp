@@ -296,14 +296,28 @@ export async function recalcStatusFromProduction(orderId) {
   if (LOCKED.includes(order.status)) return;
 
   // Auto-managed lifecycle covers only Draft → Confirmed → Processing,
-  // driven purely by linked production plans.
+  // driven purely by linked production plans. Output is the cumulative Daily
+  // Production (production_status_transactions) of each plan's measurement
+  // stage — the same live source the stats and production module use — rather
+  // than the stored (often stale) production_plans.output_qty column.
   const [[plan]] = await pool.query(
     `SELECT
-       COUNT(*) AS plan_count,
-       COALESCE(SUM(output_qty), 0) AS total_output
-     FROM production_plans
-     WHERE sales_order_id = ? AND deleted_at IS NULL`,
-    [orderId]
+       (SELECT COUNT(*) FROM production_plans pp
+         WHERE pp.sales_order_id = ? AND pp.deleted_at IS NULL) AS plan_count,
+       COALESCE((
+         SELECT SUM(t.output_qty)
+         FROM production_plans pp
+         JOIN production_status_orders pso
+           ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+          AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+            SELECT s2.stage_name FROM production_plan_stages s2
+            WHERE s2.plan_id = pp.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+          )
+         JOIN production_status_transactions t
+           ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+         WHERE pp.sales_order_id = ? AND pp.deleted_at IS NULL
+       ), 0) AS total_output`,
+    [orderId, orderId]
   );
 
   let status = order.status || 'Draft';
@@ -334,16 +348,51 @@ export async function resyncAllStatuses() {
 }
 
 export async function getStats() {
+  // Processing is NOT read from the stored status column (which can lag behind
+  // actual production). Instead it's derived live: a non-terminal sales order
+  // is "Processing" when any of its linked production plans has real output,
+  // where output = cumulative Daily Production (production_status_transactions)
+  // of the plan's measurement stage (last stage by sequence). This matches the
+  // output logic used across the production module and fixes the count that
+  // previously always showed 0.
+  //
+  // Confirmed = non-terminal orders that have a linked plan but no output yet.
+  // Draft     = non-terminal orders with no linked plan.
+  const PLAN_OUTPUT_SQL = `
+    COALESCE((
+      SELECT SUM(t.output_qty)
+      FROM production_plans pp
+      JOIN production_status_orders pso
+        ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+       AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+         SELECT s2.stage_name FROM production_plan_stages s2
+         WHERE s2.plan_id = pp.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+       )
+      JOIN production_status_transactions t
+        ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+    ), 0)`;
+
+  const PLAN_COUNT_SQL = `
+    (SELECT COUNT(*) FROM production_plans pp
+      WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL)`;
+
   const [[data]] = await pool.query(
     `SELECT COUNT(*) AS total,
-       SUM(status='Draft') AS draft,
-       SUM(status='Confirmed') AS confirmed,
-       SUM(status='Processing') AS processing,
-       SUM(status='Shipped') AS shipped,
-       SUM(status='Delivered') AS delivered,
-       SUM(status='Cancelled') AS cancelled,
-       SUM(grand_total) AS total_value
-     FROM sales_orders`
+       -- Terminal / user-controlled statuses still come straight from the
+       -- stored status column.
+       SUM(so.status='Shipped') AS shipped,
+       SUM(so.status='Delivered') AS delivered,
+       SUM(so.status='Cancelled') AS cancelled,
+       -- Live, production-driven lifecycle for non-terminal orders.
+       SUM(CASE WHEN so.status NOT IN ('Shipped','Delivered','Cancelled')
+                 AND ${PLAN_COUNT_SQL} = 0 THEN 1 ELSE 0 END) AS draft,
+       SUM(CASE WHEN so.status NOT IN ('Shipped','Delivered','Cancelled')
+                 AND ${PLAN_COUNT_SQL} > 0 AND ${PLAN_OUTPUT_SQL} <= 0 THEN 1 ELSE 0 END) AS confirmed,
+       SUM(CASE WHEN so.status NOT IN ('Shipped','Delivered','Cancelled')
+                 AND ${PLAN_COUNT_SQL} > 0 AND ${PLAN_OUTPUT_SQL} > 0 THEN 1 ELSE 0 END) AS processing,
+       SUM(so.grand_total) AS total_value
+     FROM sales_orders so`
   );
   return data;
 }
