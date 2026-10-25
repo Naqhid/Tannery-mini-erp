@@ -51,6 +51,9 @@ interface SalesOrderFull {
   price_list: string;
   sales_person: string;
   status: string;
+  shipped_qty: number | string;
+  shipped_date: string;
+  packing_output_qty?: number;
   terms_conditions: string;
   discount: number;
   freight: number;
@@ -74,7 +77,7 @@ const emptyOrder: SalesOrderFull = {
   customer_id: null, order_date: new Date().toISOString().split('T')[0],
   delivery_date: '', customer_po_no: '', order_type: 'Standard', contact_person: '',
   delivery_address: '', payment_terms: '', currency: 'INR', price_list: '',
-  sales_person: '', status: 'Draft', terms_conditions: '', discount: 0, freight: 0,
+  sales_person: '', status: 'Draft', shipped_qty: '', shipped_date: '', terms_conditions: '', discount: 0, freight: 0,
   tax_percent: 18, tax_type: 'IGST', sub_total: 0, tax_amount: 0,
   cgst_amount: 0, sgst_amount: 0, igst_amount: 0, grand_total: 0, remarks: '',
   items: [], deliveries: [], receipts: [], invoices: [], attachments: [],
@@ -197,6 +200,12 @@ export default function SalesOrderDetail() {
         ...d,
         order_date: d.order_date?.split('T')[0] || '',
         delivery_date: d.delivery_date?.split('T')[0] || '',
+        // Prefill Shipped Qty from the Packing-stage output when the order has
+        // no saved shipped qty yet; otherwise keep the saved value. Editable.
+        shipped_qty: (d.shipped_qty != null && d.shipped_qty !== ('' as unknown as number))
+          ? Number(d.shipped_qty)
+          : (Number(d.packing_output_qty) || 0),
+        shipped_date: d.shipped_date?.split('T')[0] || '',
         discount: Number(d.discount) || 0,
         freight: Number(d.freight) || 0,
         tax_percent: Number(d.tax_percent) || 18,
@@ -565,9 +574,24 @@ export default function SalesOrderDetail() {
           </div>
           {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="lg:col-span-3">
+            <div className="lg:col-span-2">
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
               <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
+            </div>
+            <div className="space-y-3">
+              <Input
+                label="Shipped Qty"
+                type="number"
+                value={order.shipped_qty === '' ? '' : String(order.shipped_qty)}
+                onChange={(e) => updateField('shipped_qty', e.target.value)}
+                placeholder="0.00"
+              />
+              <Input
+                label="Shipped Date"
+                type="date"
+                value={order.shipped_date}
+                onChange={(e) => updateField('shipped_date', e.target.value)}
+              />
             </div>
             <div>
               <Select

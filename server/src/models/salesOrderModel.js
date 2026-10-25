@@ -22,6 +22,7 @@ export async function getAll({ search, status, customer_id, page = 1, limit = 10
        so.customer_po_no, so.order_type, so.payment_terms, so.currency,
        so.sales_person, so.status, so.sub_total, so.discount, so.freight,
        so.tax_percent, so.tax_amount, so.grand_total, so.created_at,
+       so.shipped_qty, so.shipped_date,
        c.name AS customer_name, c.code AS customer_code,
        COALESCE((SELECT SUM(soi.quantity) FROM sales_order_items soi WHERE soi.sales_order_id = so.id), 0) AS total_quantity
      FROM sales_orders so
@@ -38,7 +39,19 @@ export async function getAll({ search, status, customer_id, page = 1, limit = 10
 
 export async function getById(id) {
   const [[order]] = await pool.query(
-    `SELECT so.*, c.name AS customer_name, c.code AS customer_code
+    `SELECT so.*, c.name AS customer_name, c.code AS customer_code,
+       -- Cumulative Packing-stage production output across all plans linked to
+       -- this sales order. Used to prefill the (editable) Shipped Qty.
+       COALESCE((
+         SELECT SUM(t.output_qty)
+         FROM production_plans pp
+         JOIN production_status_orders pso
+           ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+          AND pso.process_stage COLLATE utf8mb4_unicode_ci = 'Packing' COLLATE utf8mb4_unicode_ci
+         JOIN production_status_transactions t
+           ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+         WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+       ), 0) AS packing_output_qty
      FROM sales_orders so
      LEFT JOIN customers c ON so.customer_id = c.id
      WHERE so.id = ?`,
@@ -144,16 +157,19 @@ export async function create(data, items = [], createdBy = null) {
       `INSERT INTO sales_orders (
         order_no, customer_id, order_date, delivery_date, customer_po_no, order_type,
         contact_person, delivery_address, payment_terms, currency, price_list,
-        sales_person, status, terms_conditions, discount, freight,
+        sales_person, status, shipped_qty, shipped_date, terms_conditions, discount, freight,
         tax_percent, sub_total, tax_amount, cgst_amount, sgst_amount, igst_amount, tax_type,
         grand_total, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         order_no, data.customer_id, data.order_date, data.delivery_date || null,
         data.customer_po_no || null, data.order_type || 'Standard',
         data.contact_person || null, data.delivery_address || null,
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
-        data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
+        data.sales_person || null, data.status || 'Draft',
+        data.shipped_qty != null && data.shipped_qty !== '' ? data.shipped_qty : null,
+        data.shipped_date || null,
+        data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
         subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
         grandTotal, data.remarks || null, createdBy,
@@ -201,7 +217,7 @@ export async function update(id, data, items = [], updatedBy = null) {
       `UPDATE sales_orders SET
         customer_id=?, order_date=?, delivery_date=?, customer_po_no=?, order_type=?,
         contact_person=?, delivery_address=?, payment_terms=?, currency=?, price_list=?,
-        sales_person=?, status=?, terms_conditions=?, discount=?, freight=?,
+        sales_person=?, status=?, shipped_qty=?, shipped_date=?, terms_conditions=?, discount=?, freight=?,
         tax_percent=?, sub_total=?, tax_amount=?, cgst_amount=?, sgst_amount=?, igst_amount=?, tax_type=?,
         grand_total=?, remarks=?, updated_by=?
        WHERE id=?`,
@@ -210,7 +226,10 @@ export async function update(id, data, items = [], updatedBy = null) {
         data.customer_po_no || null, data.order_type || 'Standard',
         data.contact_person || null, data.delivery_address || null,
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
-        data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
+        data.sales_person || null, data.status || 'Draft',
+        data.shipped_qty != null && data.shipped_qty !== '' ? data.shipped_qty : null,
+        data.shipped_date || null,
+        data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
         subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
         grandTotal, data.remarks || null, updatedBy, id,

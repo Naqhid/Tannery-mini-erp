@@ -42,7 +42,7 @@ const STATUS_COLORS: Record<string, string> = {
   Planned: 'bg-slate-50 text-slate-700 border border-slate-200',
 };
 
-interface StageOption { id: number; name: string; uom?: string; }
+interface StageOption { id: number; name: string; uom?: string; seq?: number; }
 
 export default function ProductionStatus() {
   const navigate = useNavigate();
@@ -93,7 +93,17 @@ export default function ProductionStatus() {
     (async () => {
       try {
         const res = await api<{ data: StageOption[] }>('/process-stages?limit=100');
-        setStageOptions(res.data || []);
+        // Sort stages by their master sequence (1,2,3…) so the Stage filter
+        // lists them in production order rather than insertion order.
+        const seqNum = (v: unknown) => {
+          const n = Number(v);
+          return Number.isFinite(n) && v !== null && v !== undefined && v !== '' ? n : Number.MAX_SAFE_INTEGER;
+        };
+        const sorted = [...(res.data || [])].sort((a, b) => {
+          const sa = seqNum(a.seq), sb = seqNum(b.seq);
+          return sa !== sb ? sa - sb : (a.name || '').localeCompare(b.name || '');
+        });
+        setStageOptions(sorted);
       } catch { setStageOptions([]); }
     })();
   }, []);

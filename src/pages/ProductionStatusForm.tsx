@@ -9,7 +9,7 @@ import { toast } from 'react-toastify';
 import SearchableSelect from '../components/ui/SearchableSelect';
 
 interface PlanOption { id: number; plan_no: string; plan_date: string; customer_name: string; article: string; color: string; }
-interface ProcessStageOption { id: number; name: string; uom: string; }
+interface ProcessStageOption { id: number; name: string; uom: string; seq?: number; }
 
 interface OrderData {
   order_no: string;
@@ -143,7 +143,16 @@ export default function ProductionStatusForm() {
           id: p.id, plan_no: p.plan_no, plan_date: p.plan_date?.split('T')[0] || '',
           customer_name: p.customer_name || '', article: p.article || '', color: p.color || '',
         })));
-        setProcessStages(stagesRes.data || []);
+        // Order the Process Stage dropdown by master sequence (1,2,3…).
+        const seqNum = (v: unknown) => {
+          const n = Number(v);
+          return Number.isFinite(n) && v !== null && v !== undefined && v !== '' ? n : Number.MAX_SAFE_INTEGER;
+        };
+        const sortedStages = [...(stagesRes.data || [])].sort((a, b) => {
+          const sa = seqNum(a.seq), sb = seqNum(b.seq);
+          return sa !== sb ? sa - sb : (a.name || '').localeCompare(b.name || '');
+        });
+        setProcessStages(sortedStages);
       } catch {}
     })();
   }, []);

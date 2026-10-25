@@ -3,7 +3,9 @@ import pool from '../../config/db.js';
 // ─── Sales Order Summary ─────────────────────────────────────────────────────
 export async function salesOrderSummary({ from_date, to_date, customer_id, status, search, page = 1, limit = 10 }) {
   const params = [];
-  let where = '1=1';
+  // Sales Order reports show confirmed-and-beyond orders only — Draft orders
+  // are excluded.
+  let where = "so.status <> 'Draft'";
   if (from_date) { where += ' AND so.order_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND so.order_date <= ?'; params.push(to_date); }
   if (customer_id) { where += ' AND so.customer_id = ?'; params.push(customer_id); }
@@ -43,7 +45,8 @@ export async function salesOrderSummary({ from_date, to_date, customer_id, statu
 // Ordered vs shipped (delivery notes) vs pending, per order line.
 export async function orderFulfillment({ from_date, to_date, customer_id, search, page = 1, limit = 10 }) {
   const params = [];
-  let where = '1=1';
+  // Exclude Draft orders — reports cover confirmed-and-beyond orders only.
+  let where = "so.status <> 'Draft'";
   if (from_date) { where += ' AND so.order_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND so.order_date <= ?'; params.push(to_date); }
   if (customer_id) { where += ' AND so.customer_id = ?'; params.push(customer_id); }
@@ -90,7 +93,8 @@ export async function orderFulfillment({ from_date, to_date, customer_id, search
 // Orders not fully delivered / not cancelled.
 export async function openSalesOrders({ customer_id, search, page = 1, limit = 10 }) {
   const params = [];
-  let where = `so.status NOT IN ('Cancelled','Delivered')`;
+  // Exclude Draft (and the already-excluded Cancelled/Delivered) orders.
+  let where = `so.status NOT IN ('Draft','Cancelled','Delivered')`;
   if (customer_id) { where += ' AND so.customer_id = ?'; params.push(customer_id); }
   if (search) {
     where += ' AND (so.order_no LIKE ? OR c.name LIKE ? OR soi.item_description LIKE ?)';
@@ -140,7 +144,8 @@ export async function openSalesOrders({ customer_id, search, page = 1, limit = 1
 // Links SO items to production plans/status for output tracking.
 export async function salesOrderProductionTracking({ customer_id, search, page = 1, limit = 10 }) {
   const params = [];
-  let where = '1=1';
+  // Exclude Draft orders — tracking covers confirmed-and-beyond orders only.
+  let where = "so.status <> 'Draft'";
   if (customer_id) { where += ' AND so.customer_id = ?'; params.push(customer_id); }
   if (search) {
     where += ' AND (so.order_no LIKE ? OR soi.item_description LIKE ? OR c.name LIKE ?)';
