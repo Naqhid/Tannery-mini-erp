@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../../../lib/api';
 import ReportShell from '../../../components/reports/ReportShell';
 import FilterSelect from '../../../components/reports/FilterSelect';
@@ -14,7 +13,6 @@ interface Row extends Record<string, unknown> {
 }
 
 export default function OrderProductionPlan({ embedded }: { embedded?: boolean }) {
-  const navigate = useNavigate();
   const [customer, setCustomer] = useState('');
   const [opts, setOpts] = useState<{ customers: { id: number; name: string }[] }>({ customers: [] });
 
@@ -24,7 +22,7 @@ export default function OrderProductionPlan({ embedded }: { embedded?: boolean }
   }, []);
 
   const columns: Column<Row>[] = [
-    { key: 'sales_order_no', header: 'Order No', render: r => <button onClick={() => navigate('/reports/production-plan', { state: { filter: { sales_order_no: r.sales_order_no } } })} className="font-mono text-blue-700 hover:underline cursor-pointer">{r.sales_order_no}</button> },
+    { key: 'sales_order_no', header: 'Order No', render: r => <span className="font-mono text-blue-700">{r.sales_order_no}</span> },
     { key: 'customer_name', header: 'Customer' },
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },

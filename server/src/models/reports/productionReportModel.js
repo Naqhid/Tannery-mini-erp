@@ -34,6 +34,28 @@ const planWipSql = (planCol) => `
     ) stage_totals
   ), 0)`;
 
+// Planned qty of a specific plan stage (matched loosely by name, so
+// "Wet Blue" / "Wetblue" / "Wet-Blue" all count).
+const stagePlannedSql = (planCol, normName) => `
+  COALESCE((
+    SELECT SUM(s.planned_qty)
+    FROM production_plan_stages s
+    WHERE s.plan_id = ${planCol}
+      AND REPLACE(REPLACE(LOWER(s.stage_name), ' ', ''), '-', '') COLLATE utf8mb4_unicode_ci = '${normName}'
+  ), 0)`;
+
+// Cumulative Daily Production output of a specific named stage for a plan
+// (matched loosely by name).
+const stageOutputSql = (planCol, normName) => `
+  COALESCE((
+    SELECT SUM(t.output_qty)
+    FROM production_status_orders pso
+    JOIN production_status_transactions t
+      ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+    WHERE pso.production_plan_id = ${planCol} AND pso.deleted_at IS NULL
+      AND REPLACE(REPLACE(LOWER(pso.process_stage), ' ', ''), '-', '') COLLATE utf8mb4_unicode_ci = '${normName}'
+  ), 0)`;
+
 // ─── Production Plan Summary ─────────────────────────────────────────────────
 export async function planSummary({ from_date, to_date, customer_id, sales_order_no, status, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
@@ -113,9 +135,12 @@ export async function planVsActual({ from_date, to_date, customer_id, plan_no, s
     where += ' AND (pp.plan_no LIKE ? OR pp.article LIKE ? OR c.name LIKE ?)';
     const t = `%${search}%`; params.push(t, t, t);
   }
-  const mOut = measurementOutputSql('pp.id');
+  // Planned Qty = Wet Blue stage planned qty; Actual Output Qty = Finishing
+  // stage cumulative output; Variance = Planned − Actual Output.
+  const wetBluePlanned = stagePlannedSql('pp.id', 'wetblue');
+  const finishingOutput = stageOutputSql('pp.id', 'finishing');
   const mWip = planWipSql('pp.id');
-  
+
   // Total rejection across all stages
   const totalRejectionSql = `
     COALESCE((SELECT SUM(t.rejection_qty)
@@ -123,25 +148,19 @@ export async function planVsActual({ from_date, to_date, customer_id, plan_no, s
       JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
       WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
     ), 0)`;
-  
-  // Get current stage (last stage with output)
-  const currentStageSql = `
-    (SELECT s.stage_name FROM production_plan_stages s
-      WHERE s.plan_id = pp.id
-      ORDER BY s.seq DESC, s.id DESC LIMIT 1)`;
-  
+
   const statusExpr = `CASE
-      WHEN ${mOut} >= COALESCE(pp.planned_qty,0) AND COALESCE(pp.planned_qty,0) > 0 THEN 'Completed'
-      WHEN ${mOut} > 0 THEN 'In Progress'
+      WHEN ${finishingOutput} >= ${wetBluePlanned} AND ${wetBluePlanned} > 0 THEN 'Completed'
+      WHEN ${finishingOutput} > 0 THEN 'In Progress'
       ELSE 'Planned' END`;
-  
+
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
     `SELECT pp.id, pp.plan_no, pp.plan_date, c.name AS customer_name, pp.article, pp.color, pp.uom,
-       ${currentStageSql} AS stage,
-       COALESCE(pp.planned_qty,0) AS planned_qty,
-       ${mOut} AS actual_output,
+       ${wetBluePlanned} AS planned_qty,
+       ${finishingOutput} AS actual_output,
+       (${wetBluePlanned} - ${finishingOutput}) AS variance,
        ${mWip} AS wip_qty,
        ${totalRejectionSql} AS rejection_qty,
        ${statusExpr} AS status
@@ -233,23 +252,25 @@ export async function orderProductionPlan({ from_date, to_date, customer_id, sea
   const mWip = planWipSql('pp.id');
   const offset = (page - 1) * limit;
 
-  // Get stage-wise outputs
-  const stageOutputsSql = (stageName) => `
+  // Stage-wise output. Stage names are hardcoded constants (not user input), so
+  // they are matched loosely by name and inlined — avoiding positional-param
+  // misalignment between the SELECT subqueries and the WHERE/LIMIT params.
+  const stageOutputsSql = (normName) => `
     COALESCE((SELECT SUM(t.output_qty)
       FROM production_status_orders pso
       JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
       WHERE pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
-        AND pso.process_stage COLLATE utf8mb4_unicode_ci = ?
+        AND REPLACE(REPLACE(LOWER(pso.process_stage), ' ', ''), '-', '') COLLATE utf8mb4_unicode_ci = '${normName}'
     ), 0)`;
 
   const [rows] = await pool.query(
-    `SELECT pp.id, so.order_no AS sales_order_no, so.order_qty,
+    `SELECT pp.id, so.order_no AS sales_order_no, COALESCE(pp.order_qty, 0) AS order_qty,
        c.name AS customer_name, pp.article, pp.color, pp.uom,
-       ${stageOutputsSql('Wet Blue')} AS wet_blue_output,
-       ${stageOutputsSql('Finishing')} AS finishing_output,
-       ${stageOutputsSql('Measurement')} AS measurement_output,
-       ${stageOutputsSql('Packing')} AS packing_output,
-       ${stageOutputsSql('Shipment')} AS shipment_output,
+       ${stageOutputsSql('wetblue')} AS wet_blue_output,
+       ${stageOutputsSql('finishing')} AS finishing_output,
+       ${stageOutputsSql('measurement')} AS measurement_output,
+       ${stageOutputsSql('packing')} AS packing_output,
+       ${stageOutputsSql('shipment')} AS shipment_output,
        ${mOut} AS total_output,
        ${mWip} AS wip_qty,
        pp.status
@@ -259,7 +280,7 @@ export async function orderProductionPlan({ from_date, to_date, customer_id, sea
      WHERE ${where}
      ORDER BY pp.plan_date DESC, pp.id DESC
      LIMIT ? OFFSET ?`,
-    [...params, 'Wet Blue', 'Finishing', 'Measurement', 'Packing', 'Shipment', Number(limit), Number(offset)]
+    [...params, Number(limit), Number(offset)]
   );
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM production_plans pp
@@ -290,6 +311,7 @@ export async function dailyProductionOutput({ from_date, to_date, stage, search,
   const [rows] = await pool.query(
     `SELECT t.id, t.production_date, t.transaction_no, pso.order_no AS plan_no,
        pso.process_stage, pso.article, pso.color, t.uom,
+       COALESCE(t.opening_qty,0) AS opening_qty,
        t.input_qty, t.output_qty, t.rejection_qty,
        (COALESCE(t.input_qty,0) - COALESCE(t.output_qty,0) - COALESCE(t.rejection_qty,0)) AS wip_qty
      ${baseFrom}
@@ -299,7 +321,8 @@ export async function dailyProductionOutput({ from_date, to_date, stage, search,
   );
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${baseFrom}`, params);
   const [[totals]] = await pool.query(
-    `SELECT COALESCE(SUM(t.input_qty),0) AS total_input, COALESCE(SUM(t.output_qty),0) AS total_output,
+    `SELECT COALESCE(SUM(t.opening_qty),0) AS total_opening,
+       COALESCE(SUM(t.input_qty),0) AS total_input, COALESCE(SUM(t.output_qty),0) AS total_output,
        COALESCE(SUM(t.rejection_qty),0) AS total_rejection ${baseFrom}`, params
   );
   return { rows, total, totals };
@@ -321,8 +344,19 @@ export async function stageWiseProduction({ from_date, to_date, stage, search, p
      WHERE ${where}
      GROUP BY pso.process_stage`;
 
+  // Resolve the UOM for a stage from the process_stages master, preferring the
+  // uom master's short form (e.g. "Sq.Ft.") when the stage UOM maps to one.
+  const stageUom = `
+    (SELECT COALESCE(u.short_form, ps.uom)
+       FROM process_stages ps
+       LEFT JOIN uom u ON u.name COLLATE utf8mb4_unicode_ci = ps.uom COLLATE utf8mb4_unicode_ci
+      WHERE ps.name COLLATE utf8mb4_unicode_ci = pso.process_stage COLLATE utf8mb4_unicode_ci
+        AND ps.uom IS NOT NULL AND ps.uom <> ''
+      ORDER BY (ps.status='Active') DESC, ps.id ASC LIMIT 1)`;
+
   const [rows] = await pool.query(
     `SELECT pso.process_stage AS stage_name,
+       MAX(${stageUom}) AS uom,
        COALESCE(SUM(t.input_qty),0) AS input_qty,
        COALESCE(SUM(t.output_qty),0) AS output_qty,
        COALESCE(SUM(t.rejection_qty),0) AS rejection_qty,
@@ -381,23 +415,42 @@ export async function productionWip({ stage, search, page = 1, limit = 10 }) {
   // WIP = input − output − rejection for the stage. Negative values flag data errors.
   const wipExpr = `(${stageInput} - ${stageOutput} - ${stageRej})`;
 
-  const baseFrom = `
-     FROM production_plan_stages s
-     JOIN production_plans pp ON s.plan_id = pp.id
-     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+  // Per-stage WIP rows (one per plan+stage with WIP > 0). These are rolled up to
+  // a single row per Plan No below.
+  const stageSelect = `
+    SELECT pp.id AS plan_id, so.order_no AS sales_order_no, pp.plan_no,
+           pp.article, pp.color, pp.uom, pp.plan_date,
+           s.stage_name AS stage,
+           ${stageInput} AS input_qty, ${stageOutput} AS output_qty, ${stageRej} AS rejection_qty,
+           COALESCE(s.planned_qty,0) AS plan_qty,
+           ${wipExpr} AS wip_qty
+      FROM production_plan_stages s
+      JOIN production_plans pp ON s.plan_id = pp.id
+      LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
      WHERE ${where} AND ${wipExpr} > 0`;
 
+  // Group/sum by Plan No: totals per plan across all its WIP stages.
+  const groupedFrom = `FROM (${stageSelect}) ws
+     GROUP BY ws.plan_id, ws.sales_order_no, ws.plan_no, ws.article, ws.color, ws.uom`;
+
   const [rows] = await pool.query(
-    `SELECT s.id, so.order_no AS sales_order_no, pp.plan_no, s.stage_name AS stage, pp.article, pp.color, pp.uom,
-       ${stageInput} AS input_qty, ${stageOutput} AS output_qty, ${stageRej} AS rejection_qty,
-       COALESCE(s.planned_qty,0) AS plan_qty,
-       ${wipExpr} AS wip_qty
-     ${baseFrom}
-     ORDER BY pp.plan_date DESC, s.seq ASC
+    `SELECT ws.plan_id AS id,
+            ws.sales_order_no, ws.plan_no, ws.article, ws.color, ws.uom,
+            GROUP_CONCAT(DISTINCT ws.stage ORDER BY ws.stage SEPARATOR ', ') AS stage,
+            SUM(ws.input_qty) AS input_qty,
+            SUM(ws.output_qty) AS output_qty,
+            SUM(ws.rejection_qty) AS rejection_qty,
+            SUM(ws.plan_qty) AS plan_qty,
+            SUM(ws.wip_qty) AS wip_qty
+     ${groupedFrom}
+     ORDER BY MAX(ws.plan_date) DESC, ws.plan_no ASC
      LIMIT ? OFFSET ?`,
     [...params, Number(limit), Number(offset)]
   );
-  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${baseFrom}`, params);
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM (SELECT ws.plan_id ${groupedFrom}) g`,
+    params
+  );
   return { rows, total };
 }
 

@@ -102,7 +102,6 @@ import DepartmentMasterForm from './pages/DepartmentMasterForm';
 // Reports Module (grouped into 5 tabbed pages)
 import InventoryReports from './pages/reports/InventoryReports';
 import ProductionPlanReports from './pages/reports/ProductionPlanReports';
-import ActualProductionReports from './pages/reports/ActualProductionReports';
 import SalesOrderReports from './pages/reports/SalesOrderReports';
 import StageCostingReports from './pages/reports/StageCostingReports';
 import WipCostSummaryReport from './pages/reports/costing/WipCostSummaryReport';
@@ -266,7 +265,8 @@ function App() {
             <Route path="reports" element={<Navigate to="/reports/inventory" replace />} />
             <Route path="reports/inventory" element={<InventoryReports />} />
             <Route path="reports/production-plan" element={<ProductionPlanReports />} />
-            <Route path="reports/actual-production" element={<ActualProductionReports />} />
+            {/* Actual Production Reports merged into Production Plan Reports */}
+            <Route path="reports/actual-production" element={<Navigate to="/reports/production-plan" replace />} />
             <Route path="reports/sales-order" element={<SalesOrderReports />} />
             <Route path="reports/stage-costing" element={<StageCostingReports />} />
             <Route path="reports/wip-cost-summary" element={<WipCostSummaryReport />} />

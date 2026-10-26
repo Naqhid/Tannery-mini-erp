@@ -118,7 +118,6 @@ export const menuItems: MenuItem[] = [
   },
   { label: 'Production', icon: <Factory size={20} />, children: [
       { label: 'Daily Production', icon: <CalendarDays size={16} />, path: '/production-status' },
-      { label: 'Actual Production Reports', icon: <FileBarChart size={16} />, path: '/reports/actual-production' },
     ],
   },
   // Admin: the main transaction screens listed in workflow order so users

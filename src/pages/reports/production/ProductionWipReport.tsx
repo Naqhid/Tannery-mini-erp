@@ -21,8 +21,8 @@ export default function ProductionWipReport({ embedded }: { embedded?: boolean }
 
   const columns: Column<Row>[] = [
     { key: 'sales_order_no', header: 'Order', render: r => <span className="font-mono text-blue-700">{r.sales_order_no || '—'}</span> },
-    { key: 'plan_no', header: 'Plan No' },
-    { key: 'stage', header: 'Stage', render: r => <span className="font-medium text-gray-900">{r.stage}</span> },
+    { key: 'plan_no', header: 'Plan No', render: r => <span className="font-semibold text-gray-900">{r.plan_no}</span> },
+    { key: 'stage', header: 'Stages (in WIP)', render: r => <span className="font-medium text-gray-900">{r.stage}</span> },
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },
     { key: 'uom', header: 'UOM' },
