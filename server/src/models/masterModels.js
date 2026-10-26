@@ -19,9 +19,9 @@ export const leatherTypeModel = createMasterModel(
 export const uomModel = createMasterModel(
   'uom',
   'UOM',
-  ['id', 'code', 'name', 'description', 'status', 'created_at', 'updated_at'],
-  ['name', 'code'],
-  { uniqueFields: [{ fields: ['name'] }] }
+  ['id', 'code', 'name', 'short_form', 'description', 'status', 'created_at', 'updated_at'],
+  ['name', 'code', 'short_form'],
+  { uniqueFields: [{ fields: ['name'] }], extraColumns: { short_form: 'string' } }
 );
 
 export const thicknessModel = createMasterModel(
