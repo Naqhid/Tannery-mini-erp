@@ -7,7 +7,7 @@ import { fmtNum, fmtQty, fmtDate } from '../../../lib/reportFormat';
 import StatusBadge from '../../../components/reports/StatusBadge';
 
 interface Row extends Record<string, unknown> {
-  id: number; order_no: string; order_date: string; customer_name: string; article: string; color: string; uom: string;
+  id: number; order_no: string; order_date: string; delivery_date: string; customer_name: string; article: string; color: string; uom: string;
   order_qty: number; unit_price: number; amount: number; status: string;
 }
 
@@ -24,6 +24,7 @@ export default function SalesOrderSummary({ embedded }: { embedded?: boolean }) 
   const columns: Column<Row>[] = [
     { key: 'order_no', header: 'Order No', render: r => <span className="font-mono text-blue-700">{r.order_no}</span> },
     { key: 'order_date', header: 'Order Date', render: r => fmtDate(r.order_date) },
+    { key: 'delivery_date', header: 'Delivery Date', render: r => fmtDate(r.delivery_date) },
     { key: 'customer_name', header: 'Customer', render: r => <span className="font-medium text-gray-900">{r.customer_name || '—'}</span> },
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },
@@ -54,7 +55,7 @@ export default function SalesOrderSummary({ embedded }: { embedded?: boolean }) 
       }
       footer={(rows, totals) => totals && (
         <tr>
-          <td className="px-4 py-3 text-sm" colSpan={6}>Total</td>
+          <td className="px-4 py-3 text-sm" colSpan={7}>Total</td>
           <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.total_qty)}</td>
           <td />
           <td className="px-4 py-3 text-sm text-right">{fmtNum(totals.total_amount)}</td>

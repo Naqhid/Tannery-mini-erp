@@ -7,8 +7,8 @@ import { fmtQty } from '../../../lib/reportFormat';
 import StatusBadge from '../../../components/reports/StatusBadge';
 
 interface Row extends Record<string, unknown> {
-  id: number; order_no: string; customer_name: string; article: string; color: string; uom: string;
-  order_qty: number; plan_qty: number; output_qty: number; wip_qty: number; order_balance: number; status: string;
+  id: number; order_no: string; customer_name: string; article: string; color: string;
+  order_qty: number; plan_qty: number; finishing_qty: number; wip_qty: number; measurement_qty: number; bal_to_produce: number; status: string;
 }
 
 export default function SalesOrderProductionTracking({ embedded }: { embedded?: boolean }) {
@@ -25,12 +25,16 @@ export default function SalesOrderProductionTracking({ embedded }: { embedded?: 
     { key: 'customer_name', header: 'Customer' },
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },
-    // Production output is tracked in pieces, so the UOM is always Pieces here.
-    { key: 'uom', header: 'UOM', render: () => 'Pieces' },
-    { key: 'plan_qty', header: 'Plan Qty', align: 'right', render: r => fmtQty(r.plan_qty) },
-    { key: 'output_qty', header: 'Output (Pieces)', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.output_qty)}</span> },
-    { key: 'wip_qty', header: 'WIP', align: 'right', render: r => fmtQty(r.wip_qty) },
-    { key: 'order_balance', header: 'Order Balance', align: 'right', render: r => <span className="text-amber-700 font-semibold">{fmtQty(r.order_balance)}</span> },
+    // Order Qty is the sales order quantity (Sq.Ft.).
+    { key: 'order_qty', header: 'Order Qty (sqft)', align: 'right', render: r => fmtQty(r.order_qty) },
+    // Planned / Finishing / WIP are tracked in pieces.
+    { key: 'plan_qty', header: 'Planned Qty (pcs)', align: 'right', render: r => fmtQty(r.plan_qty) },
+    { key: 'finishing_qty', header: 'Finishing Qty (pcs)', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.finishing_qty)}</span> },
+    { key: 'wip_qty', header: 'WIP (pcs)', align: 'right', render: r => fmtQty(r.wip_qty) },
+    // Measurement output is the finished Sq.Ft.
+    { key: 'measurement_qty', header: 'Measurement (sqft)', align: 'right', render: r => fmtQty(r.measurement_qty) },
+    // Balance to produce = Order Qty (sqft) − Measurement (sqft).
+    { key: 'bal_to_produce', header: 'Bal to Produce (sqft)', align: 'right', render: r => <span className="text-amber-700 font-semibold">{fmtQty(r.bal_to_produce)}</span> },
     { key: 'status', header: 'Status', render: r => <StatusBadge status={r.status} /> },
   ];
 

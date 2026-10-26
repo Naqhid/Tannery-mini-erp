@@ -279,6 +279,7 @@ export default function SalesOrderDetail() {
   const handleSaveItem = async () => {
     if (!itemForm.item_description) { toast.error('Item description is required'); return; }
     if (!itemForm.quantity) { toast.error('Quantity is required'); return; }
+    if (!itemForm.delivery_date) { toast.error('Delivery Date is required'); return; }
     const computed = calcItem(itemForm);
     let newItems: SalesOrderItem[];
     if (editingItem) {
@@ -327,6 +328,11 @@ export default function SalesOrderDetail() {
   const handleSave = async () => {
     if (!order.customer_id) { toast.error('Customer is required'); return; }
     if (!order.order_date) { toast.error('Order date is required'); return; }
+    // Delivery Date is mandatory on every order line.
+    if (order.items.length > 0 && order.items.some(i => !i.delivery_date)) {
+      toast.error('Delivery Date is required for every item');
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...order, items: order.items.map(({ _key, ...rest }) => rest) };
@@ -669,7 +675,7 @@ export default function SalesOrderDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Delivery Date', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
+                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Delivery Date *', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
                           <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>

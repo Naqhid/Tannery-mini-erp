@@ -23,7 +23,9 @@ export async function salesOrderSummary({ from_date, to_date, customer_id, statu
      WHERE ${where}`;
 
   const [rows] = await pool.query(
-    `SELECT soi.id, so.order_no, so.order_date, c.name AS customer_name,
+    `SELECT soi.id, so.order_no, so.order_date,
+       COALESCE(soi.delivery_date, so.delivery_date) AS delivery_date,
+       c.name AS customer_name,
        soi.item_description AS article, soi.finish_color AS color, soi.uom,
        COALESCE(soi.quantity,0) AS order_qty,
        COALESCE(soi.unit_price,0) AS unit_price,
@@ -102,17 +104,16 @@ export async function openSalesOrders({ customer_id, search, page = 1, limit = 1
   }
   const offset = (page - 1) * limit;
 
-  // Completed = actual production output (measurement/last stage) for the plans
-  // linked to this SO + article. This is 0 until production actually produces
-  // output, so it will not show phantom "shipped" quantity.
+  // Completed = cumulative Daily Production OUTPUT of the MEASUREMENT stage for
+  // the plans linked to this SO + article. Matched on the 'Measurement' stage
+  // name explicitly (not merely the last stage by sequence). This is 0 until
+  // Measurement-stage output is actually entered in Daily Production.
   const completedSql = `
     COALESCE((
       SELECT SUM(t.output_qty)
       FROM production_plans pp
       JOIN production_status_orders pso ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
-        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
-          SELECT s2.stage_name FROM production_plan_stages s2 WHERE s2.plan_id = pp.id
-          ORDER BY s2.seq DESC, s2.id DESC LIMIT 1)
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = 'Measurement' COLLATE utf8mb4_unicode_ci
       JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
       WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
         AND pp.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
@@ -153,42 +154,35 @@ export async function salesOrderProductionTracking({ customer_id, search, page =
   }
   const offset = (page - 1) * limit;
 
-  // Planned & completed qty from production plans linked to this SO + article.
+  // Planned Qty = planned qty of the Wet Blue stage (production_plan_stages),
+  // summed across the plans linked to this SO + article. Stage name is matched
+  // loosely so "Wet Blue" / "Wetblue" / "Wet-Blue" all count.
   const plannedSql = `
     COALESCE((
-      SELECT SUM(pp.planned_qty) FROM production_plans pp
+      SELECT SUM(pps.planned_qty)
+      FROM production_plans pp
+      JOIN production_plan_stages pps ON pps.plan_id = pp.id
       WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
         AND pp.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
+        AND REPLACE(REPLACE(LOWER(pps.stage_name), ' ', ''), '-', '') COLLATE utf8mb4_unicode_ci = 'wetblue'
     ), 0)`;
-  const outputSql = `
+  // Cumulative Daily Production output of a specific named stage, across the
+  // plans linked to this SO + article.
+  const stageOutputSql = (stageName) => `
     COALESCE((
       SELECT SUM(t.output_qty)
       FROM production_plans pp
       JOIN production_status_orders pso ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
-        AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
-          SELECT s2.stage_name FROM production_plan_stages s2 WHERE s2.plan_id = pp.id
-          ORDER BY s2.seq DESC, s2.id DESC LIMIT 1)
+        AND pso.process_stage COLLATE utf8mb4_unicode_ci = '${stageName}' COLLATE utf8mb4_unicode_ci
       JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
       WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
         AND pp.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
     ), 0)`;
-  // WIP = sum of per-stage (input − output − rejection) across the plans linked
-  // to this SO + article, each stage clamped at 0. Applies the WIP rule at the
-  // stage level and aggregates (no dependency on stage sequence).
-  const wipSql = `
-    COALESCE((
-      SELECT SUM(GREATEST(0, st.in_qty - st.out_qty - st.rej_qty))
-      FROM (
-        SELECT pso.process_stage,
-          SUM(t.input_qty) AS in_qty, SUM(t.output_qty) AS out_qty, SUM(t.rejection_qty) AS rej_qty
-        FROM production_plans pp
-        JOIN production_status_orders pso ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
-        JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
-        WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
-          AND pp.article COLLATE utf8mb4_unicode_ci = soi.item_description COLLATE utf8mb4_unicode_ci
-        GROUP BY pso.process_stage
-      ) st
-    ), 0)`;
+  // Finishing-stage output (pieces) and Measurement-stage output (sqft).
+  const finishingSql = stageOutputSql('Finishing');
+  const measurementSql = stageOutputSql('Measurement');
+  // WIP = Planned Qty (Wet Blue) − Finishing Qty, clamped at 0.
+  const wipSql = `GREATEST(0, ${plannedSql} - ${finishingSql})`;
 
   const baseFrom = `
      FROM sales_order_items soi
@@ -198,12 +192,13 @@ export async function salesOrderProductionTracking({ customer_id, search, page =
 
   const [rows] = await pool.query(
     `SELECT soi.id, so.order_no, c.name AS customer_name,
-       soi.item_description AS article, soi.finish_color AS color, soi.uom,
+       soi.item_description AS article, soi.finish_color AS color,
        COALESCE(soi.quantity,0) AS order_qty,
        ${plannedSql} AS plan_qty,
-       ${outputSql} AS output_qty,
+       ${finishingSql} AS finishing_qty,
        ${wipSql} AS wip_qty,
-       GREATEST(0, COALESCE(soi.quantity,0) - ${outputSql}) AS order_balance,
+       ${measurementSql} AS measurement_qty,
+       GREATEST(0, COALESCE(soi.quantity,0) - ${measurementSql}) AS bal_to_produce,
        so.status
      ${baseFrom}
      ORDER BY so.order_date DESC, so.id DESC
