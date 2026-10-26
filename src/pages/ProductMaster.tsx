@@ -4,6 +4,8 @@ import { Package } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 
 export default function ProductMaster() {
   const navigate = useNavigate();
@@ -38,26 +40,59 @@ export default function ProductMaster() {
     toast.success(res.message || 'Product deleted!');
   };
 
+  const fetchAll = async () => {
+    const res = await api<{ data: any[] }>('/products?page=1&limit=99999');
+    return res.data || [];
+  };
+
+  const exportColumns = [
+    { key: 'code', header: 'Code' },
+    { key: 'name', header: 'Name' },
+    { key: 'category_name', header: 'Category' },
+    { key: 'leather_type_name', header: 'Leather Type' },
+    { key: 'thickness_name', header: 'Thickness' },
+    { key: 'status', header: 'Status' },
+  ];
+
+  const pdfColumns = ['Code', 'Name', 'Category', 'Leather Type', 'Thickness', 'Status'];
+  const pdfRows = (data: any[]) => data.map((r: any) => [
+    r.code || '', r.name || '', r.category_name || '', r.leather_type_name || '', r.thickness_name || '', r.status || '',
+  ]);
+
+  const handlePreviewPDF = async () => {
+    try { previewPDF({ title: 'Articles', columns: pdfColumns, rows: pdfRows(await fetchAll()), fileName: 'Articles' }); }
+    catch { toast.error('Failed to generate PDF preview'); }
+  };
+  const handleDownloadPDF = async () => {
+    try { downloadPDF({ title: 'Articles', columns: pdfColumns, rows: pdfRows(await fetchAll()), fileName: 'Articles' }); toast.success('PDF downloaded!'); }
+    catch { toast.error('Failed to download PDF'); }
+  };
+  const handleExportExcel = async () => {
+    try { exportToExcel({ data: await fetchAll(), columns: exportColumns, fileName: 'Articles' }); toast.success('Excel downloaded!'); }
+    catch { toast.error('Failed to download Excel'); }
+  };
+
   return (
     <TransactionListPage
-      title="Products"
-      subtitle="Manage your product database"
+      title="Articles"
+      subtitle="Manage your article database"
       icon={<Package size={20} className="text-white" />}
       iconColor="from-blue-500 to-blue-600"
       apiEndpoint="/products"
       columns={columns}
       statCards={statCards}
       filterOptions={filterOptions}
-      addButtonLabel="Add Product"
+      addButtonLabel="Add Article"
       onAdd={() => navigate('/product-master/new')}
       onRowClick={(row) => navigate(`/product-master/${row.id}`)}
       onEdit={(row) => navigate(`/product-master/${row.id}`)}
       onDelete={handleDelete}
-      deleteTitle="Delete Product"
-      deleteMessage="Are you sure? This will remove the product record."
-      searchPlaceholder="Search products..."
+      deleteTitle="Delete Article"
+      deleteMessage="Are you sure? This will remove the article record."
+      searchPlaceholder="Search articles..."
       enableBulkDelete={true}
       defaultFilters={{ status: 'Active' }}
+      exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />
   );
 }

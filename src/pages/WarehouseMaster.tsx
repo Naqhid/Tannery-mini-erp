@@ -4,6 +4,8 @@ import { Warehouse } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 
 const TYPE_COLORS: Record<string, string> = {
   'Raw Material': 'bg-blue-100 text-blue-700 border-blue-200',
@@ -47,6 +49,37 @@ export default function WarehouseMaster() {
     toast.success(res.message || 'Warehouse deleted!');
   };
 
+  const fetchAll = async () => {
+    const res = await api<{ data: any[] }>('/warehouses?page=1&limit=99999');
+    return res.data || [];
+  };
+
+  const exportColumns = [
+    { key: 'code', header: 'Code' },
+    { key: 'name', header: 'Name' },
+    { key: 'warehouse_type', header: 'Type' },
+    { key: 'city', header: 'City' },
+    { key: 'status', header: 'Status' },
+  ];
+
+  const pdfColumns = ['Code', 'Name', 'Type', 'City', 'Status'];
+  const pdfRows = (data: any[]) => data.map((r: any) => [
+    r.code || '', r.name || '', r.warehouse_type || '', r.city || '', r.status || '',
+  ]);
+
+  const handlePreviewPDF = async () => {
+    try { previewPDF({ title: 'Warehouses', columns: pdfColumns, rows: pdfRows(await fetchAll()), fileName: 'Warehouses' }); }
+    catch { toast.error('Failed to generate PDF preview'); }
+  };
+  const handleDownloadPDF = async () => {
+    try { downloadPDF({ title: 'Warehouses', columns: pdfColumns, rows: pdfRows(await fetchAll()), fileName: 'Warehouses' }); toast.success('PDF downloaded!'); }
+    catch { toast.error('Failed to download PDF'); }
+  };
+  const handleExportExcel = async () => {
+    try { exportToExcel({ data: await fetchAll(), columns: exportColumns, fileName: 'Warehouses' }); toast.success('Excel downloaded!'); }
+    catch { toast.error('Failed to download Excel'); }
+  };
+
   return (
     <TransactionListPage
       title="Warehouses"
@@ -67,6 +100,7 @@ export default function WarehouseMaster() {
       searchPlaceholder="Search warehouses..."
       enableBulkDelete={true}
       defaultFilters={{ status: 'Active' }}
+      exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />
   );
 }

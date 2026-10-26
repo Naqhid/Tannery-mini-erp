@@ -24,6 +24,8 @@ interface SalesOrderItem {
   thickness: string;
   uom: string;
   quantity: number;
+  shipped_qty: number | string;
+  shipped_date: string;
   unit_price: number;
   discount_percent: number;
   amount: number;
@@ -85,7 +87,7 @@ const emptyOrder: SalesOrderFull = {
 
 const emptyItem: SalesOrderItem = {
   _key: '', product_id: null, item_code: '', item_description: '', leather_type: '', finish_color: '',
-  thickness: '', uom: 'Sq.Ft.', quantity: 0, unit_price: 0, discount_percent: 0, amount: 0,
+  thickness: '', uom: 'Sq.Ft.', quantity: 0, shipped_qty: '', shipped_date: '', unit_price: 0, discount_percent: 0, amount: 0,
   delivery_date: '',
 };
 
@@ -216,7 +218,7 @@ export default function SalesOrderDetail() {
         sgst_amount: Number(d.sgst_amount) || 0,
         igst_amount: Number(d.igst_amount) || 0,
         grand_total: Number(d.grand_total) || 0,
-        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, delivery_date: i.delivery_date?.split('T')[0] || '' })),
+        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, shipped_qty: (i.shipped_qty != null && i.shipped_qty !== ('' as unknown as number)) ? Number(i.shipped_qty) : '', shipped_date: i.shipped_date?.split('T')[0] || '', unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, delivery_date: i.delivery_date?.split('T')[0] || '' })),
         deliveries: d.deliveries || [],
         receipts: d.receipts || [],
         invoices: d.invoices || [],
@@ -332,6 +334,33 @@ export default function SalesOrderDetail() {
     if (order.items.length > 0 && order.items.some(i => !i.delivery_date)) {
       toast.error('Delivery Date is required for every item');
       return;
+    }
+    // Delivery Date must be later than both the Order Date and the creation date.
+    // For a new order the creation date is today; for an existing one it's the
+    // stored created_at (falling back to the order date).
+    const toDay = (v?: string | number | null) => {
+      if (!v) return null;
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) return null;
+      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    };
+    const orderDay = toDay(order.order_date);
+    const createdDay = isNew ? toDay(new Date().toISOString()) : toDay((order as any).created_at);
+    const floor = Math.max(orderDay ?? -Infinity, createdDay ?? -Infinity);
+    if (Number.isFinite(floor)) {
+      const headerDay = toDay(order.delivery_date);
+      if (headerDay != null && headerDay <= floor) {
+        toast.error('Delivery Date must be later than both the Order Date and the order creation date');
+        return;
+      }
+      const badItem = order.items.findIndex(i => {
+        const d = toDay(i.delivery_date);
+        return d != null && d <= floor;
+      });
+      if (badItem >= 0) {
+        toast.error(`Delivery Date for item ${badItem + 1} must be later than both the Order Date and the creation date`);
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -461,6 +490,9 @@ export default function SalesOrderDetail() {
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(n || 0);
+
+  const fmtQty = (n: number) =>
+    new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(n || 0);
 
   const totalReceived = order.receipts.reduce((s, r) => s + Number(r.amount || 0), 0);
 
@@ -675,14 +707,14 @@ export default function SalesOrderDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Delivery Date *', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
+                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Shipped Qty', 'Shipped Date', 'Delivery Date *', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
                           <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {order.items.length === 0 ? (
-                        <tr><td colSpan={12} className="py-12 text-center">
+                        <tr><td colSpan={14} className="py-12 text-center">
                           <Package size={32} className="mx-auto text-gray-300 mb-3" />
                           <p className="text-sm font-medium text-gray-500">No items added yet</p>
                           <p className="text-xs text-gray-400 mt-1">Click "Add Item" to add a row</p>
@@ -756,6 +788,19 @@ export default function SalesOrderDetail() {
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="0" />
                           </td>
                           <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.shipped_qty === '' ? '' : String(item.shipped_qty)} onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, shipped_qty: val } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[70px]" placeholder="0" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="date" value={item.shipped_date} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, shipped_date: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
                             <input type="date" value={item.delivery_date} onChange={(e) => {
                               const newItems = order.items.map(it => it._key === item._key ? { ...it, delivery_date: e.target.value } : it);
                               setOrder(prev => ({ ...prev, items: newItems }));
@@ -784,6 +829,16 @@ export default function SalesOrderDetail() {
                         </tr>
                       ))}
                     </tbody>
+                    {order.items.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold text-gray-900">
+                          <td colSpan={6} className="py-2.5 px-3.5 text-right text-xs uppercase tracking-wider text-gray-600">Order Total</td>
+                          <td className="py-2.5 px-3.5 text-right text-sm">{fmtQty(order.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0))}</td>
+                          <td className="py-2.5 px-3.5 text-right text-sm">{fmtQty(order.items.reduce((s, i) => s + (Number(i.shipped_qty) || 0), 0))}</td>
+                          <td colSpan={6} className="py-2.5 px-3.5"></td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
 
