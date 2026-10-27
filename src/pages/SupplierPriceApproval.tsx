@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import {
-  Search, Loader2, X, Check, XCircle, Eye,
-  CheckCircle2, Clock, FileText, Save
+  Search, Loader2, X, Check, XCircle, FileText
 } from 'lucide-react';
 import api from '../lib/api';
 import { usePermission } from '../lib/usePermission';
@@ -28,11 +27,6 @@ interface ApprovalRequest {
   item_group: string | null;
 }
 
-interface PriceTrendPoint {
-  month: string;
-  price: number;
-}
-
 interface FilterState {
   supplier: string;
   item_group: string;
@@ -48,36 +42,17 @@ export default function SupplierPriceApproval() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ApprovalRequest[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null);
-  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve');
-  const [rejectionReason, setRejectionReason] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Reject modal (requires a reason before rejecting).
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const [filters, setFilters] = useState<FilterState>({
     supplier: '', item_group: '', item: '', fromDate: '', toDate: '', status: '',
   });
 
-  // Mock suppliers/groups for dropdowns
   const [suppliers, setSuppliers] = useState<{ id: number; code: string; name: string }[]>([]);
-
-  // Price trend data
-  const [priceTrend] = useState<PriceTrendPoint[]>([
-    { month: 'Aug', price: 172 },
-    { month: 'Sep', price: 175 },
-    { month: 'Oct', price: 178 },
-    { month: 'Nov', price: 180 },
-    { month: 'Dec', price: 180 },
-    { month: 'Jan', price: 185 },
-  ]);
-
-  // Mock data for pending approvals
-  const mockData: ApprovalRequest[] = [
-    { id: 1, request_id: 1, request_no: 'PRQ-2025-001', request_date: '15-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-CHR-001', material_name: 'Chrome Powder - Basic Grade', uom: 'KG', current_price: 185.00, requested_price: 180.60, change_percent: -2.38, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Annual contract renewal - price reduction negotiated', supplier_part_no: 'SP-1001', item_group: 'Chemicals' },
-    { id: 2, request_id: 1, request_no: 'PRQ-2025-001', request_date: '15-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-001', material_name: 'Leather Dye - Black', uom: 'LTR', current_price: 420.00, requested_price: 455.00, change_percent: 8.33, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Raw material cost increase from supplier', supplier_part_no: 'SP-3001', item_group: 'Dyes' },
-    { id: 3, request_id: 2, request_no: 'PRQ-2025-002', request_date: '14-Jan-2025', supplier_code: 'SUP-001', supplier_name: 'Balaji Chemicals Pvt Ltd', material_code: 'RM-TAN-001', material_name: 'Tanning Agent - Vegetable', uom: 'LTR', current_price: 320.00, requested_price: 310.00, change_percent: -3.13, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Rajesh Kumar', remarks: 'Bulk order discount applied', supplier_part_no: 'SP-2001', item_group: 'Chemicals' },
-    { id: 4, request_id: 2, request_no: 'PRQ-2025-002', request_date: '14-Jan-2025', supplier_code: 'SUP-003', supplier_name: 'Modi Leather Supplies', material_code: 'RM-FAT-001', material_name: 'Fat Liquor - Synthetic', uom: 'KG', current_price: 280.00, requested_price: 295.00, change_percent: 5.36, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Admin', remarks: null, supplier_part_no: 'SP-4001', item_group: 'Chemicals' },
-    { id: 5, request_id: 3, request_no: 'PRQ-2025-003', request_date: '13-Jan-2025', supplier_code: 'SUP-002', supplier_name: 'Krishna Dyes & Chemicals', material_code: 'RM-DYE-002', material_name: 'Leather Dye - Brown', uom: 'LTR', current_price: 400.00, requested_price: 420.00, change_percent: 5.00, effective_from: '01-Feb-2025', status: 'Pending', requested_by: 'Suresh Patel', remarks: 'Quarterly price revision', supplier_part_no: 'SP-3002', item_group: 'Dyes' },
-  ];
 
   useEffect(() => {
     (async () => {
@@ -98,12 +73,11 @@ export default function SupplierPriceApproval() {
       if (filters.fromDate) params.set('from_date', filters.fromDate);
       if (filters.toDate) params.set('to_date', filters.toDate);
       if (filters.status) params.set('status', filters.status);
-      else params.set('status', 'Pending');
 
       const res = await api<{ data: ApprovalRequest[] }>(`/price-approvals?${params}`);
-      setData(res.data || mockData);
+      setData(res.data || []);
     } catch {
-      setData(mockData);
+      setData([]);
     } finally {
       setLoading(false);
     }
@@ -120,52 +94,16 @@ export default function SupplierPriceApproval() {
     else setSelectedIds(data.map(d => d.id));
   };
 
-  const handleRowClick = (req: ApprovalRequest) => {
-    setSelectedRequest(req);
-    setSelectedIds([req.id]);
-    setApprovalAction('approve');
-    setRejectionReason('');
-  };
-
   const clearFilters = () => {
     setFilters({ supplier: '', item_group: '', item: '', fromDate: '', toDate: '', status: '' });
   };
 
   const handleSearch = () => { fetchData(); };
 
-  const handleApprove = async () => {
-    if (!selectedRequest) return;
-    if (approvalAction === 'reject' && !rejectionReason.trim()) {
-      toast.error('Rejection reason is required');
-      return;
-    }
-    setSaving(true);
-    try {
-      if (approvalAction === 'approve') {
-        await api(`/price-approvals/${selectedRequest.request_id}/approve-selected`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            item_ids: [selectedRequest.id],
-            approval_notes: 'Approved via UI',
-          }),
-        });
-      } else {
-        await api(`/price-approvals/${selectedRequest.request_id}/reject-selected`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            item_ids: [selectedRequest.id],
-            rejection_reason: rejectionReason,
-          }),
-        });
-      }
-      toast.success(approvalAction === 'approve' ? 'Price approved successfully!' : 'Price rejected');
-      setSelectedRequest(null);
-      fetchData();
-    } catch (err) {
-      toast.error('Failed: ' + (err as Error).message);
-    } finally {
-      setSaving(false);
-    }
+  const statusClass = (status: string) => {
+    if (status === 'Approved') return 'bg-emerald-100 text-emerald-700';
+    if (status === 'Rejected') return 'bg-red-100 text-red-700';
+    return 'bg-amber-100 text-amber-700';
   };
 
   const handleBulkApprove = async () => {
@@ -194,13 +132,23 @@ export default function SupplierPriceApproval() {
       toast.success(`${selectedIds.length} prices approved!`);
       setSelectedIds([]);
       fetchData();
-    } catch {
-      toast.error('Failed to approve');
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to approve');
     } finally { setSaving(false); }
   };
 
-  const handleBulkReject = async () => {
+  const handleBulkReject = () => {
     if (!selectedIds.length) return;
+    setRejectionReason('');
+    setRejectModalOpen(true);
+  };
+
+  const confirmBulkReject = async () => {
+    const reason = rejectionReason.trim();
+    if (!reason) {
+      toast.error('Rejection reason is required');
+      return;
+    }
     setSaving(true);
     try {
       // Group selected items by request_id
@@ -218,71 +166,17 @@ export default function SupplierPriceApproval() {
       for (const [requestId, itemIds] of Object.entries(groupedByRequest)) {
         await api(`/price-approvals/${requestId}/reject-selected`, {
           method: 'PATCH',
-          body: JSON.stringify({ item_ids: itemIds, rejection_reason: 'Bulk rejected' }),
+          body: JSON.stringify({ item_ids: itemIds, rejection_reason: reason }),
         });
       }
 
       toast.success(`${selectedIds.length} prices rejected`);
       setSelectedIds([]);
+      setRejectModalOpen(false);
       fetchData();
-    } catch {
-      toast.error('Failed to reject');
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to reject');
     } finally { setSaving(false); }
-  };
-
-  // SVG price trend chart
-  const renderPriceTrendChart = () => {
-    const width = 280;
-    const height = 120;
-    const padding = { top: 10, right: 10, bottom: 25, left: 35 };
-    const chartW = width - padding.left - padding.right;
-    const chartH = height - padding.top - padding.bottom;
-
-    const prices = priceTrend.map(p => p.price);
-    const minP = Math.min(...prices) - 5;
-    const maxP = Math.max(...prices) + 5;
-
-    const points = priceTrend.map((p, i) => ({
-      x: padding.left + (i / (priceTrend.length - 1)) * chartW,
-      y: padding.top + chartH - ((p.price - minP) / (maxP - minP)) * chartH,
-    }));
-
-    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-    const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + chartH} L ${points[0].x} ${padding.top + chartH} Z`;
-
-    return (
-      <svg width={width} height={height} className="w-full">
-        {/* Grid lines */}
-        {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
-          const y = padding.top + chartH - pct * chartH;
-          const val = Math.round(minP + pct * (maxP - minP));
-          return (
-            <g key={i}>
-              <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#e5e7eb" strokeWidth="1" />
-              <text x={padding.left - 5} y={y + 3} textAnchor="end" className="text-[9px] fill-gray-400">{val}</text>
-            </g>
-          );
-        })}
-        {/* Area */}
-        <path d={areaPath} fill="url(#gradient)" opacity="0.3" />
-        {/* Line */}
-        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="2" />
-        {/* Points */}
-        {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="3" fill="#3b82f6" stroke="white" strokeWidth="1.5" />
-        ))}
-        {/* X labels */}
-        {priceTrend.map((pt, i) => (
-          <text key={i} x={points[i].x} y={height - 5} textAnchor="middle" className="text-[9px] fill-gray-500">{pt.month}</text>
-        ))}
-        <defs>
-          <linearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-      </svg>
-    );
   };
 
   return (
@@ -394,14 +288,14 @@ export default function SupplierPriceApproval() {
                 </tr>
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-gray-500">No pending approvals found</td>
+                  <td colSpan={12} className="text-center py-12 text-gray-500">No price approvals found</td>
                 </tr>
               ) : (
                 data.map(req => (
                   <tr
                     key={req.id}
-                    onClick={() => handleRowClick(req)}
-                    className={`cursor-pointer transition-colors ${selectedRequest?.id === req.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-gray-50'}`}
+                    onClick={() => toggleSelect(req.id)}
+                    className={`cursor-pointer transition-colors ${selectedIds.includes(req.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                   >
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={selectedIds.includes(req.id)} onChange={() => toggleSelect(req.id)} className="w-4 h-4 text-blue-600 rounded border-gray-300" />
@@ -419,7 +313,7 @@ export default function SupplierPriceApproval() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{req.effective_from}</td>
                     <td className="px-4 py-3">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">{req.status}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusClass(req.status)}`}>{req.status}</span>
                     </td>
                   </tr>
                 ))
@@ -433,20 +327,20 @@ export default function SupplierPriceApproval() {
           {loading ? (
             <div className="p-4 space-y-3">{[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}</div>
           ) : data.length === 0 ? (
-            <div className="py-12 text-center"><p className="text-sm text-gray-500">No pending approvals found</p></div>
+            <div className="py-12 text-center"><p className="text-sm text-gray-500">No price approvals found</p></div>
           ) : (
             data.map(req => (
               <div
                 key={req.id}
-                onClick={() => handleRowClick(req)}
-                className={`p-4 transition-colors cursor-pointer ${selectedRequest?.id === req.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'active:bg-gray-50'}`}
+                onClick={() => toggleSelect(req.id)}
+                className={`p-4 transition-colors cursor-pointer ${selectedIds.includes(req.id) ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'active:bg-gray-50'}`}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{req.material_name}</p>
                     <p className="text-xs text-blue-600 font-mono mt-0.5">{req.request_no}</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 shrink-0 ml-2">{req.status}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ml-2 ${statusClass(req.status)}`}>{req.status}</span>
                 </div>
                 <p className="text-xs text-gray-600 mb-2 truncate">{req.supplier_name}</p>
                 <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
@@ -484,210 +378,22 @@ export default function SupplierPriceApproval() {
                 </button>
               </>
             )}
-            <button onClick={() => { if (selectedRequest) handleRowClick(selectedRequest); }} disabled={!selectedRequest} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-              <Eye className="w-4 h-4" /> View Details
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Price Request Details - Bottom Section */}
-      {selectedRequest && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          {/* Title + Badge */}
-          <div className="flex items-center gap-3 mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Price Request Details</h2>
-            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pending Approval</span>
-          </div>
-
-          {/* Approval Workflow Progress */}
-          <div className="mb-8">
-            <div className="flex items-center justify-center gap-0">
-              {/* Step 1: Requested */}
-              <div className="flex items-center">
-                <div className="flex flex-col items-center">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="text-xs font-medium text-blue-700 mt-1">Requested</span>
-                </div>
-                <div className="w-24 h-0.5 bg-blue-600 mx-2" />
-              </div>
-              {/* Step 2: Under Review */}
-              <div className="flex items-center">
-                <div className="flex flex-col items-center">
-                  <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center">
-                    <Clock className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="text-xs font-medium text-amber-700 mt-1">Under Review</span>
-                </div>
-                <div className="w-24 h-0.5 bg-gray-300 mx-2" />
-              </div>
-              {/* Step 3: Approved/Rejected */}
-              <div className="flex flex-col items-center">
-                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                  <Check className="w-4 h-4 text-gray-400" />
-                </div>
-                <span className="text-xs font-medium text-gray-500 mt-1">Approved / Rejected</span>
-              </div>
+      {rejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="reject-title">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h2 id="reject-title" className="text-lg font-bold text-gray-900">Reject selected prices</h2>
+            <p className="mt-1 text-sm text-gray-600">Provide a reason for rejecting {selectedIds.length} selected price{selectedIds.length === 1 ? '' : 's'}.</p>
+            <label className="mt-4 block text-sm font-medium text-gray-700" htmlFor="rejection-reason">Rejection reason <span className="text-red-600">*</span></label>
+            <textarea id="rejection-reason" autoFocus rows={4} value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} placeholder="Enter reason for rejection..." className="mt-1 w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <div className="mt-5 flex justify-end gap-3">
+              <button onClick={() => setRejectModalOpen(false)} disabled={saving} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+              <button onClick={confirmBulkReject} disabled={saving} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">{saving ? 'Rejecting...' : 'Reject selected'}</button>
             </div>
           </div>
-
-          {/* Three Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            {/* Left: Request Information */}
-            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-              <h3 className="text-sm font-bold text-gray-900 mb-3">1. Request Information</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Request No.</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.request_no}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Request Date</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.request_date}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Requested By</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.requested_by}</span>
-                </div>
-                {selectedRequest.remarks && (
-                  <div className="pt-2 border-t border-gray-200">
-                    <span className="text-xs text-gray-500 block mb-1">Remarks</span>
-                    <p className="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100">{selectedRequest.remarks}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Middle: Item & Supplier Details */}
-            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-              <h3 className="text-sm font-bold text-gray-900 mb-3">2. Item & Supplier Details</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Supplier</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.supplier_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Supplier Part No.</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.supplier_part_no || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Item Code</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.material_code}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Item Description</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.material_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">Item Group</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.item_group || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-500">UOM</span>
-                  <span className="text-xs font-medium text-gray-900">{selectedRequest.uom}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Price Trend + Price Comparison */}
-            <div className="space-y-4">
-              {/* Price Trend */}
-              <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-bold text-gray-900 mb-3">4. Price Trend (Last 6 Months)</h3>
-                {renderPriceTrendChart()}
-              </div>
-
-              {/* Price Comparison */}
-              <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-bold text-gray-900 mb-3">3. Price Comparison</h3>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-2 text-gray-500 font-medium">Description</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">Price (INR/{selectedRequest.uom})</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-2 text-gray-700">Last Approved Price</td>
-                      <td className="py-2 text-right font-medium text-gray-900">{Number(selectedRequest.current_price || 0).toFixed(2)}</td>
-                      <td className="py-2 text-right text-gray-500">28-Dec-2024</td>
-                    </tr>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-2 text-gray-700">Requested Price</td>
-                      <td className="py-2 text-right font-medium text-gray-900">{Number(selectedRequest.requested_price || 0).toFixed(2)}</td>
-                      <td className="py-2 text-right text-gray-500">{selectedRequest.request_date}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 text-gray-700 font-medium">Difference</td>
-                      <td className={`py-2 text-right font-bold ${(selectedRequest.change_percent || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {(selectedRequest.change_percent || 0) < 0 ? '' : '+'}{(Number(selectedRequest.requested_price || 0) - Number(selectedRequest.current_price || 0)).toFixed(2)}
-                      </td>
-                      <td className={`py-2 text-right font-medium ${(selectedRequest.change_percent || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {(selectedRequest.change_percent || 0) > 0 ? '+' : ''}{Number(selectedRequest.change_percent || 0).toFixed(2)}%
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Approval Action Section */}
-          {!isReadOnly && (
-            <div className="border-t border-gray-200 pt-6">
-              <h3 className="text-sm font-bold text-gray-900 mb-4">Approval Action</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                {/* Approve Option */}
-                <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${approvalAction === 'approve' ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input type="radio" name="action" value="approve" checked={approvalAction === 'approve'} onChange={() => setApprovalAction('approve')} className="mt-0.5 w-4 h-4 text-emerald-600" />
-                  <div>
-                    <span className="text-sm font-medium text-emerald-700">Approve</span>
-                    <p className="text-xs text-gray-500 mt-1">Set as new approved price effective from date</p>
-                  </div>
-                </label>
-
-                {/* Reject Option */}
-                <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${approvalAction === 'reject' ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input type="radio" name="action" value="reject" checked={approvalAction === 'reject'} onChange={() => setApprovalAction('reject')} className="mt-0.5 w-4 h-4 text-red-600" />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-red-700">Reject</span>
-                    {approvalAction === 'reject' && (
-                      <div className="mt-2">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Rejection Reason <span className="text-red-500">*</span></label>
-                        <textarea
-                          rows={3}
-                          value={rejectionReason}
-                          onChange={e => setRejectionReason(e.target.value)}
-                          placeholder="Enter reason for rejection..."
-                          className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </label>
-              </div>
-
-              {/* Footer Buttons */}
-              <div className="flex items-center justify-end gap-3">
-                <button onClick={() => setSelectedRequest(null)} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                  Cancel
-                </button>
-                <button
-                  onClick={handleApprove}
-                  disabled={saving}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 ${
-                    approvalAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Approval'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

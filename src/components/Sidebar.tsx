@@ -118,6 +118,7 @@ export const menuItems: MenuItem[] = [
   },
   { label: 'Production', icon: <Factory size={20} />, children: [
       { label: 'Daily Production', icon: <CalendarDays size={16} />, path: '/production-status' },
+      { label: 'Production Plan Reports', icon: <FileBarChart size={16} />, path: '/reports/production-plan' },
     ],
   },
   {
