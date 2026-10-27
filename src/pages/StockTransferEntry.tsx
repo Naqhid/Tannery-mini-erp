@@ -67,6 +67,7 @@ export default function StockTransferEntry() {
       deleteMessage="Are you sure? This will remove the stock transfer entry."
       searchPlaceholder="Search transfers..."
       enableBulkDelete={true}
+      enableBulkStatus={true}
     />
   );
 }

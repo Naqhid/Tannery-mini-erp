@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, FlaskConical, Upload, Paperclip } from 'lucide-react';
@@ -155,6 +155,16 @@ export default function MaterialMasterForm() {
     }
   }, [form.category, dropdowns['group-master']?.data, dropdowns['product-categories']?.data]);
 
+  // Category dropdown for a material must not offer "Finished Leather" — that
+  // category belongs to the Product (finished-goods) master, not chemicals /
+  // raw materials. Filtered out here (case-insensitive) for Add and Edit.
+  const categoryOptions = useMemo(
+    () => (dropdowns['product-categories']?.options || []).filter(
+      (o: { value: string; label: string }) => o.label.trim().toLowerCase() !== 'finished leather'
+    ),
+    [dropdowns['product-categories']?.options]
+  );
+
   // Auto-populate HSN when group changes
   useEffect(() => {
     if (form.group_id && dropdowns['group-master']?.data) {
@@ -264,7 +274,7 @@ export default function MaterialMasterForm() {
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Material Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Input label="Material Name" required value={form.name} onChange={(e) => update('name', e.target.value)} error={errors.name} placeholder="Enter material name" />
-          <Select label="Category" options={[{ value: '', label: 'Select Category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category} onChange={(e) => update('category', e.target.value)} />
+          <Select label="Category" options={[{ value: '', label: 'Select Category' }, ...categoryOptions]} value={form.category} onChange={(e) => update('category', e.target.value)} />
           <Select label="Material Type" required options={[{ value: '', label: 'Select type' }, ...MATERIAL_TYPES.map(t => ({ value: t, label: t }))]} value={form.type} onChange={(e) => { update('type', e.target.value); }} error={errors.type} />
           <Select
             label="Group"

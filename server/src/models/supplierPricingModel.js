@@ -486,9 +486,11 @@ export async function getSupplierPricingHistory(supplierId, materialId = null) {
 
   const [rows] = await pool.query(
     `SELECT sp.*,
-       m.code AS material_code, m.name AS material_name
+       m.code AS material_code, m.name AS material_name,
+       au.full_name AS approved_by_name
      FROM supplier_pricing sp
      JOIN materials m ON sp.material_id = m.id
+     LEFT JOIN users au ON sp.approved_by = au.id
      WHERE ${where}
      ORDER BY sp.valid_from DESC, sp.created_at DESC`,
     params

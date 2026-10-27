@@ -84,7 +84,8 @@ const RECEIPT_TYPES = [
   { value: 'Transfer', label: 'Transfer' },
   { value: 'Sample', label: 'Sample' },
   { value: 'Return', label: 'Return' },
-  { value: 'Physical Stock', label: 'Physical Stock' },
+  // 'Physical Stock' removed: stock adjustments are now done on the Physical
+  // Stock Entry page, which posts Stock Adjustment rows to the stock ledger.
 ];
 
 let _kc = 0;

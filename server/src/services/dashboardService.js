@@ -19,16 +19,39 @@ async function getRecentOrders() {
   return rows;
 }
 
+// Live stock per material, derived from stock_ledger (single source of truth):
+// the latest running balance per (warehouse, material), summed across all
+// warehouses. Exposes material_id, live_qty and live_value. Used by every
+// dashboard stock metric so the whole dashboard reads the ledger, not the
+// decoupled materials.current_stock master field.
+const LEDGER_LIVE_STOCK = `(
+  SELECT sl.material_id,
+         SUM(sl.balance_qty) AS live_qty,
+         SUM(sl.balance_value) AS live_value
+    FROM stock_ledger sl
+    JOIN (
+      SELECT warehouse_id, material_id, MAX(transaction_date) AS md
+        FROM stock_ledger GROUP BY warehouse_id, material_id
+    ) ld ON ld.warehouse_id=sl.warehouse_id AND ld.material_id=sl.material_id AND ld.md=sl.transaction_date
+    JOIN (
+      SELECT warehouse_id, material_id, transaction_date, MAX(id) AS mid
+        FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date
+    ) li ON li.warehouse_id=sl.warehouse_id AND li.material_id=sl.material_id
+        AND li.transaction_date=sl.transaction_date AND li.mid=sl.id
+   GROUP BY sl.material_id
+)`;
+
 // ─── Low stock alerts (materials at/below reorder level) ──────────────────────
 async function getLowStock() {
   const [rows] = await pool.query(
     `SELECT m.id, m.name AS item, m.uom,
-       m.current_stock AS current_qty, m.reorder_level AS threshold
+       COALESCE(ls.live_qty, 0) AS current_qty, m.reorder_level AS threshold
      FROM materials m
+     LEFT JOIN ${LEDGER_LIVE_STOCK} ls ON ls.material_id = m.id
      WHERE m.status = 'Active'
        AND COALESCE(m.reorder_level, 0) > 0
-       AND COALESCE(m.current_stock, 0) <= m.reorder_level
-     ORDER BY (m.current_stock / NULLIF(m.reorder_level, 0)) ASC
+       AND COALESCE(ls.live_qty, 0) <= m.reorder_level
+     ORDER BY (COALESCE(ls.live_qty, 0) / NULLIF(m.reorder_level, 0)) ASC
      `
   );
   return rows.map(r => {
@@ -91,28 +114,36 @@ async function getProductionOrders() {
 
 // ─── Highest remaining work-in-progress by production stage ───────────────────
 async function getHighestWipStages() {
+  // Per stage, use the WIP of the LATEST production transaction (most recent
+  // record by date, then id) for each plan+stage, and sum those latest WIP
+  // values across open plans. This reflects the current running WIP per stage
+  // rather than a derived "remaining" figure. Limited to the stages present.
   const [rows] = await pool.query(
     `SELECT pps.stage_name AS stage,
-       SUM(GREATEST(COALESCE(pps.planned_qty, 0) - COALESCE(stage_totals.output_qty, 0) - COALESCE(stage_totals.rejection_qty, 0), 0)) AS wip_qty,
+       SUM(COALESCE(latest.wip_qty, 0)) AS wip_qty,
        SUM(COALESCE(pps.planned_qty, 0)) AS planned_qty,
        COUNT(DISTINCT pps.plan_id) AS order_count
      FROM production_plan_stages pps
      JOIN production_plans pp ON pp.id = pps.plan_id AND pp.deleted_at IS NULL
      LEFT JOIN (
-       SELECT pso.production_plan_id, pso.process_stage,
-         SUM(t.output_qty) AS output_qty, SUM(t.rejection_qty) AS rejection_qty
+       SELECT pso.production_plan_id, pso.process_stage, t.wip_qty
        FROM production_status_orders pso
        JOIN production_status_transactions t ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
        WHERE pso.deleted_at IS NULL
-       GROUP BY pso.production_plan_id, pso.process_stage
-     ) stage_totals
-       ON stage_totals.production_plan_id = pps.plan_id
-       AND stage_totals.process_stage COLLATE utf8mb4_unicode_ci = pps.stage_name COLLATE utf8mb4_unicode_ci
+         -- Keep only the latest transaction per order (by date, then id).
+         AND t.id = (
+           SELECT t2.id FROM production_status_transactions t2
+           WHERE t2.production_status_order_id = pso.id AND t2.deleted_at IS NULL
+           ORDER BY t2.production_date DESC, t2.id DESC LIMIT 1
+         )
+     ) latest
+       ON latest.production_plan_id = pps.plan_id
+       AND latest.process_stage COLLATE utf8mb4_unicode_ci = pps.stage_name COLLATE utf8mb4_unicode_ci
      WHERE COALESCE(pp.status, '') NOT IN ('Completed', 'Cancelled', 'Canceled')
      GROUP BY pps.stage_name
      HAVING wip_qty > 0
      ORDER BY wip_qty DESC, pps.stage_name ASC
-     LIMIT 5`
+     LIMIT 4`
   );
   return rows.map((row) => ({
     stage: row.stage,
@@ -126,10 +157,17 @@ async function getHighestWipStages() {
 async function getKpiCounts() {
   const [[row]] = await pool.query(
     `SELECT
-       (SELECT COUNT(*) FROM sales_orders
-         WHERE status NOT IN ('Shipped', 'Delivered', 'Cancelled')) AS sales_orders_not_shipped,
-       (SELECT COUNT(*) FROM sales_orders
-         WHERE status IN ('Processing', 'Confirmed')) AS open_orders,
+       -- Total ordered quantity (not the number of orders) across sales orders
+       -- that are not yet shipped/delivered/cancelled.
+       (SELECT COALESCE(SUM(soi.quantity), 0)
+          FROM sales_orders so
+          JOIN sales_order_items soi ON soi.sales_order_id = so.id
+         WHERE so.status NOT IN ('Shipped', 'Delivered', 'Cancelled')) AS sales_orders_not_shipped,
+       -- "Open orders in process" — total planned quantity (not the number of
+       -- plans) across production plans that are still open.
+       (SELECT COALESCE(SUM(COALESCE(planned_qty, order_qty, 0)), 0) FROM production_plans
+         WHERE deleted_at IS NULL
+           AND COALESCE(status, '') NOT IN ('Completed', 'Cancelled', 'Canceled')) AS open_orders,
        (SELECT COUNT(*) FROM customers WHERE status = 'Active') AS customers_total,
        (SELECT COUNT(*) FROM products WHERE status = 'Active') AS products_total,
        (SELECT COUNT(*) FROM materials WHERE status = 'Active') AS materials_active,
@@ -145,28 +183,50 @@ async function getKpiCounts() {
   };
 }
 
-// ─── Sales order value trend (ALL orders, grouped by month, live) ────────────
+// ─── Sales order quantity trend (last 6 months, grouped by month, live) ──────
 async function getSalesOrderTrend() {
   const [rows] = await pool.query(
-    `SELECT DATE_FORMAT(order_date, '%Y-%m') AS ym,
-       DATE_FORMAT(order_date, '%b %Y') AS label,
-       COALESCE(SUM(grand_total), 0) AS value,
-       COUNT(*) AS order_count
-     FROM sales_orders
-     GROUP BY DATE_FORMAT(order_date, '%Y-%m'), DATE_FORMAT(order_date, '%b %Y')
-     ORDER BY DATE_FORMAT(order_date, '%Y-%m') ASC`
+    `SELECT DATE_FORMAT(so.order_date, '%Y-%m') AS ym,
+       COALESCE(SUM(soi.quantity), 0) AS value,
+       COUNT(DISTINCT so.id) AS order_count
+     FROM sales_orders so
+     LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+     WHERE so.order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01')
+     GROUP BY DATE_FORMAT(so.order_date, '%Y-%m')
+     ORDER BY DATE_FORMAT(so.order_date, '%Y-%m') ASC`
   );
-  return rows.map(r => ({ label: r.label, value: Number(r.value) || 0, orderCount: Number(r.order_count) || 0 }));
+
+  // Build a continuous 6-month window (oldest → current) so the chart always
+  // spans the full range. Months without any orders are shown as 0 instead of
+  // being dropped, which previously collapsed the line to just a couple of
+  // points when only recent months had orders.
+  const byMonth = new Map(rows.map((r) => [r.ym, r]));
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const out = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    const hit = byMonth.get(ym);
+    out.push({
+      label,
+      value: hit ? Number(hit.value) || 0 : 0,
+      orderCount: hit ? Number(hit.order_count) || 0 : 0,
+    });
+  }
+  return out;
 }
 
 // ─── Inventory value by material type (live valuation) ───────────────────────
 async function getInventoryValue() {
   const [rows] = await pool.query(
-    `SELECT COALESCE(NULLIF(TRIM(type), ''), 'Other') AS category,
-       COALESCE(SUM(COALESCE(current_stock, 0) * COALESCE(rate, 0)), 0) AS value
-     FROM materials
-     WHERE status = 'Active'
-     GROUP BY COALESCE(NULLIF(TRIM(type), ''), 'Other')
+    `SELECT COALESCE(NULLIF(TRIM(m.type), ''), 'Other') AS category,
+       COALESCE(SUM(COALESCE(ls.live_value, 0)), 0) AS value
+     FROM materials m
+     LEFT JOIN ${LEDGER_LIVE_STOCK} ls ON ls.material_id = m.id
+     WHERE m.status = 'Active'
+     GROUP BY COALESCE(NULLIF(TRIM(m.type), ''), 'Other')
      HAVING value > 0
      ORDER BY value DESC`
   );
@@ -175,11 +235,11 @@ async function getInventoryValue() {
   return { total, breakdown };
 }
 
-// ─── Top 5 products by sales order value (live) ──────────────────────────────
+// ─── Top 5 products by sales order quantity (live) ───────────────────────────
 async function getTopProducts() {
   const [rows] = await pool.query(
     `SELECT soi.item_description AS product,
-       COALESCE(SUM(soi.quantity * COALESCE(soi.unit_price, 0)), 0) AS value
+       COALESCE(SUM(soi.quantity), 0) AS value
      FROM sales_order_items soi
      WHERE soi.item_description IS NOT NULL AND soi.item_description <> ''
      GROUP BY soi.item_description
@@ -215,21 +275,22 @@ async function getQuickSummary() {
          WHERE delivery_date IS NOT NULL
            AND delivery_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
            AND status NOT IN ('Delivered', 'Cancelled')) AS nearest_delivery_orders,
-       -- Sales orders that are not yet completed (not Delivered/Cancelled).
+       -- Draft sales orders (not yet confirmed).
        (SELECT COUNT(*) FROM sales_orders
-         WHERE status NOT IN ('Delivered', 'Cancelled')) AS pending_sales_orders,
+         WHERE status = 'Draft') AS draft_sales_orders,
        (SELECT COUNT(*) FROM material_receipts WHERE status = 'Draft') AS pending_goods_receipt,
        (SELECT COUNT(*) FROM material_issues WHERE status = 'Draft') AS pending_material_issues,
-       (SELECT COUNT(*) FROM materials
-         WHERE status = 'Active' AND COALESCE(reorder_level,0) > 0
-           AND COALESCE(current_stock,0) <= reorder_level) AS low_stock_items,
+       (SELECT COUNT(*) FROM materials m
+         LEFT JOIN ${LEDGER_LIVE_STOCK} ls ON ls.material_id = m.id
+         WHERE m.status = 'Active' AND COALESCE(m.reorder_level,0) > 0
+           AND COALESCE(ls.live_qty,0) <= m.reorder_level) AS low_stock_items,
        (SELECT COUNT(*) FROM production_plans
          WHERE deleted_at IS NULL
            AND COALESCE(status,'') NOT IN ('Completed','Cancelled','Canceled')) AS open_production_plans`
   );
   return {
     nearestDeliveryOrders: Number(row.nearest_delivery_orders) || 0,
-    pendingSalesOrders: Number(row.pending_sales_orders) || 0,
+    draftSalesOrders: Number(row.draft_sales_orders) || 0,
     pendingGoodsReceipt: Number(row.pending_goods_receipt) || 0,
     pendingMaterialIssues: Number(row.pending_material_issues) || 0,
     lowStockItems: Number(row.low_stock_items) || 0,

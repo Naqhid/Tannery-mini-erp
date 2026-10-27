@@ -139,7 +139,14 @@ export default function ActualStandardCostSheet(){
     const rows=data?.stages.flatMap(s=>s.rows)||[];
     const amount=rows.reduce((a,r)=>a+Number(r.actual_cost||0),0);
     const out=data?.order.completed_qty||0;
-    return {amount,costPerUom:out>0?amount/out:0};
+    // Total Cost/Piece = sum of each stage's cost/piece (stage amount ÷ that
+    // stage's own qty), matching how each Cost Details stage row is computed.
+    const costPerPiece=(data?.stages||[]).reduce((a,s)=>{
+      const stageAmt=s.rows.reduce((x,r)=>x+Number(r.actual_cost||0),0);
+      const stageQty=Number(s.order_qty)||0;
+      return a+(stageQty>0?stageAmt/stageQty:0);
+    },0);
+    return {amount,costPerUom:out>0?amount/out:0,costPerPiece};
   },[data]);
 
   // Build the Cost Details tree: STAGE -> SOURCE (Material / Machine / General)
@@ -355,14 +362,27 @@ export default function ActualStandardCostSheet(){
             onToggleStageSource={toggleStageSource}
           />
         ))}
-      </tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={5} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">—</td></tr></tfoot></table></div>
+      </tbody><tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr><td colSpan={5} className="p-3 text-right font-bold text-slate-700">Total</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.amount)}</td><td className="p-3 text-right font-bold text-blue-800">{fmt(totals.costPerPiece)}</td></tr></tfoot></table></div>
     </div>
     {data.summary && data.summary.length>0 && <SummarySection summary={data.summary} meta={data.summary_meta}/>}
   </div>;
 }
 
 function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta}){
-  const grand = summary.reduce((a,s)=>({amt:a.amt+s.total_with_rejection.amount, cpp:a.cpp+s.total_with_rejection.cost_per_piece}),{amt:0,cpp:0});
+  // Grand totals:
+  //   amt  = Σ stage amount (incl. rejection)
+  //   cpp  = Σ stage Cost/Sqft (backend cost_per_piece, measurement Sq.Ft. basis)
+  //   cppp = Σ stage Cost/Piece (amount ÷ stage planned qty) — this is the
+  //          "Total Cost/Piece" that previously showed a dash.
+  const grand = summary.reduce((a,s)=>{
+    const pieceQty = Number(s.planned_qty) || 0;
+    const stageCpp = pieceQty > 0 ? s.total_with_rejection.amount / pieceQty : 0;
+    return {
+      amt: a.amt + s.total_with_rejection.amount,
+      cpp: a.cpp + s.total_with_rejection.cost_per_piece,
+      cppp: a.cppp + stageCpp,
+    };
+  },{amt:0,cpp:0,cppp:0});
   return <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div className="px-4 py-3 border-b border-slate-200 font-bold text-slate-700">Summary</div>
     <div className="overflow-x-auto"><table className="w-full text-sm">
@@ -379,7 +399,7 @@ function SummarySection({summary,meta}:{summary:SummaryStage[];meta?:SummaryMeta
       <tfoot className="border-t-2 border-slate-300 bg-slate-50"><tr>
         <td colSpan={2} className="p-3 text-right font-bold text-slate-700">Grand Total (incl. rejection)</td>
         <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.amt)}</td>
-        <td className="p-3 text-right font-bold text-blue-800">—</td>
+        <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.cppp)}</td>
         <td className="p-3 text-right font-bold text-blue-800">{fmt(grand.cpp)}</td>
       </tr></tfoot>
     </table></div>

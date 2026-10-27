@@ -4,26 +4,92 @@ import pool from '../../config/db.js';
 // Stock summary with opening/receipt/issue/transfer/outbound/closing qty and value
 // Data source: chemical material master + stock ledger table
 export async function stockSummary({ warehouse_id, group_id, as_on_date, search, page = 1, limit = 10, sortBy, sortOrder }) {
-  const params = [];
+  // Period = the current month (or the month of as_on_date if given).
+  //  - Opening  = running balance of everything BEFORE the 1st of that month.
+  //  - Movements = receipts/issues/transfers/outbound WITHIN the month, up to
+  //                the as-on date (defaults to today).
+  //  - Closing  = opening + receipt - issue - transfer - outbound.
+  const periodEnd = as_on_date ? new Date(as_on_date) : new Date();
+  const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), 1);
+  const startStr = toISO(periodStart);   // first day of the month
+  const endStr = toISO(periodEnd);       // as-on date (inclusive)
+
+  // Warehouse scope (shared by opening and movement joins).
+  const whClause = warehouse_id ? ' AND sl.warehouse_id = ?' : '';
+
+  // Column-list builder: opening is pre-period balance; movements are in-period.
+  const metricCols = `
+    COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.in_qty - sl.out_qty ELSE 0 END), 0) AS opening_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0) AS opening_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0) AS receipt_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0) AS receipt_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0) AS issue_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0) AS issue_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0) AS transfer_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0) AS transfer_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0) AS outbound_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN sl.in_qty - sl.out_qty ELSE 0 END), 0) AS adjustment_qty,
+    COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN (CASE WHEN sl.in_qty > 0 THEN sl.amount ELSE -sl.amount END) ELSE 0 END), 0) AS adjustment_value`;
+
+  // Params that fill the metric CASE expressions, in order.
+  const metricParams = [
+    startStr,                 // opening_qty  (< start)
+    startStr,                 // opening_value(< start)
+    startStr, endStr,         // receipt_qty
+    startStr, endStr,         // receipt_value
+    startStr, endStr,         // issue_qty
+    startStr, endStr,         // issue_value
+    startStr, endStr,         // transfer_qty
+    startStr, endStr,         // transfer_value
+    startStr, endStr,         // outbound_qty
+    startStr, endStr,         // outbound_value
+    startStr, endStr,         // adjustment_qty
+    startStr, endStr,         // adjustment_value
+  ];
+
+  // Params for ONE closing block (qty or value): 1 opening boundary + 5
+  // movement ranges (receipt, issue, transfer, outbound, adjustment).
+  // closing_qty and closing_value share the identical shape, so used twice.
+  const closingBlockParams = [
+    startStr,                 // opening (< start)
+    startStr, endStr,         // receipt
+    startStr, endStr,         // issue
+    startStr, endStr,         // transfer
+    startStr, endStr,         // outbound
+    startStr, endStr,         // adjustment
+  ];
+  const closingParams = [...closingBlockParams, ...closingBlockParams]; // qty + value
+
+  // WHERE for the materials master (drives which items are listed).
   let where = "m.status = 'Active'";
-  if (group_id) { where += ' AND m.group_id = ?'; params.push(group_id); }
+  const whereParams = [];
+  if (group_id) { where += ' AND m.group_id = ?'; whereParams.push(group_id); }
   if (search) {
     where += ' AND (m.name LIKE ? OR m.code LIKE ?)';
-    const t = `%${search}%`; params.push(t, t);
+    const t = `%${search}%`; whereParams.push(t, t);
   }
 
-  const dateFilter = as_on_date ? `AND sl.transaction_date <= ?` : '';
-  if (as_on_date) params.push(as_on_date);
+  // The join carries the warehouse filter; metrics then slice by date.
+  const slJoin = `LEFT JOIN stock_ledger sl ON sl.material_id = m.id${whClause}`;
+  const joinParams = warehouse_id ? [warehouse_id] : [];
 
-  const whJoin = warehouse_id
-    ? `AND sl.warehouse_id = ?`
-    : '';
-  if (warehouse_id) params.push(warehouse_id);
-
-  const allowed = ['material_name', 'material_code', 'opening_qty', 'receipt_qty', 'issue_qty', 'transfer_qty', 'outbound_qty', 'closing_qty', 'closing_value'];
+  const sortMap = {
+    material_code: 'm.code',
+    material_name: 'm.name',
+    group_name: 'g.name',
+    uom: 'm.uom',
+    opening_qty: 'opening_qty',
+    receipt_qty: 'receipt_qty',
+    issue_qty: 'issue_qty',
+    transfer_qty: 'transfer_qty',
+    outbound_qty: 'outbound_qty',
+    closing_qty: 'closing_qty',
+    closing_value: 'closing_value',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const col = allowed.includes(sortBy) ? sortBy : 'material_name';
-  const orderClause = col === 'material_name' && !sortBy ? 'm.name ASC' : `${col} ${ord}`;
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'm.name ASC';
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
@@ -33,55 +99,65 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
        m.name AS material_name,
        g.name AS group_name,
        m.uom,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Opening Stock' THEN sl.in_qty ELSE 0 END), 0) AS opening_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Opening Stock' THEN sl.amount ELSE 0 END), 0) AS opening_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0) AS receipt_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0) AS receipt_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Material Issue' THEN sl.out_qty ELSE 0 END), 0) AS issue_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Material Issue' THEN sl.amount ELSE 0 END), 0) AS issue_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Stock Transfer' THEN sl.out_qty ELSE 0 END), 0) AS transfer_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Stock Transfer' THEN sl.amount ELSE 0 END), 0) AS transfer_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0) AS outbound_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value,
-       COALESCE(SUM(sl.in_qty) - SUM(sl.out_qty), 0) AS closing_qty,
-       COALESCE(SUM(sl.amount), 0) AS closing_value
+       ${metricCols},
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
+       ) AS closing_qty,
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN (CASE WHEN sl.in_qty > 0 THEN sl.amount ELSE -sl.amount END) ELSE 0 END), 0)
+       ) AS closing_value
      FROM materials m
      LEFT JOIN group_master g ON m.group_id = g.id
-     LEFT JOIN stock_ledger sl ON sl.material_id = m.id ${dateFilter} ${whJoin}
+     ${slJoin}
      WHERE ${where}
      GROUP BY m.id, m.code, m.name, g.name, m.uom
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
-    [...params, Number(limit), Number(offset)]
+    [...metricParams, ...closingParams, ...joinParams, ...whereParams, Number(limit), Number(offset)]
   );
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(DISTINCT m.id) AS total
      FROM materials m
      LEFT JOIN group_master g ON m.group_id = g.id
-     LEFT JOIN stock_ledger sl ON sl.material_id = m.id ${dateFilter} ${whJoin}
+     ${slJoin}
      WHERE ${where}`,
-    params
+    [...joinParams, ...whereParams]
   );
 
   const [totalsRows] = await pool.query(
     `SELECT 
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Opening Stock' THEN sl.in_qty ELSE 0 END), 0) AS opening_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Opening Stock' THEN sl.amount ELSE 0 END), 0) AS opening_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0) AS receipt_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0) AS receipt_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Material Issue' THEN sl.out_qty ELSE 0 END), 0) AS issue_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Material Issue' THEN sl.amount ELSE 0 END), 0) AS issue_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Stock Transfer' THEN sl.out_qty ELSE 0 END), 0) AS transfer_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Stock Transfer' THEN sl.amount ELSE 0 END), 0) AS transfer_value,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0) AS outbound_qty,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0) AS outbound_value,
-       COALESCE(SUM(sl.in_qty) - SUM(sl.out_qty), 0) AS closing_qty,
-       COALESCE(SUM(sl.amount), 0) AS closing_value
+       ${metricCols},
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN sl.in_qty - sl.out_qty ELSE 0 END), 0)
+       ) AS closing_qty,
+       (
+         COALESCE(SUM(CASE WHEN sl.transaction_date < ? THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.amount ELSE 0 END), 0)
+         - COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Outbound Delivery' THEN sl.amount ELSE 0 END), 0)
+         + COALESCE(SUM(CASE WHEN sl.transaction_date BETWEEN ? AND ? AND sl.transaction_type = 'Stock Adjustment' THEN (CASE WHEN sl.in_qty > 0 THEN sl.amount ELSE -sl.amount END) ELSE 0 END), 0)
+       ) AS closing_value
      FROM materials m
-     LEFT JOIN stock_ledger sl ON sl.material_id = m.id ${dateFilter} ${whJoin}
+     ${slJoin}
      WHERE ${where}`,
-    params
+    [...metricParams, ...closingParams, ...joinParams, ...whereParams]
   );
 
   const totals = {
@@ -95,6 +171,8 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
     transfer_value: Number(totalsRows[0]?.transfer_value || 0),
     outbound_qty: Number(totalsRows[0]?.outbound_qty || 0),
     outbound_value: Number(totalsRows[0]?.outbound_value || 0),
+    adjustment_qty: Number(totalsRows[0]?.adjustment_qty || 0),
+    adjustment_value: Number(totalsRows[0]?.adjustment_value || 0),
     closing_qty: Number(totalsRows[0]?.closing_qty || 0),
     closing_value: Number(totalsRows[0]?.closing_value || 0),
   };
@@ -106,6 +184,26 @@ export async function stockSummary({ warehouse_id, group_id, as_on_date, search,
 // Same source as summary but focussed on value; positive qty only.
 export async function stockValuation({ warehouse_id, group_id, origin, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
+  // Live stock is derived from stock_ledger (single source of truth): the latest
+  // running balance per (warehouse, material). `ledgerStock` exposes the same
+  // column names the rest of this query used from the old warehouse_stock table
+  // (id, warehouse_id, material_id, uom, current_qty, avg_unit_cost) so the
+  // filters/sorts below keep working unchanged.
+  const ledgerStock = `(
+    SELECT sl.id, sl.warehouse_id, sl.material_id, sl.uom,
+           sl.balance_qty AS current_qty,
+           CASE WHEN sl.balance_qty <> 0 THEN sl.balance_value / sl.balance_qty ELSE 0 END AS avg_unit_cost
+      FROM stock_ledger sl
+      JOIN (
+        SELECT warehouse_id, material_id, MAX(transaction_date) AS md
+          FROM stock_ledger GROUP BY warehouse_id, material_id
+      ) ld ON ld.warehouse_id=sl.warehouse_id AND ld.material_id=sl.material_id AND ld.md=sl.transaction_date
+      JOIN (
+        SELECT warehouse_id, material_id, transaction_date, MAX(id) AS mid
+          FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date
+      ) li ON li.warehouse_id=sl.warehouse_id AND li.material_id=sl.material_id
+          AND li.transaction_date=sl.transaction_date AND li.mid=sl.id
+  )`;
   let where = 'ws.current_qty <> 0';
   if (warehouse_id) { where += ' AND ws.warehouse_id = ?'; params.push(warehouse_id); }
   if (group_id) { where += ' AND m.group_id = ?'; params.push(group_id); }
@@ -119,10 +217,18 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
     const t = `%${search}%`; params.push(t, t);
   }
 
-  const allowed = ['material_name', 'material_code', 'closing_qty', 'avg_rate', 'stock_value'];
+  const sortMap = {
+    material_code: 'm.code',
+    material_name: 'm.name',
+    group_name: 'g.name',
+    warehouse_name: 'w.name',
+    uom: 'ws.uom',
+    closing_qty: 'closing_qty',
+    avg_rate: 'avg_rate',
+    stock_value: 'stock_value',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const col = allowed.includes(sortBy) ? sortBy : null;
-  const orderClause = col ? `${col} ${ord}` : 'stock_value DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'stock_value DESC';
   const offset = (page - 1) * limit;
 
   const [rows] = await pool.query(
@@ -130,7 +236,7 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
        g.name AS group_name, w.name AS warehouse_name, ws.uom,
        ws.current_qty AS closing_qty, ws.avg_unit_cost AS avg_rate,
        (ws.current_qty * ws.avg_unit_cost) AS stock_value
-     FROM warehouse_stock ws
+     FROM ${ledgerStock} ws
      JOIN materials m ON ws.material_id = m.id
      LEFT JOIN group_master g ON m.group_id = g.id
      LEFT JOIN warehouses w ON ws.warehouse_id = w.id
@@ -141,12 +247,12 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
   );
 
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM warehouse_stock ws
+    `SELECT COUNT(*) AS total FROM ${ledgerStock} ws
      JOIN materials m ON ws.material_id = m.id WHERE ${where}`, params
   );
   const [[totals]] = await pool.query(
     `SELECT COALESCE(SUM(ws.current_qty * ws.avg_unit_cost),0) AS total_value
-     FROM warehouse_stock ws JOIN materials m ON ws.material_id = m.id WHERE ${where}`, params
+     FROM ${ledgerStock} ws JOIN materials m ON ws.material_id = m.id WHERE ${where}`, params
   );
 
   return { rows, total, totals };
@@ -170,9 +276,24 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
     const t = `%${search}%`; params.push(t, t, t);
   }
 
-  const allowed = ['receipt_no', 'receipt_date', 'supplier_name', 'material_name', 'amount'];
+  // Map every displayed column key to a safe ORDER BY expression so all
+  // columns are sortable from the UI without risking ambiguous-column errors.
+  const sortMap = {
+    receipt_no: 'mr.receipt_no',
+    receipt_date: 'mr.receipt_date',
+    po_no: 'mr.purchase_order_no',
+    supplier_name: 's.name',
+    warehouse_name: 'w.name',
+    material_code: 'm.code',
+    material_name: 'm.name',
+    uom: 'mri.uom',
+    qty: 'qty',
+    rate: 'rate',
+    amount: 'amount',
+    tax_total_gst: 'tax_total_gst',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'mr.receipt_date DESC, mr.id DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'mr.receipt_date DESC, mr.id DESC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -181,6 +302,10 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
      LEFT JOIN suppliers s ON mr.supplier_id = s.id
      LEFT JOIN warehouses w ON mr.warehouse_id = w.id
      LEFT JOIN materials m ON mri.material_id = m.id
+     LEFT JOIN (
+       SELECT receipt_id, SUM(COALESCE(amount_inr, amount, 0)) AS receipt_total
+       FROM material_receipt_items GROUP BY receipt_id
+     ) rt ON rt.receipt_id = mr.id
      WHERE ${where}`;
 
   const [rows] = await pool.query(
@@ -190,11 +315,14 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
        COALESCE(mri.received_qty, mri.primary_uom_qty, 0) AS qty,
        COALESCE(mri.rate_inr, mri.rate, 0) AS rate,
        COALESCE(mri.amount_inr, mri.amount, 0) AS amount,
-       COALESCE(mri.tax_amount, 0) AS tax_amount,
-       COALESCE(mri.cgst_amount, 0) AS cgst_amount,
-       COALESCE(mri.sgst_amount, 0) AS sgst_amount,
-       COALESCE(mri.igst_amount, 0) AS igst_amount,
-       (COALESCE(mri.tax_amount, 0) + COALESCE(mri.cgst_amount, 0) + COALESCE(mri.sgst_amount, 0) + COALESCE(mri.igst_amount, 0)) AS tax_total_gst,
+       -- GST is stored on the receipt header (material_receipts), not per line
+       -- item. Allocate the header GST to each line proportionally by its
+       -- amount share so the per-row figure is meaningful and the sum matches
+       -- the receipt total.
+       (COALESCE(mr.cgst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS cgst_amount,
+       (COALESCE(mr.sgst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS sgst_amount,
+       (COALESCE(mr.igst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS igst_amount,
+       (COALESCE(mr.total_gst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))) AS tax_total_gst,
        mr.status
      ${baseFrom}
      ORDER BY ${orderClause}
@@ -206,7 +334,7 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
   const [[totals]] = await pool.query(
     `SELECT COALESCE(SUM(COALESCE(mri.received_qty, mri.primary_uom_qty, 0)),0) AS total_qty,
        COALESCE(SUM(COALESCE(mri.amount_inr, mri.amount, 0)),0) AS total_amount,
-       COALESCE(SUM(COALESCE(mri.tax_amount, 0) + COALESCE(mri.cgst_amount, 0) + COALESCE(mri.sgst_amount, 0) + COALESCE(mri.igst_amount, 0)),0) AS total_tax_gst ${baseFrom}`, params
+       COALESCE(SUM(COALESCE(mr.total_gst_amount, 0) * (COALESCE(mri.amount_inr, mri.amount, 0) / NULLIF(rt.receipt_total, 0))),0) AS total_tax_gst ${baseFrom}`, params
   );
 
   return { rows, total, totals };
@@ -215,7 +343,7 @@ export async function receiptRegister({ from_date, to_date, warehouse_id, suppli
 // ─── Material Issue Register ─────────────────────────────────────────────────
 export async function issueRegister({ from_date, to_date, warehouse_id, process_stage, origin, search, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
-  let where = '1=1';
+  let where = 'mi.deleted_at IS NULL';
   if (from_date) { where += ' AND mi.issue_date >= ?'; params.push(from_date); }
   if (to_date) { where += ' AND mi.issue_date <= ?'; params.push(to_date); }
   if (warehouse_id) { where += ' AND mi.warehouse_id = ?'; params.push(warehouse_id); }
@@ -230,9 +358,20 @@ export async function issueRegister({ from_date, to_date, warehouse_id, process_
     const t = `%${search}%`; params.push(t, t, t);
   }
 
-  const allowed = ['issue_no', 'issue_date', 'process_stage', 'material_name', 'amount'];
+  const sortMap = {
+    issue_no: 'mi.issue_no',
+    issue_date: 'mi.issue_date',
+    plan_no: 'mi.production_batch',
+    process_stage: 'mi.process_stage',
+    article: 'mi.article',
+    material_name: 'm.name',
+    uom: 'mii.uom',
+    qty: 'qty',
+    rate: 'rate',
+    amount: 'amount',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'mi.issue_date DESC, mi.id DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'mi.issue_date DESC, mi.id DESC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -279,9 +418,22 @@ export async function stockMovement({ from_date, to_date, warehouse_id, material
     const t = `%${search}%`; params.push(t, t);
   }
 
-  const allowed = ['transaction_date', 'transaction_type', 'material_name', 'reference_no'];
+  const sortMap = {
+    transaction_date: 'sl.transaction_date',
+    transaction_type: 'sl.transaction_type',
+    reference_no: 'sl.reference_no',
+    material_code: 'm.code',
+    material_name: 'm.name',
+    warehouse_name: 'w.name',
+    uom: 'sl.uom',
+    in_qty: 'sl.in_qty',
+    out_qty: 'sl.out_qty',
+    rate: 'rate',
+    amount: 'sl.amount',
+    balance_qty: 'sl.balance_qty',
+  };
   const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -324,9 +476,25 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
     const t = `%${search}%`; params.push(t, t, t, t, t);
   }
 
-  const allowed = ['transaction_date', 'transaction_type', 'material_name', 'reference_no', 'reference_type', 'created_at'];
-  const ord = sortOrder === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = allowed.includes(sortBy) ? `${sortBy} ${ord}` : 'sl.transaction_date DESC, sl.id DESC';
+  const sortMap = {
+    transaction_date: 'sl.transaction_date',
+    reference_no: 'sl.reference_no',
+    material_code: 'm.code',
+    material_name: 'm.name',
+    uom: 'sl.uom',
+    opening_qty: 'opening_qty',
+    receipt_qty: 'receipt_qty',
+    issue_qty: 'issue_qty',
+    transfer_qty: 'transfer_qty',
+    outbound_qty: 'outbound_qty',
+    closing_qty: 'closing_qty',
+    rate: 'rate',
+    amount: 'sl.amount',
+    remarks: 'sl.remarks',
+  };
+  const ord = sortOrder === 'desc' ? 'DESC' : 'ASC';
+  // Default to ascending date order so the oldest/opening date shows first.
+  const orderClause = sortMap[sortBy] ? `${sortMap[sortBy]} ${ord}` : 'sl.transaction_date ASC, sl.id ASC';
   const offset = (page - 1) * limit;
 
   const baseFrom = `
@@ -343,12 +511,29 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
        od.delivery_challan_no,
        m.code AS material_code, m.name AS material_name,
        sl.uom,
-       CASE WHEN sl.transaction_type = 'Opening Stock' THEN sl.in_qty ELSE 0 END AS opening_qty,
-       CASE WHEN sl.transaction_type IN ('Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END AS receipt_qty,
-       CASE WHEN sl.transaction_type = 'Material Issue' THEN sl.out_qty ELSE 0 END AS issue_qty,
-       CASE WHEN sl.transaction_type = 'Stock Transfer' THEN sl.out_qty ELSE 0 END AS transfer_qty,
+       -- stock_ledger is the single source of truth: opening_qty and balance_qty
+       -- are the STORED running balances (before / after this row), maintained
+       -- per (warehouse, material) by the date-ordered rebuild. Read them
+       -- directly — do NOT recompute or fall back to the master (that caused a
+       -- wrong opening on Transfer In rows).
+       sl.opening_qty AS opening_qty,
+       -- A receipt and a Transfer IN both add stock; a Stock Adjustment can add
+       -- (in_qty) or remove (out_qty). Map each movement to the right column so
+       -- the row reads correctly regardless of which warehouse it belongs to.
+       -- Transfer IN (stock arriving at the destination warehouse) is shown as
+       -- a RECEIPT for that warehouse. Only Transfer OUT (leaving the source
+       -- warehouse) is shown in the Transfer Qty column.
+       CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty
+            WHEN sl.transaction_type = 'Transfer In' THEN sl.in_qty
+            WHEN sl.transaction_type = 'Stock Adjustment' AND sl.in_qty > 0 THEN sl.in_qty
+            ELSE 0 END AS receipt_qty,
+       CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty
+            WHEN sl.transaction_type = 'Stock Adjustment' AND sl.out_qty > 0 THEN sl.out_qty
+            ELSE 0 END AS issue_qty,
+       CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty
+            ELSE 0 END AS transfer_qty,
        CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END AS outbound_qty,
-       sl.in_qty - sl.out_qty AS closing_qty,
+       sl.balance_qty AS closing_qty,
        sl.unit_cost AS rate, sl.amount,
        sl.remarks, u.full_name AS created_by_name, sl.created_at
      ${baseFrom}
@@ -360,14 +545,31 @@ export async function stockLedger({ from_date, to_date, warehouse_id, material_i
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${baseFrom}`, params);
   const [[totals]] = await pool.query(
     `SELECT 
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Opening Stock' THEN sl.in_qty ELSE 0 END),0) AS total_opening,
-       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Material Receipt', 'Purchase Receipt') THEN sl.in_qty ELSE 0 END),0) AS total_receipt,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Material Issue' THEN sl.out_qty ELSE 0 END),0) AS total_issue,
-       COALESCE(SUM(CASE WHEN sl.transaction_type = 'Stock Transfer' THEN sl.out_qty ELSE 0 END),0) AS total_transfer,
+       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Receipt', 'Material Receipt', 'Purchase Receipt') THEN sl.in_qty
+                         WHEN sl.transaction_type = 'Transfer In' THEN sl.in_qty
+                         WHEN sl.transaction_type = 'Stock Adjustment' AND sl.in_qty > 0 THEN sl.in_qty ELSE 0 END),0) AS total_receipt,
+       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Issue', 'Material Issue') THEN sl.out_qty
+                         WHEN sl.transaction_type = 'Stock Adjustment' AND sl.out_qty > 0 THEN sl.out_qty ELSE 0 END),0) AS total_issue,
+       COALESCE(SUM(CASE WHEN sl.transaction_type IN ('Transfer Out', 'Stock Transfer') THEN sl.out_qty ELSE 0 END),0) AS total_transfer,
        COALESCE(SUM(CASE WHEN sl.transaction_type = 'Outbound Delivery' THEN sl.out_qty ELSE 0 END),0) AS total_outbound,
-       COALESCE(SUM(sl.in_qty - sl.out_qty),0) AS total_closing,
        COALESCE(SUM(sl.amount),0) AS total_amount ${baseFrom}`, params
   );
+
+  // Opening = running balance BEFORE the earliest transaction in the filtered
+  // range; Closing = running balance AFTER the latest. Summing running balances
+  // would be meaningless, so take the boundary rows (date, then id order).
+  const [[firstRow]] = await pool.query(
+    `SELECT sl.opening_qty AS opening_qty
+     ${baseFrom}
+     ORDER BY sl.transaction_date ASC, sl.id ASC LIMIT 1`, params
+  );
+  const [[lastRow]] = await pool.query(
+    `SELECT sl.balance_qty AS closing_qty
+     ${baseFrom}
+     ORDER BY sl.transaction_date DESC, sl.id DESC LIMIT 1`, params
+  );
+  totals.total_opening = Number(firstRow?.opening_qty || 0);
+  totals.total_closing = Number(lastRow?.closing_qty || 0);
 
   return { rows, total, totals };
 }
@@ -395,80 +597,53 @@ export async function getInventoryFilters() {
 }
 
 // ─── Inventory Consistency Check (READ-ONLY DIAGNOSTIC) ──────────────────────
-// Compares the current on-hand quantity across the three stock tables:
-//   1. warehouse_stock.current_qty          (the live balance table)
-//   2. latest material_transactions.balance_qty per (warehouse, item)
-//   3. running SUM(in_qty - out_qty) from stock_ledger per (warehouse, material)
-// and flags any (warehouse, material) where they disagree.
-//
-// This does NOT modify any data. It only reports discrepancies so an operator
-// can investigate. No automatic repair is performed.
+// stock_ledger is now the SINGLE SOURCE OF TRUTH, so there are no longer three
+// tables to reconcile. This is a self-consistency check on the ledger: for each
+// (warehouse, material) it compares (first-row opening + SUM in − SUM out)
+// against the stamped balance_qty on the latest row. A mismatch means a rebuild
+// (rebuildAndReprice) hasn't been run for that pair. Does NOT modify any data.
 export async function inventoryConsistencyCheck({ tolerance = 0.001 } = {}) {
-  // 1) warehouse_stock balances
-  const [wsRows] = await pool.query(
-    `SELECT ws.warehouse_id, ws.material_id, ws.current_qty
-     FROM warehouse_stock ws`
-  );
-
-  // 2) latest material_transactions balance per (warehouse, item)
-  const [mtRows] = await pool.query(
-    `SELECT t.warehouse_id, t.item_id AS material_id, t.balance_qty
-     FROM material_transactions t
-     JOIN (
-       SELECT warehouse_id, item_id, MAX(transaction_date) AS max_date
-       FROM material_transactions
-       GROUP BY warehouse_id, item_id
-     ) latest
-       ON latest.warehouse_id = t.warehouse_id
-      AND latest.item_id = t.item_id
-      AND latest.max_date = t.transaction_date
-     JOIN (
-       SELECT warehouse_id, item_id, transaction_date, MAX(transaction_id) AS max_id
-       FROM material_transactions
-       GROUP BY warehouse_id, item_id, transaction_date
-     ) latest_id
-       ON latest_id.warehouse_id = t.warehouse_id
-      AND latest_id.item_id = t.item_id
-      AND latest_id.transaction_date = t.transaction_date
-      AND latest_id.max_id = t.transaction_id`
-  );
-
-  // 3) stock_ledger running balance per (warehouse, material)
-  const [slRows] = await pool.query(
+  // Running net movement per (warehouse, material).
+  const [moveRows] = await pool.query(
     `SELECT warehouse_id, material_id,
-            COALESCE(SUM(in_qty),0) - COALESCE(SUM(out_qty),0) AS ledger_qty
-     FROM stock_ledger
-     WHERE warehouse_id IS NOT NULL AND material_id IS NOT NULL
-     GROUP BY warehouse_id, material_id`
+            COALESCE(SUM(in_qty),0) - COALESCE(SUM(out_qty),0) AS move_qty
+       FROM stock_ledger
+      WHERE warehouse_id IS NOT NULL AND material_id IS NOT NULL
+      GROUP BY warehouse_id, material_id`
   );
 
-  // Build lookup maps keyed by "warehouse:material"
-  const key = (w, m) => `${w}:${m}`;
-  const wsMap = new Map(wsRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.current_qty) || 0]));
-  const mtMap = new Map(mtRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.balance_qty) || 0]));
-  const slMap = new Map(slRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.ledger_qty) || 0]));
+  // Latest stamped balance + first-row opening per (warehouse, material).
+  const [balRows] = await pool.query(
+    `SELECT sl.warehouse_id, sl.material_id, sl.balance_qty,
+            (SELECT f.opening_qty FROM stock_ledger f
+              WHERE f.warehouse_id=sl.warehouse_id AND f.material_id=sl.material_id
+              ORDER BY f.transaction_date ASC, f.id ASC LIMIT 1) AS opening_qty
+       FROM stock_ledger sl
+       JOIN (
+         SELECT warehouse_id, material_id, MAX(transaction_date) AS md
+           FROM stock_ledger GROUP BY warehouse_id, material_id
+       ) ld ON ld.warehouse_id=sl.warehouse_id AND ld.material_id=sl.material_id AND ld.md=sl.transaction_date
+       JOIN (
+         SELECT warehouse_id, material_id, transaction_date, MAX(id) AS mid
+           FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date
+       ) li ON li.warehouse_id=sl.warehouse_id AND li.material_id=sl.material_id
+           AND li.transaction_date=sl.transaction_date AND li.mid=sl.id`
+  );
 
-  // Union of all keys present in any table
-  const allKeys = new Set([...wsMap.keys(), ...mtMap.keys(), ...slMap.keys()]);
+  const key = (w, m) => `${w}:${m}`;
+  const moveMap = new Map(moveRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.move_qty) || 0]));
+  const openMap = new Map(balRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.opening_qty) || 0]));
+  const balMap = new Map(balRows.map(r => [key(r.warehouse_id, r.material_id), Number(r.balance_qty) || 0]));
+
+  const allKeys = new Set([...balMap.keys()]);
 
   const discrepancies = [];
   for (const k of allKeys) {
     const [warehouse_id, material_id] = k.split(':').map(Number);
-    const wsQty = wsMap.has(k) ? wsMap.get(k) : null;
-    const mtQty = mtMap.has(k) ? mtMap.get(k) : null;
-    const slQty = slMap.has(k) ? slMap.get(k) : null;
-
-    const types = [];
-    const diff = (a, b) => a != null && b != null && Math.abs(a - b) > tolerance;
-    if (diff(wsQty, mtQty)) types.push('warehouse_stock != material_transactions');
-    if (diff(wsQty, slQty)) types.push('warehouse_stock != stock_ledger');
-    if (diff(mtQty, slQty)) types.push('material_transactions != stock_ledger');
-    // Presence mismatches (row missing from one table but not another)
-    const present = [wsQty, mtQty, slQty].filter(v => v != null).length;
-    if (present > 0 && present < 3) types.push('missing_in_one_or_more_tables');
-
-    if (types.length > 0) {
-      discrepancies.push({ warehouse_id, material_id, wsQty, mtQty, slQty, types });
+    const stamped = balMap.get(k);
+    const expected = (openMap.get(k) || 0) + (moveMap.get(k) || 0);
+    if (Math.abs(stamped - expected) > tolerance) {
+      discrepancies.push({ warehouse_id, material_id, stamped, expected });
     }
   }
 
@@ -497,15 +672,10 @@ export async function inventoryConsistencyCheck({ tolerance = 0.001 } = {}) {
       material_name: m.name || null,
       warehouse_id: d.warehouse_id,
       warehouse_name: w.name || null,
-      warehouse_stock_qty: d.wsQty,
-      material_transaction_qty: d.mtQty,
-      stock_ledger_qty: d.slQty,
-      difference: {
-        ws_vs_mt: d.wsQty != null && d.mtQty != null ? Number((d.wsQty - d.mtQty).toFixed(3)) : null,
-        ws_vs_sl: d.wsQty != null && d.slQty != null ? Number((d.wsQty - d.slQty).toFixed(3)) : null,
-        mt_vs_sl: d.mtQty != null && d.slQty != null ? Number((d.mtQty - d.slQty).toFixed(3)) : null,
-      },
-      discrepancy_type: d.types.join('; '),
+      stock_ledger_qty: Number(d.stamped.toFixed(3)),
+      expected_qty: Number(d.expected.toFixed(3)),
+      difference: Number((d.stamped - d.expected).toFixed(3)),
+      discrepancy_type: 'stock_ledger balance_qty != opening + in - out (rebuild needed)',
     };
   });
 

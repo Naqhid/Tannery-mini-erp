@@ -15,6 +15,8 @@ router.get('/plan-stages', ctrl.planStages);
 router.get('/previous-issue', ctrl.previousIssue);
 router.get('/:id', validateId, ctrl.getOne);
 router.post('/', requireWriteAccess, ctrl.create);
+router.post('/bulk-status', requireWriteAccess, ctrl.bulkStatus);
+router.post('/bulk-delete', requireWriteAccess, ctrl.bulkDelete);
 router.put('/:id', validateId, requireWriteAccess, ctrl.update);
 router.delete('/:id', validateId, requireWriteAccess, ctrl.remove);
 

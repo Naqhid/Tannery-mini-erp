@@ -21,7 +21,7 @@ async function syncLinkedSalesOrderStatus(orderId) {
 
 // ─── Orders (main list) ──────────────────────────────────────────────────────
 
-export async function getOrders({ process_stage, show_completed, status_filter, search, plan_no, has_transactions, page = 1, limit = 10, sortBy, sortOrder }) {
+export async function getOrders({ process_stage, show_completed, status_filter, search, plan_no, sale_order_no, has_transactions, page = 1, limit = 10, sortBy, sortOrder }) {
   const params = [];
   let where = 'o.deleted_at IS NULL AND o.production_plan_id IS NOT NULL';
 
@@ -44,6 +44,14 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
   if (plan_no) {
     where += ' AND o.order_no LIKE ?';
     params.push(`%${plan_no}%`);
+  }
+  if (sale_order_no) {
+    where += ` AND EXISTS (
+      SELECT 1 FROM production_plans pp
+      JOIN sales_orders so ON so.id = pp.sales_order_id
+      WHERE pp.id = o.production_plan_id AND so.order_no LIKE ?
+    )`;
+    params.push(`%${sale_order_no}%`);
   }
   if (search) {
     where += ' AND (o.order_no LIKE ? OR o.article LIKE ? OR o.color LIKE ? OR o.customer_name LIKE ?)';
@@ -82,9 +90,27 @@ export async function getOrders({ process_stage, show_completed, status_filter, 
   //   Input  = o.issued_qty (stored)
   //   Output = completed_qty (measurement output alias below)
   //   WIP    = Input − Output − Rejection (can be negative, e.g. over-production)
+  // Sale order number linked via the production plan.
+  const saleOrderNoSql = `(
+    SELECT so.order_no FROM production_plans pp
+    JOIN sales_orders so ON so.id = pp.sales_order_id
+    WHERE pp.id = o.production_plan_id
+    LIMIT 1
+  )`;
+
+  // Latest Daily Production transaction date for this order (used by the
+  // Transaction tab's "Transaction Date" column).
+  const transactionDateSql = `(
+    SELECT MAX(t.production_date)
+    FROM production_status_transactions t
+    WHERE t.production_status_order_id = o.id AND t.deleted_at IS NULL
+  )`;
+
   const [rows] = await pool.query(
     `SELECT o.*, ${measurementCompletedSql} AS completed_qty,
        ${stageRejectionSql} AS rejection_qty,
+       ${saleOrderNoSql} AS sale_order_no,
+       ${transactionDateSql} AS transaction_date,
        (COALESCE(o.issued_qty,0) - ${measurementCompletedSql} - ${stageRejectionSql}) AS balance_qty
        FROM production_status_orders o
        WHERE ${where} ORDER BY ${col} ${ord} LIMIT ? OFFSET ?`,
@@ -194,10 +220,12 @@ export async function recalcOrderTotals(orderId) {
   const [[plan]] = await pool.query(`SELECT COALESCE(SUM(planned_qty),0) AS planned_qty FROM production_plan_stages WHERE plan_id=(SELECT production_plan_id FROM production_status_orders WHERE id=? LIMIT 1)`, [orderId]);
   const plannedQty = Number(plan?.planned_qty || 0);
   const balanceQty = Math.max(0, plannedQty - completedQty);
+  // Daily Production status: Pending when no output, In-Process once any output
+  // is recorded, Completed when output reaches the planned qty.
   let status = 'Pending';
-  if (plannedQty > 0 && completedQty === 0) status = 'Planned';
-  else if (completedQty > 0 && completedQty < plannedQty) status = 'In Progress';
+  if (completedQty <= 0) status = 'Pending';
   else if (plannedQty > 0 && completedQty >= plannedQty) status = 'Completed';
+  else status = 'In-Process';
 
   // Don't overwrite status if already posted
   const [[current]] = await pool.query('SELECT posted_at FROM production_status_orders WHERE id=?', [orderId]);
@@ -299,6 +327,26 @@ export async function getNextTransactionNo() {
   return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
+/**
+ * Resolve the planned qty for a production status order.
+ * `planned_qty` is not a stored column on production_status_orders; it is
+ * derived from the matching stage row in production_plan_stages.
+ */
+async function getPlannedQtyForOrder(orderId) {
+  const [[row]] = await pool.query(
+    `SELECT COALESCE((
+       SELECT s.planned_qty FROM production_plan_stages s
+       WHERE s.plan_id = o.production_plan_id
+         AND s.stage_name COLLATE utf8mb4_unicode_ci = o.process_stage COLLATE utf8mb4_unicode_ci
+       ORDER BY s.seq ASC LIMIT 1
+     ), 0) AS planned_qty
+     FROM production_status_orders o
+     WHERE o.id = ? AND o.deleted_at IS NULL`,
+    [orderId]
+  );
+  return parseFloat(row?.planned_qty) || 0;
+}
+
 export async function createTransaction(data, userId = null) {
   // Input qty must always be greater than 0 (output cannot be recorded without input).
   if ((parseFloat(data.input_qty) || 0) <= 0) {
@@ -309,11 +357,7 @@ export async function createTransaction(data, userId = null) {
 
   // Input qty must not exceed the stage planned qty.
   if (data.production_status_order_id) {
-    const [[order]] = await pool.query(
-      'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
-      [data.production_status_order_id]
-    );
-    const plannedQty = parseFloat(order?.planned_qty) || 0;
+    const plannedQty = await getPlannedQtyForOrder(data.production_status_order_id);
     if (plannedQty > 0 && (parseFloat(data.input_qty) || 0) > plannedQty) {
       const err = new Error(`Input qty cannot exceed planned qty (${plannedQty})`);
       err.status = 400;
@@ -321,15 +365,38 @@ export async function createTransaction(data, userId = null) {
     }
   }
 
-  // Output + rejection must not exceed opening + input.
+  // Output qty must not be greater than input qty.
   const openingVal = parseFloat(data.opening_qty) || 0;
   const inputVal = parseFloat(data.input_qty) || 0;
   const outputVal = parseFloat(data.output_qty) || 0;
   const rejectionVal = parseFloat(data.rejection_qty) || 0;
+  if (outputVal > inputVal) {
+    const err = new Error('Output qty cannot be greater than input qty');
+    err.status = 400;
+    throw err;
+  }
+  // Output + rejection must not exceed opening + input.
   if (outputVal + rejectionVal > openingVal + inputVal) {
     const err = new Error('Output + rejection cannot exceed opening + input');
     err.status = 400;
     throw err;
+  }
+
+  // Cumulative output qty (all transactions for this order) must not exceed planned qty.
+  if (data.production_status_order_id) {
+    const plannedQty = await getPlannedQtyForOrder(data.production_status_order_id);
+    if (plannedQty > 0) {
+      const [[agg]] = await pool.query(
+        'SELECT COALESCE(SUM(output_qty), 0) AS total_output FROM production_status_transactions WHERE production_status_order_id = ? AND deleted_at IS NULL',
+        [data.production_status_order_id]
+      );
+      const existingOutput = parseFloat(agg?.total_output) || 0;
+      if (existingOutput + outputVal > plannedQty) {
+        const err = new Error(`Output qty cannot exceed planned qty (${plannedQty}). Already produced: ${existingOutput}`);
+        err.status = 400;
+        throw err;
+      }
+    }
   }
 
   const transactionNo = data.transaction_no || await getNextTransactionNo();
@@ -373,26 +440,42 @@ export async function updateTransaction(id, data, userId = null) {
   if (!existing) return false;
 
   // Input qty must not exceed the stage planned qty.
-  const [[order]] = await pool.query(
-    'SELECT planned_qty FROM production_status_orders WHERE id = ? AND deleted_at IS NULL',
-    [existing.production_status_order_id]
-  );
-  const plannedQty = parseFloat(order?.planned_qty) || 0;
+  const plannedQty = await getPlannedQtyForOrder(existing.production_status_order_id);
   if (plannedQty > 0 && (parseFloat(data.input_qty) || 0) > plannedQty) {
     const err = new Error(`Input qty cannot exceed planned qty (${plannedQty})`);
     err.status = 400;
     throw err;
   }
 
-  // Output + rejection must not exceed opening + input.
+  // Output qty must not be greater than input qty.
   const openingVal = parseFloat(data.opening_qty) || 0;
   const inputVal = parseFloat(data.input_qty) || 0;
   const outputVal = parseFloat(data.output_qty) || 0;
   const rejectionVal = parseFloat(data.rejection_qty) || 0;
+  if (outputVal > inputVal) {
+    const err = new Error('Output qty cannot be greater than input qty');
+    err.status = 400;
+    throw err;
+  }
+  // Output + rejection must not exceed opening + input.
   if (outputVal + rejectionVal > openingVal + inputVal) {
     const err = new Error('Output + rejection cannot exceed opening + input');
     err.status = 400;
     throw err;
+  }
+
+  // Cumulative output qty (excluding this transaction) + new output must not exceed planned qty.
+  if (plannedQty > 0) {
+    const [[agg]] = await pool.query(
+      'SELECT COALESCE(SUM(output_qty), 0) AS total_output FROM production_status_transactions WHERE production_status_order_id = ? AND id <> ? AND deleted_at IS NULL',
+      [existing.production_status_order_id, id]
+    );
+    const otherOutput = parseFloat(agg?.total_output) || 0;
+    if (otherOutput + outputVal > plannedQty) {
+      const err = new Error(`Output qty cannot exceed planned qty (${plannedQty}). Already produced: ${otherOutput}`);
+      err.status = 400;
+      throw err;
+    }
   }
 
   const [result] = await pool.query(

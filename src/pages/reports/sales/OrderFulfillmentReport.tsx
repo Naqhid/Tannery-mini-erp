@@ -3,7 +3,7 @@ import api from '../../../lib/api';
 import ReportShell from '../../../components/reports/ReportShell';
 import FilterSelect from '../../../components/reports/FilterSelect';
 import { Column } from '../../../components/reports/ReportTable';
-import { fmtQty, fmtDate, fmtPct } from '../../../lib/reportFormat';
+import { fmtQty, fmtDate } from '../../../lib/reportFormat';
 import StatusBadge from '../../../components/reports/StatusBadge';
 
 interface Row extends Record<string, unknown> {
@@ -29,7 +29,7 @@ export default function OrderFulfillmentReport({ embedded }: { embedded?: boolea
     { key: 'order_qty', header: 'Ordered', align: 'right', render: r => fmtQty(r.order_qty) },
     { key: 'shipped_qty', header: 'Shipped', align: 'right', render: r => fmtQty(r.shipped_qty) },
     { key: 'pending_qty', header: 'Pending', align: 'right', render: r => <span className="text-amber-700 font-semibold">{fmtQty(r.pending_qty)}</span> },
-    { key: 'fulfillment_percent', header: 'Fulfilled %', align: 'right', render: r => fmtPct(r.fulfillment_percent) },
+    { key: 'fulfillment_percent', header: 'Fulfilled %', align: 'right', render: r => `${Math.round(Number(r.fulfillment_percent) || 0)}%` },
     { key: 'status', header: 'Status', render: r => <StatusBadge status={r.status} /> },
   ];
 

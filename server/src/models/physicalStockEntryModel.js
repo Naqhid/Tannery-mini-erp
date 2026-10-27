@@ -1,6 +1,74 @@
 import pool from '../config/db.js';
+import { addLedgerEntry, rebuildAndReprice } from './stockLedgerModel.js';
 
 const ALLOWED_SORT = ['id', 'entry_no', 'entry_date', 'stock_date', 'status', 'total_items', 'created_at'];
+
+// Post a Completed physical stock entry's variances into the stock ledger as
+// "Stock Adjustment" rows: a positive variance goes to in_qty, a negative one
+// to out_qty (as a positive magnitude). The item's existing average cost is
+// used for valuation, then valuation is rebuilt per material/warehouse.
+async function postAdjustmentToLedger(conn, entryId, entry, items, createdBy) {
+  // Remove any prior adjustment rows for this entry so a re-save never
+  // double-counts, then re-insert the current variances.
+  const [prev] = await conn.query(
+    'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+    ['physical_stock', entryId]
+  );
+  await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['physical_stock', entryId]);
+
+  const warehouseId = entry.warehouse_id || null;
+  const txnDate = entry.stock_date || entry.entry_date || new Date().toISOString().split('T')[0];
+  const affected = new Map();
+  for (const p of prev) affected.set(`${p.warehouse_id}:${p.material_id}`, { w: p.warehouse_id, m: p.material_id });
+
+  for (const item of items) {
+    const materialId = item.material_id || null;
+    if (!materialId || !warehouseId) continue;
+    // Additive behaviour: the quantity entered is the amount to ADD to the
+    // current stock (a positive value increases stock, a negative value
+    // decreases it). It is NOT a physical count / variance.
+    const addQty = Number(parseFloat(item.physical_qty) || 0);
+    if (Math.abs(addQty) < 0.000001) continue; // nothing to add
+
+    const unitCost = Number(parseFloat(item.avg_rate) || 0);
+    const inQty = addQty > 0 ? addQty : 0;
+    const outQty = addQty < 0 ? Math.abs(addQty) : 0;
+    const amount = Number((Math.abs(addQty) * unitCost).toFixed(2));
+
+    await addLedgerEntry(conn, {
+      transaction_date: txnDate,
+      transaction_type: 'Stock Adjustment',
+      reference_type: 'physical_stock',
+      reference_id: entryId,
+      reference_no: entry.entry_no || null,
+      warehouse_id: warehouseId,
+      material_id: materialId,
+      uom: item.uom || null,
+      batch_no: item.batch_no || null,
+      in_qty: inQty,
+      out_qty: outQty,
+      unit_cost: unitCost,
+      amount,
+      balance_qty: 0, // recomputed by rebuildAndReprice
+      remarks: `Physical stock adjustment (${entry.entry_no || ''})`,
+      created_by: createdBy,
+    });
+
+    affected.set(`${warehouseId}:${materialId}`, { w: warehouseId, m: materialId });
+  }
+
+  // Rebuild date-ordered valuation from the stock ledger for every touched pair.
+  for (const p of affected.values()) {
+    await rebuildAndReprice(conn, p.w, p.m);
+  }
+}
+
+// No-op: stock_ledger is the single source of truth. The delete/un-post paths
+// already remove this entry's stock_ledger rows and call rebuildAndReprice, so
+// there is nothing else to reverse. Kept for backward-compatible call sites.
+async function removeAdjustmentTransactions() {
+  // Intentionally empty — material_transactions no longer exists.
+}
 
 export async function getAll({ search, entry_no, warehouse_id, status, from_date, to_date, page = 1, limit = 10, sortBy, sortOrder } = {}) {
   const params = [];
@@ -57,9 +125,9 @@ export async function getById(id) {
 
   const [items] = await pool.query(
     `SELECT psei.*,
-       m.code AS material_code, m.name AS material_name
+       m.id AS material_id, m.code AS material_code, m.name AS material_name
      FROM physical_stock_entry_items psei
-     LEFT JOIN materials m ON psei.item_code = m.code
+     LEFT JOIN materials m ON psei.item_code COLLATE utf8mb4_unicode_ci = m.code COLLATE utf8mb4_unicode_ci
      WHERE psei.entry_id = ?
      ORDER BY psei.seq ASC`,
     [id]
@@ -125,7 +193,7 @@ export async function create(data, items = [], createdBy = null) {
         batch_no, from_item_code, to_item_code, item_group, item_id, uom,
         reference_no, total_items, matched_items, variance_items,
         total_variance_qty, total_variance_value, status, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         entry_no,
         data.entry_date || new Date().toISOString().split('T')[0],
@@ -179,6 +247,12 @@ export async function create(data, items = [], createdBy = null) {
           item.remarks || null
         ]
       );
+    }
+
+    // When the entry is Completed (posted), reflect the variances in the stock
+    // ledger as Stock Adjustment movements.
+    if ((data.status || 'Draft') === 'Completed') {
+      await postAdjustmentToLedger(conn, entryId, { ...data, entry_no }, items, createdBy);
     }
 
     await conn.commit();
@@ -279,6 +353,23 @@ export async function update(id, data, items = [], updatedBy = null) {
       );
     }
 
+    if ((data.status || 'Draft') === 'Completed') {
+      // Posted → (re)write the Stock Adjustment ledger rows for this entry.
+      await postAdjustmentToLedger(conn, id, { ...data, entry_no: data.entry_no }, items, updatedBy);
+    } else {
+      // Not posted → ensure no stale ledger rows linger, and rebuild valuation
+      // for any materials that previously had adjustment rows.
+      const [prev] = await conn.query(
+        'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+        ['physical_stock', id]
+      );
+      if (prev.length) {
+        await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['physical_stock', id]);
+        for (const p of prev) await rebuildAndReprice(conn, p.warehouse_id, p.material_id);
+      }
+      await removeAdjustmentTransactions(conn, id);
+    }
+
     await conn.commit();
     return true;
   } catch (err) {
@@ -290,21 +381,69 @@ export async function update(id, data, items = [], updatedBy = null) {
 }
 
 export async function softDelete(id) {
-  const [result] = await pool.query(
-    `UPDATE physical_stock_entries SET deleted_at = CURRENT_TIMESTAMP, status = 'Cancelled' WHERE id = ? AND deleted_at IS NULL`,
-    [id]
-  );
-  return result.affectedRows > 0;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // Reverse any posted Stock Adjustment ledger rows for this entry, then
+    // rebuild valuation for the affected materials.
+    const [prev] = await conn.query(
+      'SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type=? AND reference_id=?',
+      ['physical_stock', id]
+    );
+    if (prev.length) {
+      await conn.query('DELETE FROM stock_ledger WHERE reference_type=? AND reference_id=?', ['physical_stock', id]);
+      for (const p of prev) await rebuildAndReprice(conn, p.warehouse_id, p.material_id);
+    }
+    await removeAdjustmentTransactions(conn, id);
+    const [result] = await conn.query(
+      `UPDATE physical_stock_entries SET deleted_at = CURRENT_TIMESTAMP, status = 'Cancelled' WHERE id = ? AND deleted_at IS NULL`,
+      [id]
+    );
+    await conn.commit();
+    return result.affectedRows > 0;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function bulkSoftDelete(ids) {
   if (!ids || ids.length === 0) return 0;
-  const placeholders = ids.map(() => '?').join(', ');
-  const [result] = await pool.query(
-    `UPDATE physical_stock_entries SET deleted_at = CURRENT_TIMESTAMP, status = 'Cancelled' WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
-    ids
-  );
-  return result.affectedRows;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Reverse any posted Stock Adjustment ledger rows for each entry, then
+    // rebuild valuation for the affected materials — same as single delete.
+    const placeholders = ids.map(() => '?').join(', ');
+    const [prev] = await conn.query(
+      `SELECT DISTINCT warehouse_id, material_id FROM stock_ledger WHERE reference_type = ? AND reference_id IN (${placeholders})`,
+      ['physical_stock', ...ids]
+    );
+    if (prev.length) {
+      await conn.query(
+        `DELETE FROM stock_ledger WHERE reference_type = ? AND reference_id IN (${placeholders})`,
+        ['physical_stock', ...ids]
+      );
+      for (const p of prev) await rebuildAndReprice(conn, p.warehouse_id, p.material_id);
+    }
+    for (const entryId of ids) await removeAdjustmentTransactions(conn, entryId);
+
+    const [result] = await conn.query(
+      `UPDATE physical_stock_entries SET deleted_at = CURRENT_TIMESTAMP, status = 'Cancelled' WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+      ids
+    );
+
+    await conn.commit();
+    return result.affectedRows;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function bulkUpdateStatus(ids, status) {
@@ -347,7 +486,7 @@ export async function exportData(entryId) {
     `SELECT psei.*,
        m.name AS material_name
      FROM physical_stock_entry_items psei
-     LEFT JOIN materials m ON psei.item_code = m.code
+     LEFT JOIN materials m ON psei.item_code COLLATE utf8mb4_unicode_ci = m.code COLLATE utf8mb4_unicode_ci
      WHERE psei.entry_id = ?
      ORDER BY psei.seq ASC`,
     [entryId]

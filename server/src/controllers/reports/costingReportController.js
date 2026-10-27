@@ -35,6 +35,14 @@ export async function standardVsActual(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function wipCostSummary(req, res, next) {
+  try {
+    const { stage, search } = req.query;
+    const { page, limit } = req;
+    shape(res, await model.wipCostSummary({ stage, search, page, limit }), page, limit);
+  } catch (err) { next(err); }
+}
+
 export async function filters(req, res, next) {
   try {
     res.json({ data: await model.getCostingFilters() });

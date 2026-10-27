@@ -71,6 +71,7 @@ export default function OutboundDelivery() {
     deleteTitle="Delete Outbound Delivery"
     deleteMessage="This will remove the outbound delivery and restore its stock to the source warehouse."
     searchPlaceholder="Search outbound deliveries..."
-    enableBulkDelete={false}
+    enableBulkDelete={true}
+    enableBulkStatus={true}
   />;
 }

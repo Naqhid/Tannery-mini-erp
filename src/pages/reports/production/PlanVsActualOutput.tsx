@@ -9,7 +9,7 @@ import StatusBadge from '../../../components/reports/StatusBadge';
 
 interface Row extends Record<string, unknown> {
   id: number; plan_no: string; plan_date: string; customer_name: string; article: string; color: string; uom: string;
-  stage: string; planned_qty: number; actual_output: number; wip_qty: number; rejection_qty: number; status: string;
+  planned_qty: number; actual_output: number; variance: number; wip_qty: number; rejection_qty: number; status: string;
 }
 
 export default function PlanVsActualOutput({ embedded, title, subtitle }: { embedded?: boolean; title?: string; subtitle?: string }) {
@@ -35,9 +35,11 @@ export default function PlanVsActualOutput({ embedded, title, subtitle }: { embe
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },
     { key: 'uom', header: 'UOM' },
-    { key: 'stage', header: 'Stage' },
+    // Planned Qty = Wet Blue planned; Actual Output Qty = Finishing output.
     { key: 'planned_qty', header: 'Planned Qty', align: 'right', render: r => fmtQty(r.planned_qty) },
-    { key: 'actual_output', header: 'Actual Output', align: 'right', render: r => <span className="text-emerald-700">{fmtQty(r.actual_output)}</span> },
+    { key: 'actual_output', header: 'Actual Output Qty', align: 'right', render: r => <span className="text-emerald-700">{fmtQty(r.actual_output)}</span> },
+    // Variance = Planned Qty − Actual Output Qty.
+    { key: 'variance', header: 'Variance', align: 'right', render: r => <span className={Number(r.variance) > 0 ? 'text-red-600' : Number(r.variance) < 0 ? 'text-emerald-600' : 'text-gray-700'}>{fmtQty(r.variance)}</span> },
     { key: 'wip_qty', header: 'WIP', align: 'right', render: r => <span className="text-amber-600">{fmtQty(r.wip_qty)}</span> },
     { key: 'rejection_qty', header: 'Rejection', align: 'right', render: r => <span className="text-red-600">{fmtQty(r.rejection_qty || 0)}</span> },
     { key: 'status', header: 'Status', render: r => <StatusBadge status={r.status} /> },

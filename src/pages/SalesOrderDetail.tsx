@@ -24,6 +24,8 @@ interface SalesOrderItem {
   thickness: string;
   uom: string;
   quantity: number;
+  shipped_qty: number | string;
+  shipped_date: string;
   unit_price: number;
   discount_percent: number;
   amount: number;
@@ -51,6 +53,9 @@ interface SalesOrderFull {
   price_list: string;
   sales_person: string;
   status: string;
+  shipped_qty: number | string;
+  shipped_date: string;
+  packing_output_qty?: number;
   terms_conditions: string;
   discount: number;
   freight: number;
@@ -74,7 +79,7 @@ const emptyOrder: SalesOrderFull = {
   customer_id: null, order_date: new Date().toISOString().split('T')[0],
   delivery_date: '', customer_po_no: '', order_type: 'Standard', contact_person: '',
   delivery_address: '', payment_terms: '', currency: 'INR', price_list: '',
-  sales_person: '', status: 'Draft', terms_conditions: '', discount: 0, freight: 0,
+  sales_person: '', status: 'Draft', shipped_qty: '', shipped_date: '', terms_conditions: '', discount: 0, freight: 0,
   tax_percent: 18, tax_type: 'IGST', sub_total: 0, tax_amount: 0,
   cgst_amount: 0, sgst_amount: 0, igst_amount: 0, grand_total: 0, remarks: '',
   items: [], deliveries: [], receipts: [], invoices: [], attachments: [],
@@ -82,7 +87,7 @@ const emptyOrder: SalesOrderFull = {
 
 const emptyItem: SalesOrderItem = {
   _key: '', product_id: null, item_code: '', item_description: '', leather_type: '', finish_color: '',
-  thickness: '', uom: 'Sq.Ft.', quantity: 0, unit_price: 0, discount_percent: 0, amount: 0,
+  thickness: '', uom: 'Sq.Ft.', quantity: 0, shipped_qty: '', shipped_date: '', unit_price: 0, discount_percent: 0, amount: 0,
   delivery_date: '',
 };
 
@@ -178,6 +183,14 @@ export default function SalesOrderDetail() {
     } catch { setProducts([]); }
   }, []);
 
+  const [colors, setColors] = useState<{ id: number; name: string }[]>([]);
+  const fetchColors = useCallback(async () => {
+    try {
+      const res = await api<{ data: { id: number; name: string }[] }>('/colors/dropdown');
+      setColors(res.data || []);
+    } catch { setColors([]); }
+  }, []);
+
   const fetchOrder = useCallback(async () => {
     if (isNew) return;
     try {
@@ -189,6 +202,12 @@ export default function SalesOrderDetail() {
         ...d,
         order_date: d.order_date?.split('T')[0] || '',
         delivery_date: d.delivery_date?.split('T')[0] || '',
+        // Prefill Shipped Qty from the Packing-stage output when the order has
+        // no saved shipped qty yet; otherwise keep the saved value. Editable.
+        shipped_qty: (d.shipped_qty != null && d.shipped_qty !== ('' as unknown as number))
+          ? Number(d.shipped_qty)
+          : (Number(d.packing_output_qty) || 0),
+        shipped_date: d.shipped_date?.split('T')[0] || '',
         discount: Number(d.discount) || 0,
         freight: Number(d.freight) || 0,
         tax_percent: Number(d.tax_percent) || 18,
@@ -199,7 +218,7 @@ export default function SalesOrderDetail() {
         sgst_amount: Number(d.sgst_amount) || 0,
         igst_amount: Number(d.igst_amount) || 0,
         grand_total: Number(d.grand_total) || 0,
-        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, delivery_date: i.delivery_date?.split('T')[0] || '' })),
+        items: (d.items || []).map(i => ({ ...i, _key: String(Math.random()), quantity: Number(i.quantity) || 0, shipped_qty: (i.shipped_qty != null && i.shipped_qty !== ('' as unknown as number)) ? Number(i.shipped_qty) : '', shipped_date: i.shipped_date?.split('T')[0] || '', unit_price: Number(i.unit_price) || 0, discount_percent: Number(i.discount_percent) || 0, amount: Number(i.amount) || 0, delivery_date: i.delivery_date?.split('T')[0] || '' })),
         deliveries: d.deliveries || [],
         receipts: d.receipts || [],
         invoices: d.invoices || [],
@@ -219,7 +238,7 @@ export default function SalesOrderDetail() {
     } catch { /* ignore preview failure */ }
   }, [isNew]);
 
-  useEffect(() => { fetchCustomers(); fetchProducts(); fetchOrder(); fetchNextOrderNo(); }, [fetchCustomers, fetchProducts, fetchOrder, fetchNextOrderNo]);
+  useEffect(() => { fetchCustomers(); fetchProducts(); fetchColors(); fetchOrder(); fetchNextOrderNo(); }, [fetchCustomers, fetchProducts, fetchColors, fetchOrder, fetchNextOrderNo]);
 
   const updateField = (field: keyof SalesOrderFull, value: any) => {
     setOrder(prev => {
@@ -262,6 +281,7 @@ export default function SalesOrderDetail() {
   const handleSaveItem = async () => {
     if (!itemForm.item_description) { toast.error('Item description is required'); return; }
     if (!itemForm.quantity) { toast.error('Quantity is required'); return; }
+    if (!itemForm.delivery_date) { toast.error('Delivery Date is required'); return; }
     const computed = calcItem(itemForm);
     let newItems: SalesOrderItem[];
     if (editingItem) {
@@ -310,6 +330,38 @@ export default function SalesOrderDetail() {
   const handleSave = async () => {
     if (!order.customer_id) { toast.error('Customer is required'); return; }
     if (!order.order_date) { toast.error('Order date is required'); return; }
+    // Delivery Date is mandatory on every order line.
+    if (order.items.length > 0 && order.items.some(i => !i.delivery_date)) {
+      toast.error('Delivery Date is required for every item');
+      return;
+    }
+    // Delivery Date must be later than both the Order Date and the creation date.
+    // For a new order the creation date is today; for an existing one it's the
+    // stored created_at (falling back to the order date).
+    const toDay = (v?: string | number | null) => {
+      if (!v) return null;
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) return null;
+      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    };
+    const orderDay = toDay(order.order_date);
+    const createdDay = isNew ? toDay(new Date().toISOString()) : toDay((order as any).created_at);
+    const floor = Math.max(orderDay ?? -Infinity, createdDay ?? -Infinity);
+    if (Number.isFinite(floor)) {
+      const headerDay = toDay(order.delivery_date);
+      if (headerDay != null && headerDay <= floor) {
+        toast.error('Delivery Date must be later than both the Order Date and the order creation date');
+        return;
+      }
+      const badItem = order.items.findIndex(i => {
+        const d = toDay(i.delivery_date);
+        return d != null && d <= floor;
+      });
+      if (badItem >= 0) {
+        toast.error(`Delivery Date for item ${badItem + 1} must be later than both the Order Date and the creation date`);
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload = { ...order, items: order.items.map(({ _key, ...rest }) => rest) };
@@ -439,6 +491,9 @@ export default function SalesOrderDetail() {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(n || 0);
 
+  const fmtQty = (n: number) =>
+    new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(n || 0);
+
   const totalReceived = order.receipts.reduce((s, r) => s + Number(r.amount || 0), 0);
 
   if (loading) return (
@@ -557,9 +612,24 @@ export default function SalesOrderDetail() {
           </div>
           {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="lg:col-span-3">
+            <div className="lg:col-span-2">
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
               <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
+            </div>
+            <div className="space-y-3">
+              <Input
+                label="Shipped Qty"
+                type="number"
+                value={order.shipped_qty === '' ? '' : String(order.shipped_qty)}
+                onChange={(e) => updateField('shipped_qty', e.target.value)}
+                placeholder="0.00"
+              />
+              <Input
+                label="Shipped Date"
+                type="date"
+                value={order.shipped_date}
+                onChange={(e) => updateField('shipped_date', e.target.value)}
+              />
             </div>
             <div>
               <Select
@@ -629,17 +699,22 @@ export default function SalesOrderDetail() {
             {activeTab === 'items' && (
               <div className="space-y-5">
                 <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                  <datalist id="so-color-options">
+                    {colors.map(c => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Delivery Date', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
+                        {['#', 'Article Code', 'Article', 'Color', 'Thickness', 'UOM', 'Qty', 'Shipped Qty', 'Shipped Date', 'Delivery Date *', `Rate (${order.currency || 'INR'})`, 'Discount %', `Amount (${order.currency || 'INR'})`, ''].map(h => (
                           <th key={h} className="text-left py-3 px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {order.items.length === 0 ? (
-                        <tr><td colSpan={12} className="py-12 text-center">
+                        <tr><td colSpan={14} className="py-12 text-center">
                           <Package size={32} className="mx-auto text-gray-300 mb-3" />
                           <p className="text-sm font-medium text-gray-500">No items added yet</p>
                           <p className="text-xs text-gray-400 mt-1">Click "Add Item" to add a row</p>
@@ -665,7 +740,7 @@ export default function SalesOrderDetail() {
                                   item_code: product?.code || '',
                                   item_description: product?.name || '',
                                   leather_type: product?.leather_type_name || product?.leather_type || '',
-                                  finish_color: product?.color_name || '',
+                                  // Color is entered manually (type or select); not auto-filled from product.
                                   thickness: product?.thickness_name || product?.thickness || '',
                                   uom: product?.uom_name || product?.uom || '',
                                 } : it);
@@ -686,7 +761,17 @@ export default function SalesOrderDetail() {
                             />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input value={colorOnly(item.finish_color)} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[80px] cursor-not-allowed" placeholder="Color" />
+                            <input
+                              list="so-color-options"
+                              value={colorOnly(item.finish_color)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const newItems = order.items.map(it => it._key === item._key ? { ...it, finish_color: val } : it);
+                                setOrder(prev => ({ ...prev, items: newItems }));
+                              }}
+                              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-400/30"
+                              placeholder="Type or select"
+                            />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input value={item.thickness} readOnly className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 min-w-[60px] cursor-not-allowed" placeholder="mm" />
@@ -701,6 +786,19 @@ export default function SalesOrderDetail() {
                               const tots = calcTotals(newItems, Number(order.discount), Number(order.freight), Number(order.tax_percent), order.tax_type);
                               setOrder(prev => ({ ...prev, items: newItems, ...tots }));
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[60px]" placeholder="0" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="number" value={item.shipped_qty === '' ? '' : String(item.shipped_qty)} onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, shipped_qty: val } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[70px]" placeholder="0" />
+                          </td>
+                          <td className="py-2.5 px-3.5">
+                            <input type="date" value={item.shipped_date} onChange={(e) => {
+                              const newItems = order.items.map(it => it._key === item._key ? { ...it, shipped_date: e.target.value } : it);
+                              setOrder(prev => ({ ...prev, items: newItems }));
+                            }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" />
                           </td>
                           <td className="py-2.5 px-3.5">
                             <input type="date" value={item.delivery_date} onChange={(e) => {
@@ -731,6 +829,16 @@ export default function SalesOrderDetail() {
                         </tr>
                       ))}
                     </tbody>
+                    {order.items.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold text-gray-900">
+                          <td colSpan={6} className="py-2.5 px-3.5 text-right text-xs uppercase tracking-wider text-gray-600">Order Total</td>
+                          <td className="py-2.5 px-3.5 text-right text-sm">{fmtQty(order.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0))}</td>
+                          <td className="py-2.5 px-3.5 text-right text-sm">{fmtQty(order.items.reduce((s, i) => s + (Number(i.shipped_qty) || 0), 0))}</td>
+                          <td colSpan={6} className="py-2.5 px-3.5"></td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
 

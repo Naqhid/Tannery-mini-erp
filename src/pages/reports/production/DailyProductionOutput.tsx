@@ -7,7 +7,7 @@ import { fmtQty, fmtDate } from '../../../lib/reportFormat';
 
 interface Row extends Record<string, unknown> {
   id: number; production_date: string; transaction_no: string; plan_no: string; process_stage: string;
-  article: string; color: string; uom: string; input_qty: number; output_qty: number; rejection_qty: number; wip_qty: number;
+  article: string; color: string; uom: string; opening_qty: number; input_qty: number; output_qty: number; rejection_qty: number; wip_qty: number;
 }
 
 export default function DailyProductionOutput({ embedded }: { embedded?: boolean }) {
@@ -27,6 +27,7 @@ export default function DailyProductionOutput({ embedded }: { embedded?: boolean
     { key: 'article', header: 'Article' },
     { key: 'color', header: 'Color' },
     { key: 'uom', header: 'UOM' },
+    { key: 'opening_qty', header: 'Opening', align: 'right', render: r => fmtQty(r.opening_qty) },
     { key: 'input_qty', header: 'Input', align: 'right', render: r => fmtQty(r.input_qty) },
     { key: 'output_qty', header: 'Output', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.output_qty)}</span> },
     { key: 'rejection_qty', header: 'Rejection', align: 'right', render: r => <span className="text-red-600">{fmtQty(r.rejection_qty)}</span> },
@@ -48,6 +49,7 @@ export default function DailyProductionOutput({ embedded }: { embedded?: boolean
       footer={(rows, totals) => totals && (
         <tr>
           <td className="px-4 py-3 text-sm" colSpan={7}>Total</td>
+          <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.total_opening)}</td>
           <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.total_input)}</td>
           <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.total_output)}</td>
           <td className="px-4 py-3 text-sm text-right text-red-600">{fmtQty(totals.total_rejection)}</td>

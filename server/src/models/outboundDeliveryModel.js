@@ -86,7 +86,9 @@ async function insertOutboundItems(conn, id, data, items, userId) {
     const qty = itemQty(item);
     if (qty <= 0) throw new Error('Outbound quantity must be greater than zero.');
     const [[stock]] = await conn.query(
-      'SELECT current_qty FROM warehouse_stock WHERE warehouse_id = ? AND material_id = ? FOR UPDATE',
+      `SELECT balance_qty AS current_qty FROM stock_ledger
+        WHERE warehouse_id = ? AND material_id = ?
+        ORDER BY transaction_date DESC, id DESC LIMIT 1`,
       [data.from_warehouse_id, item.material_id]
     );
     const available = asNumber(stock?.current_qty);
@@ -227,4 +229,38 @@ export async function getStats() {
      FROM outbound_deliveries`
   );
   return stats;
+}
+
+// Bulk status/delete reuse the normal per-record paths so the Outbound
+// Delivery stock-ledger movement (out_qty) stays correct.
+export async function bulkSetStatus(ids, status, updatedBy = null) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const existing = await getById(id);
+      if (!existing) { failed.push({ id, error: 'Not found' }); continue; }
+      if (existing.status === status) { success++; continue; }
+      const { items = [], ...header } = existing;
+      await update(id, { ...header, status }, items, updatedBy);
+      success++;
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}
+
+export async function bulkDelete(ids) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const ok = await remove(id);
+      if (ok) success++; else failed.push({ id, error: 'Not found' });
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
 }

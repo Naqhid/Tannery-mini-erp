@@ -16,6 +16,7 @@ import ProductMasterForm from './pages/ProductMasterForm';
 import CustomerMaster from './pages/CustomerMaster';
 import CustomerMasterForm from './pages/CustomerMasterForm';
 import PlaceholderPage from './pages/PlaceholderPage';
+import MaterialRequirement from './pages/MaterialRequirement';
 // New Master Pages
 import ProductCategory from './pages/ProductCategory';
 import ProductCategoryForm from './pages/ProductCategoryForm';
@@ -69,6 +70,8 @@ import OutboundDelivery from './pages/OutboundDelivery';
 import OutboundDeliveryDetail from './pages/OutboundDeliveryDetail';
 import MaterialIssueToBatch from './pages/MaterialIssueToBatch';
 import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
+import MaterialTransferNote from './pages/MaterialTransferNote';
+import MaterialTransferNoteDetail from './pages/MaterialTransferNoteDetail';
 // Production Plan Pages
 import ProductionPlan from './pages/ProductionPlan';
 import ProductionPlanDetail from './pages/ProductionPlanDetail';
@@ -99,9 +102,9 @@ import DepartmentMasterForm from './pages/DepartmentMasterForm';
 // Reports Module (grouped into 5 tabbed pages)
 import InventoryReports from './pages/reports/InventoryReports';
 import ProductionPlanReports from './pages/reports/ProductionPlanReports';
-import ActualProductionReports from './pages/reports/ActualProductionReports';
 import SalesOrderReports from './pages/reports/SalesOrderReports';
 import StageCostingReports from './pages/reports/StageCostingReports';
+import WipCostSummaryReport from './pages/reports/costing/WipCostSummaryReport';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -212,7 +215,7 @@ function App() {
             <Route path="production-status" element={<ProductionStatus />} />
             <Route path="production-status/new" element={<ProductionStatusForm />} />
             <Route path="production-status/:id" element={<ProductionStatusForm />} />
-            <Route path="material-requirement" element={<PlaceholderPage />} />
+            <Route path="material-requirement" element={<MaterialRequirement />} />
             <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
             <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />
             <Route path="physical-stock-entry/:id" element={<PhysicalStockEntryDetail />} />
@@ -239,6 +242,8 @@ function App() {
             <Route path="material-issue" element={<MaterialIssueToBatch />} />
             <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
             <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
+            <Route path="material-transfer-note" element={<MaterialTransferNote />} />
+            <Route path="material-transfer-note/:planId" element={<MaterialTransferNoteDetail />} />
             <Route path="monthly-batch-process" element={<MonthlyBatchProcess />} />
             {/* Purchase */}
             <Route path="supplier-pricing-history" element={<SupplierPricingHistory />} />
@@ -260,9 +265,11 @@ function App() {
             <Route path="reports" element={<Navigate to="/reports/inventory" replace />} />
             <Route path="reports/inventory" element={<InventoryReports />} />
             <Route path="reports/production-plan" element={<ProductionPlanReports />} />
-            <Route path="reports/actual-production" element={<ActualProductionReports />} />
+            {/* Actual Production Reports merged into Production Plan Reports */}
+            <Route path="reports/actual-production" element={<Navigate to="/reports/production-plan" replace />} />
             <Route path="reports/sales-order" element={<SalesOrderReports />} />
             <Route path="reports/stage-costing" element={<StageCostingReports />} />
+            <Route path="reports/wip-cost-summary" element={<WipCostSummaryReport />} />
             <Route path="inventory-reports" element={<Navigate to="/reports/inventory" replace />} />
             <Route path="cost-analysis" element={<Navigate to="/reports/stage-costing" replace />} />
             {/* Settings */}

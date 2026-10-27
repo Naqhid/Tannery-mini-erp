@@ -12,9 +12,10 @@ export default function UOMForm() {
       formFields={[
         { key: 'code', label: 'Code', placeholder: 'Auto-generated', disabled: true },
         { key: 'name', label: 'Name', required: true, placeholder: 'Enter UOM name' },
+        { key: 'short_form', label: 'Short Form', placeholder: 'e.g. Sq.Ft., Kg, Pcs' },
         { key: 'description', label: 'Description', type: 'textarea' },
       ]}
-      emptyData={{ code: '', name: '', description: '', status: 'Active' }}
+      emptyData={{ code: '', name: '', short_form: '', description: '', status: 'Active' }}
     />
   );
 }

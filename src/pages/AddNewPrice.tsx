@@ -2,22 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Save, X, Plus, Trash2, Upload, Download, FileText, Search,
+  Save, X, Trash2, Upload, Download, FileText, Search,
   Loader2, Info, Calendar, Package, UploadCloud
 } from 'lucide-react';
 import api from '../lib/api';
 import { usePermission } from '../lib/usePermission';
 
 interface Supplier { id: number; code: string; name: string; }
-interface Material { id: number; code: string; name: string; uom: string; type?: string; }
-
-interface PriceBreak {
-  _key: string;
-  from_qty: string;
-  to_qty: string;
-  unit_price: string;
-  discount_percent: string;
-  net_price: number;
+interface Material {
+  id: number; code: string; name: string; uom: string; type?: string;
+  group_name?: string; category?: string; category_name?: string;
+  currency?: string; reorder_level?: number | string;
 }
 
 interface AttachmentFile {
@@ -40,18 +35,15 @@ interface PriceFormData {
   uom: string;
   currency: string;
   min_order_qty: string;
-  remarks: string;
+  approval_status: string;
 }
 
 const emptyForm: PriceFormData = {
   supplier_id: '', material_id: '', price_type: 'Purchase Price',
   valid_from: new Date().toISOString().split('T')[0], item_group: '',
   supplier_part_no: '', unit_price: '', valid_to: '', uom: '',
-  currency: 'INR', min_order_qty: '', remarks: '',
+  currency: 'INR', min_order_qty: '', approval_status: '',
 };
-
-let _keyCounter = 0;
-const genKey = () => `pb_${++_keyCounter}_${Date.now()}`;
 
 export default function AddNewPrice() {
   const { id } = useParams<{ id: string }>();
@@ -60,7 +52,6 @@ export default function AddNewPrice() {
   const isNew = !id || id === 'new';
 
   const [form, setForm] = useState<PriceFormData>(emptyForm);
-  const [priceBreaks, setPriceBreaks] = useState<PriceBreak[]>([]);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -104,18 +95,8 @@ export default function AddNewPrice() {
         uom: d.uom || '',
         currency: d.currency || 'INR',
         min_order_qty: String(d.min_order_qty || ''),
-        remarks: d.remarks || '',
+        approval_status: d.status || '',
       });
-      if (d.price_breaks?.length) {
-        setPriceBreaks(d.price_breaks.map((pb: any) => ({
-          _key: genKey(),
-          from_qty: String(pb.from_qty),
-          to_qty: String(pb.to_qty || ''),
-          unit_price: String(pb.unit_price),
-          discount_percent: String(pb.discount_percent || 0),
-          net_price: pb.net_price || pb.unit_price,
-        })));
-      }
       if (d.attachments?.length) {
         setAttachments(d.attachments.map((att: any) => ({
           id: att.id,
@@ -138,23 +119,58 @@ export default function AddNewPrice() {
 
   const update = (key: keyof PriceFormData, value: string) => setForm(p => ({ ...p, [key]: value }));
 
-  const updatePriceBreak = (key: string, field: keyof PriceBreak, value: string) => {
-    setPriceBreaks(prev => prev.map(pb => {
-      if (pb._key !== key) return pb;
-      const updated = { ...pb, [field]: value };
-      const price = parseFloat(updated.unit_price) || 0;
-      const discount = parseFloat(updated.discount_percent) || 0;
-      updated.net_price = parseFloat((price - (price * discount / 100)).toFixed(2));
-      return updated;
+  // Look up the most recent pricing record for a supplier + item and surface
+  // its approval details and status. Shared by the item and supplier handlers
+  // so approval info stays in sync whenever either selection changes.
+  const loadApprovalInfo = useCallback(async (supplierId: string, materialId: string) => {
+    if (!supplierId || !materialId) {
+      setApprovalInfo({ lastApprovedDate: '', lastApprovedPrice: '', approvedBy: '', approvalNotes: '' });
+      setForm(p => ({ ...p, approval_status: materialId ? 'Not Approved' : '' }));
+      return;
+    }
+    try {
+      // Server-side filter by material so we only get this item's records.
+      const res = await api<{ data: any[] }>(`/supplier-pricing/supplier/${supplierId}?material_id=${materialId}`);
+      const latest = (res.data || []).slice().sort((a: any, b: any) =>
+        new Date(b.approved_date || b.valid_from || 0).getTime() - new Date(a.approved_date || a.valid_from || 0).getTime()
+      )[0];
+      if (latest) {
+        setApprovalInfo({
+          lastApprovedDate: (latest.last_approved_date || latest.approved_date)?.split('T')[0] || '',
+          lastApprovedPrice: latest.last_approved_price != null ? String(latest.last_approved_price) : (latest.unit_price != null ? String(latest.unit_price) : ''),
+          approvedBy: latest.approved_by_name || '',
+          approvalNotes: latest.approval_notes || latest.remarks || '',
+        });
+        setForm(p => ({ ...p, approval_status: latest.status || '' }));
+      } else {
+        setApprovalInfo({ lastApprovedDate: '', lastApprovedPrice: '', approvedBy: '', approvalNotes: '' });
+        setForm(p => ({ ...p, approval_status: 'Not Approved' }));
+      }
+    } catch {
+      setApprovalInfo({ lastApprovedDate: '', lastApprovedPrice: '', approvedBy: '', approvalNotes: '' });
+    }
+  }, []);
+
+  // When an item is selected, auto-populate Item Group, UOM, Currency and
+  // Minimum Order Qty from the material master, then refresh approval info.
+  const handleItemChange = (materialId: string) => {
+    const mat = materials.find(m => String(m.id) === materialId);
+    setForm(p => ({
+      ...p,
+      material_id: materialId,
+      item_group: mat ? (mat.group_name || mat.type || mat.category_name || mat.category || '') : '',
+      uom: mat?.uom || '',
+      currency: mat?.currency || p.currency || 'INR',
+      min_order_qty: mat?.reorder_level != null ? String(mat.reorder_level) : '',
+      approval_status: '',
     }));
+    loadApprovalInfo(form.supplier_id, materialId);
   };
 
-  const addPriceBreak = () => {
-    setPriceBreaks(p => [...p, { _key: genKey(), from_qty: '', to_qty: '', unit_price: '', discount_percent: '0', net_price: 0 }]);
-  };
-
-  const removePriceBreak = (key: string) => {
-    setPriceBreaks(p => p.filter(pb => pb._key !== key));
+  // Changing the supplier re-evaluates approval info for the current item.
+  const handleSupplierChange = (supplierId: string) => {
+    update('supplier_id', supplierId);
+    loadApprovalInfo(supplierId, form.material_id);
   };
 
   const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -196,28 +212,23 @@ export default function AddNewPrice() {
 
     setSaving(true);
     try {
+      // Save only — saving does NOT imply approval. New records start as
+      // Pending and go through the separate Price Approval workflow.
       const payload = {
         ...form,
         supplier_id: Number(form.supplier_id),
         material_id: Number(form.material_id),
         unit_price: parseFloat(form.unit_price),
         min_order_qty: parseFloat(form.min_order_qty) || 0,
-        price_breaks: priceBreaks.filter(pb => pb.from_qty && pb.unit_price).map(pb => ({
-          from_qty: parseFloat(pb.from_qty),
-          to_qty: pb.to_qty ? parseFloat(pb.to_qty) : null,
-          unit_price: parseFloat(pb.unit_price),
-          discount_percent: parseFloat(pb.discount_percent) || 0,
-          net_price: pb.net_price,
-        })),
-        status: 'Approved',
+        status: isNew ? 'Pending' : (form.approval_status || 'Pending'),
       };
 
       if (isNew) {
         await api('/supplier-pricing', { method: 'POST', body: JSON.stringify(payload) });
-        toast.success('Price created and approved!');
+        toast.success('Price saved!');
       } else {
         await api(`/supplier-pricing/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
-        toast.success('Price updated and approved!');
+        toast.success('Price saved!');
       }
       navigate('/supplier-pricing-history');
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
@@ -259,7 +270,7 @@ export default function AddNewPrice() {
               disabled={saving}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all"
             >
-              <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save & Approve'}
+              <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
             </button>
           )}
         </div>
@@ -277,7 +288,7 @@ export default function AddNewPrice() {
           {/* Row 1 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Supplier <span className="text-red-500">*</span></label>
-            <select value={form.supplier_id} onChange={e => update('supplier_id', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+            <select value={form.supplier_id} onChange={e => handleSupplierChange(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
               <option value="">Select Supplier</option>
               {suppliers.map(s => <option key={s.id} value={String(s.id)}>{s.code} - {s.name}</option>)}
             </select>
@@ -286,11 +297,7 @@ export default function AddNewPrice() {
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Item <span className="text-red-500">*</span></label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <select value={form.material_id} onChange={e => {
-                update('material_id', e.target.value);
-                const mat = materials.find(m => String(m.id) === e.target.value);
-                if (mat) { update('uom', mat.uom); update('item_group', mat.type || ''); }
-              }} className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+              <select value={form.material_id} onChange={e => handleItemChange(e.target.value)} className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
                 <option value="">Search & select item</option>
                 {materials.map(m => <option key={m.id} value={String(m.id)}>{m.code} - {m.name}</option>)}
               </select>
@@ -317,13 +324,7 @@ export default function AddNewPrice() {
           {/* Row 2 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Item Group</label>
-            <select value={form.item_group} onChange={e => update('item_group', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="">Select Group</option>
-              <option value="Chemicals">Chemicals</option>
-              <option value="Dyes">Dyes</option>
-              <option value="Raw Materials">Raw Materials</option>
-              <option value="Packaging">Packaging</option>
-            </select>
+            <input type="text" value={form.item_group} readOnly placeholder="Auto-filled from item" className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-600" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Supplier Part No.</label>
@@ -341,33 +342,33 @@ export default function AddNewPrice() {
           {/* Row 3 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">UOM <span className="text-red-500">*</span></label>
-            <select value={form.uom} onChange={e => update('uom', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="">Select UOM</option>
-              <option value="KG">KG</option>
-              <option value="LTR">LTR</option>
-              <option value="MTR">MTR</option>
-              <option value="NOS">NOS</option>
-              <option value="SQ.FT">SQ.FT</option>
-            </select>
+            <input type="text" value={form.uom} readOnly placeholder="Auto-filled from item" className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-600" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Currency <span className="text-red-500">*</span></label>
-            <select value={form.currency} onChange={e => update('currency', e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-              <option value="INR">INR - Indian Rupee</option>
-              <option value="USD">USD - US Dollar</option>
-              <option value="EUR">EUR - Euro</option>
-            </select>
+            <input type="text" value={form.currency} readOnly placeholder="Auto-filled from item" className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-600" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Minimum Order Qty</label>
             <div className="relative">
-              <input type="number" value={form.min_order_qty} onChange={e => update('min_order_qty', e.target.value)} placeholder="0" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 pr-12" />
+              <input type="number" value={form.min_order_qty} readOnly placeholder="Auto-filled from item" className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-600 pr-12" />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">{form.uom || 'UOM'}</span>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Remarks</label>
-            <input type="text" value={form.remarks} onChange={e => update('remarks', e.target.value)} placeholder="Enter remarks" className="w-full px-3 py-2.5 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Approval Status</label>
+            {form.material_id ? (
+              <span className={`inline-flex items-center h-[42px] px-3 rounded-lg text-sm font-medium w-full border ${
+                form.approval_status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                form.approval_status === 'Rejected' ? 'bg-red-50 text-red-700 border-red-200' :
+                form.approval_status === 'Expired' ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                {form.approval_status || 'Pending'}
+              </span>
+            ) : (
+              <input type="text" value="" readOnly placeholder="Select an item" className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-400" />
+            )}
           </div>
         </div>
       </div>
@@ -400,74 +401,13 @@ export default function AddNewPrice() {
         </div>
       </div>
 
-      {/* Section 3: Price Breaks */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-              <FileText className="w-4 h-4 text-blue-600" />
-            </div>
-            <h2 className="text-base font-bold text-blue-700">3. Price Breaks (Quantity Based Pricing)</h2>
-          </div>
-          {!isReadOnly && (
-            <button onClick={addPriceBreak} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-all">
-              <Plus className="w-4 h-4" /> Add Price Break
-            </button>
-          )}
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">#</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">From Qty ({form.uom || 'KG'}) <span className="text-red-500">*</span></th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">To Qty ({form.uom || 'KG'}) <span className="text-red-500">*</span></th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Unit Price (INR) <span className="text-red-500">*</span></th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Discount (%)</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Net Price (INR)</th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {priceBreaks.map((pb, idx) => (
-                <tr key={pb._key} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
-                  <td className="px-4 py-3">
-                    <input type="number" value={pb.from_qty} onChange={e => updatePriceBreak(pb._key, 'from_qty', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
-                  </td>
-                  <td className="px-4 py-3">
-                    {pb.to_qty === '' && idx === priceBreaks.length - 1 ? (
-                      <span className="px-3 py-2 text-sm text-gray-500 italic">Above</span>
-                    ) : (
-                      <input type="number" value={pb.to_qty} onChange={e => updatePriceBreak(pb._key, 'to_qty', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <input type="number" value={pb.unit_price} onChange={e => updatePriceBreak(pb._key, 'unit_price', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
-                  </td>
-                  <td className="px-4 py-3">
-                    <input type="number" value={pb.discount_percent} onChange={e => updatePriceBreak(pb._key, 'discount_percent', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0" />
-                  </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{pb.net_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="px-4 py-3 text-center">
-                    <button onClick={() => removePriceBreak(pb._key)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Section 4: Attachments */}
+      {/* Section 3: Attachments */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
             <Upload className="w-4 h-4 text-blue-600" />
           </div>
-          <h2 className="text-base font-bold text-blue-700">4. Attachments</h2>
+          <h2 className="text-base font-bold text-blue-700">3. Attachments</h2>
         </div>
 
         {/* Drag & Drop Zone + Attachments Table */}

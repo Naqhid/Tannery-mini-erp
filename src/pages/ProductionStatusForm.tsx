@@ -9,7 +9,7 @@ import { toast } from 'react-toastify';
 import SearchableSelect from '../components/ui/SearchableSelect';
 
 interface PlanOption { id: number; plan_no: string; plan_date: string; customer_name: string; article: string; color: string; }
-interface ProcessStageOption { id: number; name: string; uom: string; }
+interface ProcessStageOption { id: number; name: string; uom: string; seq?: number; }
 
 interface OrderData {
   order_no: string;
@@ -143,7 +143,16 @@ export default function ProductionStatusForm() {
           id: p.id, plan_no: p.plan_no, plan_date: p.plan_date?.split('T')[0] || '',
           customer_name: p.customer_name || '', article: p.article || '', color: p.color || '',
         })));
-        setProcessStages(stagesRes.data || []);
+        // Order the Process Stage dropdown by master sequence (1,2,3…).
+        const seqNum = (v: unknown) => {
+          const n = Number(v);
+          return Number.isFinite(n) && v !== null && v !== undefined && v !== '' ? n : Number.MAX_SAFE_INTEGER;
+        };
+        const sortedStages = [...(stagesRes.data || [])].sort((a, b) => {
+          const sa = seqNum(a.seq), sb = seqNum(b.seq);
+          return sa !== sb ? sa - sb : (a.name || '').localeCompare(b.name || '');
+        });
+        setProcessStages(sortedStages);
       } catch {}
     })();
   }, []);
@@ -200,6 +209,9 @@ export default function ProductionStatusForm() {
       params.set('production_status_order_id', id!);
       params.set('page', String(txnPage));
       params.set('limit', '10');
+      // Show transactions with the latest date on top (descending).
+      params.set('sortBy', 'production_date');
+      params.set('sortOrder', 'desc');
       const res = await api<{ data: TransactionRow[]; total: number; totalPages: number; summary: TransactionSummary }>(`/production-status/transactions?${params.toString()}`);
       setTransactions(res.data || []);
       setTxnTotal(res.total || 0);
@@ -380,10 +392,23 @@ export default function ProductionStatusForm() {
       toast.error(`Input qty (${inputVal}) cannot exceed planned qty (${plannedVal})`);
       return;
     }
+    // Output qty cannot be greater than input qty.
+    if (outputVal > inputVal) {
+      toast.error('Output qty cannot be greater than input qty');
+      return;
+    }
     // Output cannot exceed opening + input (you can't produce more than what's in the stage).
     if (outputVal + rejectionVal > openingVal + inputVal) {
       toast.error('Output + rejection cannot exceed opening + input');
       return;
+    }
+    // Cumulative output across all transactions cannot exceed the planned qty.
+    if (plannedVal > 0) {
+      const priorOutput = (txnSummary.total_output_qty || 0) - (editingTxn ? (parseFloat(String(editingTxn.output_qty)) || 0) : 0);
+      if (priorOutput + outputVal > plannedVal) {
+        toast.error(`Output qty cannot exceed planned qty (${plannedVal}). Already produced: ${priorOutput}`);
+        return;
+      }
     }
     setTxnSaving(true);
     try {
@@ -539,8 +564,8 @@ export default function ProductionStatusForm() {
         {isEdit && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-5 pt-4 border-t border-gray-100">
             <div className="text-center p-3 bg-slate-50 rounded-lg">
-              <p className="text-xs text-gray-500 font-medium">Opening Qty</p>
-              <p className="text-lg font-bold text-slate-700 mt-1" title="Latest transaction's opening — carries forward to the next day's opening">{formatNumber(txnSummary.latest_opening_qty)}</p>
+              <p className="text-xs text-gray-500 font-medium">Planned Qty</p>
+              <p className="text-lg font-bold text-slate-700 mt-1" title="Planned quantity for this stage (from the production plan)">{formatNumber(parseFloat(form.planned_qty) || 0)}</p>
             </div>
             <div className="text-center p-3 bg-blue-50 rounded-lg">
               <p className="text-xs text-gray-500 font-medium">Input Qty</p>

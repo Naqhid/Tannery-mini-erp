@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Save, X, ArrowLeft, Package } from 'lucide-react';
@@ -57,6 +57,7 @@ export default function ProductMasterForm() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [filteredGroups, setFilteredGroups] = useState<GroupOption[]>([]);
+  const nameEditedRef = useRef(false);
 
   const fetchProduct = useCallback(async () => {
     if (isNew) {
@@ -86,23 +87,25 @@ export default function ProductMasterForm() {
         hsn_code_id: d.hsn_code_id ? String(d.hsn_code_id) : '',
         hsn_code_display: d.group_hsn_code || '',
       });
+      // Existing product already has a name; don't auto-overwrite it
+      nameEditedRef.current = true;
     } catch { toast.error('Failed to load product'); navigate('/product-master'); }
     finally { setLoading(false); }
   }, [id, isNew, navigate]);
 
   useEffect(() => { fetchProduct(); }, [fetchProduct]);
 
-  // Auto-populate product name = leather type + finish type + color
+  // Auto-populate product name = leather type + finish type (skip once user edits manually)
   useEffect(() => {
+    if (nameEditedRef.current) return;
     const leather = dropdowns['leather-types']?.data?.find((o: any) => String(o.id) === form.leather_type_id);
     const finish = dropdowns['finish-types']?.data?.find((o: any) => String(o.id) === form.finish_type_id);
-    const color = dropdowns['colors']?.data?.find((o: any) => String(o.id) === form.color_id);
-    const parts = [leather?.name, finish?.name, color?.name].filter(Boolean);
+    const parts = [leather?.name, finish?.name].filter(Boolean);
     const autoName = parts.join(' ');
     setForm(p => (p.name === autoName ? p : { ...p, name: autoName }));
   }, [
-    form.leather_type_id, form.finish_type_id, form.color_id,
-    dropdowns['leather-types']?.data, dropdowns['finish-types']?.data, dropdowns['colors']?.data,
+    form.leather_type_id, form.finish_type_id,
+    dropdowns['leather-types']?.data, dropdowns['finish-types']?.data,
   ]);
 
   // Filter groups by selected category (show all if no category selected)
@@ -211,7 +214,7 @@ export default function ProductMasterForm() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
         <h2 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-4">1. Product Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Input label="Product Name" required value={form.name} disabled readOnly error={errors.name} placeholder="Auto: Leather Type + Finish Type + Color" />
+          <Input label="Product Name" required value={form.name} onChange={(e) => { nameEditedRef.current = true; update('name', e.target.value); }} error={errors.name} placeholder="Auto: Leather Type + Finish Type" />
           <Select label="Category" required options={[{ value: '', label: 'Select category' }, ...(dropdowns['product-categories']?.options || [])]} value={form.category_id} onChange={(e) => handleCategoryChange(e.target.value)} error={errors.category_id} addNewPath="/product-category/new" addNewLabel="Add Category" onRefresh={dropdowns['product-categories']?.refetch} />
           <Select
             label="Group"

@@ -62,6 +62,7 @@ export default function PhysicalStockEntryDetail() {
   const [locationRacks, setLocationRacks] = useState<LocationRackOption[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [posting, setPosting] = useState(false);
 
   const fetchDropdowns = useCallback(async () => {
     try {
@@ -98,20 +99,24 @@ export default function PhysicalStockEntryDetail() {
         remarks: d.remarks || '',
       });
       if (d.items?.length) {
-        setItems(d.items.map((it: any) => ({
-          _key: genKey(),
-          material_id: String(it.material_id || ''),
-          material_code: it.material_code || it.item_code || '',
-          material_name: it.material_name || it.item_description || '',
-          uom: it.uom || '',
-          location: it.location || it.location_rack || '',
-          system_qty: parseFloat(it.system_qty) || 0,
-          physical_qty: String(it.physical_qty || ''),
-          variance_qty: (parseFloat(it.physical_qty) || 0) - (parseFloat(it.system_qty) || 0),
-          avg_rate: parseFloat(it.avg_rate) || 0,
-          variance_value: parseFloat(it.variance_value) || 0,
-          remarks: it.remarks || '',
-        })));
+        setItems(d.items.map((it: any) => {
+          const addQty = parseFloat(it.physical_qty) || 0;
+          return {
+            _key: genKey(),
+            material_id: String(it.material_id || ''),
+            material_code: it.material_code || it.item_code || '',
+            material_name: it.material_name || it.item_description || '',
+            uom: it.uom || '',
+            location: it.location || it.location_rack || '',
+            system_qty: parseFloat(it.system_qty) || 0,
+            physical_qty: String(it.physical_qty || ''),
+            // Additive: variance == entered add qty.
+            variance_qty: addQty,
+            avg_rate: parseFloat(it.avg_rate) || 0,
+            variance_value: parseFloat(it.variance_value) || 0,
+            remarks: it.remarks || '',
+          };
+        }));
       }
     } catch { toast.error('Failed to load entry'); }
     finally { setLoading(false); }
@@ -136,9 +141,9 @@ export default function PhysicalStockEntryDetail() {
         if (it._key !== rowKey) return it;
         const systemQty = info.data.available_qty || 0;
         const avgRate = info.data.avg_rate || 0;
-        const physQty = parseFloat(it.physical_qty) || 0;
-        const variance = physQty - systemQty;
-        return { ...it, system_qty: systemQty, avg_rate: avgRate, variance_qty: variance, variance_value: parseFloat((variance * avgRate).toFixed(2)) };
+        const addQty = parseFloat(it.physical_qty) || 0;
+        // Additive: entered qty is added to current stock.
+        return { ...it, system_qty: systemQty, avg_rate: avgRate, variance_qty: addQty, variance_value: parseFloat((addQty * avgRate).toFixed(2)) };
       }));
     } catch {}
   };
@@ -148,9 +153,10 @@ export default function PhysicalStockEntryDetail() {
       if (it._key !== key) return it;
       const updated = { ...it, [field]: value };
       if (field === 'physical_qty') {
-        const phys = parseFloat(value) || 0;
-        updated.variance_qty = phys - updated.system_qty;
-        updated.variance_value = parseFloat((updated.variance_qty * updated.avg_rate).toFixed(2));
+        // Additive: entered qty is the amount to add (variance == add qty).
+        const addQty = parseFloat(value) || 0;
+        updated.variance_qty = addQty;
+        updated.variance_value = parseFloat((addQty * updated.avg_rate).toFixed(2));
       }
       return updated;
     }));
@@ -169,17 +175,19 @@ export default function PhysicalStockEntryDetail() {
     setItems([{ _key: genKey(), material_id: '', material_code: '', material_name: '', uom: '', location: '', system_qty: 0, physical_qty: '', variance_qty: 0, avg_rate: 0, variance_value: 0, remarks: '' }]);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (status: 'Draft' | 'Completed' = 'Draft') => {
     if (!entry.warehouse_id) { toast.error('Warehouse is required'); return; }
     if (!entry.entry_date) { toast.error('Entry date is required'); return; }
     if (!entry.stock_date) { toast.error('Physical Stock Date is required'); return; }
     const validItems = items.filter(i => i.material_id && i.physical_qty);
     if (!validItems.length) { toast.error('At least one item is required'); return; }
 
-    setSaving(true);
+    const posting = status === 'Completed';
+    if (posting) setPosting(true); else setSaving(true);
     try {
       const payload = {
         ...entry,
+        status,
         warehouse_id: Number(entry.warehouse_id),
         location_id: entry.location_id ? Number(entry.location_id) : null,
         items: validItems.map((i, idx) => ({
@@ -192,20 +200,30 @@ export default function PhysicalStockEntryDetail() {
           system_qty: i.system_qty,
           physical_qty: parseFloat(i.physical_qty),
           variance_qty: i.variance_qty,
+          avg_rate: i.avg_rate,
           variance_value: i.variance_value,
           remarks: i.remarks || null,
         })),
       };
+      let savedId = id;
       if (isNew) {
-        await api('/physical-stock-entries', { method: 'POST', body: JSON.stringify(payload) });
-        toast.success('Physical stock entry created!');
+        const res = await api<{ data: { id: number } }>('/physical-stock-entries', { method: 'POST', body: JSON.stringify(payload) });
+        savedId = res.data?.id ? String(res.data.id) : undefined;
+        toast.success(posting ? 'Physical stock entry posted to stock ledger!' : 'Physical stock entry created!');
       } else {
         await api(`/physical-stock-entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
-        toast.success('Physical stock entry updated!');
+        toast.success(posting ? 'Physical stock entry posted to stock ledger!' : 'Physical stock entry updated!');
       }
-      navigate('/physical-stock-entry');
+      if (posting) {
+        // Only leave the screen after posting.
+        navigate('/physical-stock-entry');
+      } else if (isNew && savedId) {
+        // On Save (draft) of a new entry, stay on the screen but switch to the
+        // created record so further edits update instead of creating duplicates.
+        navigate(`/physical-stock-entry/${savedId}`, { replace: true });
+      }
     } catch (err) { toast.error('Failed to save: ' + (err as Error).message); }
-    finally { setSaving(false); }
+    finally { if (posting) setPosting(false); else setSaving(false); }
   };
 
   // Summary calculations
@@ -242,9 +260,14 @@ export default function PhysicalStockEntryDetail() {
             <X className="w-4 h-4" /> Cancel
           </button>
           {!isReadOnly && (
-            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
-            </button>
+            <>
+              <button onClick={() => handleSave('Draft')} disabled={saving || posting} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={() => handleSave('Completed')} disabled={saving || posting} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50" title="Save and post variances to the stock ledger as Stock Adjustment">
+                <Save className="w-4 h-4" /> {posting ? 'Posting...' : 'Post'}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -308,11 +331,11 @@ export default function PhysicalStockEntryDetail() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 min-w-[180px]">Item Name <span className="text-red-500">*</span></th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">UOM</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600">Location/Rack</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">System Qty</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Physical Qty <span className="text-red-500">*</span></th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Qty</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Current Stock</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Add Qty <span className="text-red-500">*</span></th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">New Stock</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Avg Rate</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Variance Value</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600">Add Value</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-600">Action</th>
               </tr>
             </thead>
@@ -346,8 +369,8 @@ export default function PhysicalStockEntryDetail() {
                   <td className="px-4 py-3">
                     <input type="number" step="0.01" value={item.physical_qty} onChange={e => updateItem(item._key, 'physical_qty', e.target.value)} className="w-full px-2 py-1.5 text-xs text-right border border-gray-200 rounded-lg min-w-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="0.00" />
                   </td>
-                  <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_qty < 0 ? 'text-red-600' : item.variance_qty > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
-                    {item.variance_qty > 0 ? '+' : ''}{fmt(item.variance_qty)}
+                  <td className="px-4 py-3 text-right text-xs font-medium text-blue-700">
+                    {fmt(item.system_qty + item.variance_qty)}
                   </td>
                   <td className="px-4 py-3 text-right text-xs text-gray-700">{fmt(item.avg_rate)}</td>
                   <td className={`px-4 py-3 text-right text-xs font-medium ${item.variance_value < 0 ? 'text-red-600' : item.variance_value > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>

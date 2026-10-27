@@ -32,6 +32,29 @@ export async function stats(_req, res, next) {
   catch (error) { next(error); }
 }
 
+export async function bulkStatus(req, res, next) {
+  try {
+    const { ids = [], status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No records selected' });
+    if (!['Draft', 'Posted'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const result = await model.bulkSetStatus(ids, status, req.user?.id || null);
+    const verb = status === 'Posted' ? 'posted' : 'saved as draft';
+    const msg = result.failed.length
+      ? `${result.success} ${verb}, ${result.failed.length} failed`
+      : `${result.success} delivery(ies) ${verb}`;
+    res.json({ data: result, message: msg });
+  } catch (error) { next(error); }
+}
+
+export async function bulkDelete(req, res, next) {
+  try {
+    const { ids = [] } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No records selected' });
+    const result = await model.bulkDelete(ids);
+    res.json({ data: result, message: `${result.success} delivery(ies) deleted` });
+  } catch (error) { next(error); }
+}
+
 export async function create(req, res, next) {
   try {
     const { items = [], ...data } = req.body;

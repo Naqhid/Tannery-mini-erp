@@ -34,11 +34,53 @@ export async function getOne(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// Parse a date-only value (YYYY-MM-DD or ISO) into a UTC day timestamp, so
+// comparisons ignore the time-of-day component. Returns null when empty/invalid.
+function toDay(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+// Delivery Date must be strictly later than both the Order Date and the order's
+// creation date. Applies to the header delivery_date and every line item's
+// delivery_date. `createdAt` is "now" for new orders, or the stored created_at
+// for updates. Returns an error message string, or null when valid.
+function validateDeliveryDates(data, items, createdAt) {
+  const orderDay = toDay(data.order_date);
+  const createdDay = toDay(createdAt);
+  // The latest of order date / creation date is the floor the delivery must beat.
+  const floor = Math.max(orderDay ?? -Infinity, createdDay ?? -Infinity);
+  if (!Number.isFinite(floor)) return null;
+
+  const check = (value, label) => {
+    const day = toDay(value);
+    if (day == null) return null;
+    if (day <= floor) {
+      return `${label} must be later than both the Order Date and the order creation date.`;
+    }
+    return null;
+  };
+
+  const headerErr = check(data.delivery_date, 'Delivery Date');
+  if (headerErr) return headerErr;
+
+  for (let i = 0; i < (items || []).length; i++) {
+    const itemErr = check(items[i].delivery_date, `Delivery Date for item ${i + 1}`);
+    if (itemErr) return itemErr;
+  }
+  return null;
+}
+
 export async function create(req, res, next) {
   try {
     const { items = [], ...data } = req.body;
     if (!data.customer_id) return res.status(400).json({ error: 'Customer is required' });
     if (!data.order_date) return res.status(400).json({ error: 'Order date is required' });
+    // New order: creation date is now.
+    const dateErr = validateDeliveryDates(data, items, new Date());
+    if (dateErr) return res.status(400).json({ error: dateErr });
     const createdBy = req.user?.id || null;
     const result = await model.create(data, items, createdBy);
     res.status(201).json({ data: result, message: 'Sales order created successfully!' });
@@ -49,6 +91,11 @@ export async function update(req, res, next) {
   try {
     const { items = [], ...data } = req.body;
     if (!data.customer_id) return res.status(400).json({ error: 'Customer is required' });
+    // Validate against the stored creation date (falls back to order_date).
+    const existing = await model.getById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Sales order not found' });
+    const dateErr = validateDeliveryDates(data, items, existing.created_at);
+    if (dateErr) return res.status(400).json({ error: dateErr });
     const updatedBy = req.user?.id || null;
     const ok = await model.update(req.params.id, data, items, updatedBy);
     if (!ok) return res.status(404).json({ error: 'Sales order not found' });

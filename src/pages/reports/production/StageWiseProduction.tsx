@@ -6,7 +6,7 @@ import { Column } from '../../../components/reports/ReportTable';
 import { fmtQty, fmtPct } from '../../../lib/reportFormat';
 
 interface Row extends Record<string, unknown> {
-  stage_name: string; input_qty: number; output_qty: number; rejection_qty: number; wip_qty: number; output_percent: number;
+  stage_name: string; uom: string; input_qty: number; output_qty: number; rejection_qty: number; wip_qty: number; output_percent: number;
 }
 
 export default function StageWiseProduction({ embedded }: { embedded?: boolean }) {
@@ -20,6 +20,7 @@ export default function StageWiseProduction({ embedded }: { embedded?: boolean }
 
   const columns: Column<Row>[] = [
     { key: 'stage_name', header: 'Stage', render: r => <span className="font-medium text-gray-900">{r.stage_name}</span> },
+    { key: 'uom', header: 'UOM', render: r => <span className="text-gray-600">{r.uom || '—'}</span> },
     { key: 'input_qty', header: 'Input Qty', align: 'right', render: r => fmtQty(r.input_qty) },
     { key: 'output_qty', header: 'Output Qty', align: 'right', render: r => <span className="font-semibold">{fmtQty(r.output_qty)}</span> },
     { key: 'rejection_qty', header: 'Rejection', align: 'right', render: r => <span className="text-red-600">{fmtQty(r.rejection_qty)}</span> },

@@ -8,6 +8,10 @@ interface LineChartProps {
   color?: string;
   /** Formats the Y-axis / tooltip value. */
   formatValue?: (n: number) => string;
+  /** When true, draws the value above each data point. */
+  showValueLabels?: boolean;
+  /** When true, renders the x-axis (month) labels larger, bolder and darker. */
+  xLabelProminent?: boolean;
 }
 
 /**
@@ -19,14 +23,27 @@ export default function LineChart({
   height = 220,
   color = '#1e3a8a',
   formatValue = (n) => new Intl.NumberFormat('en-IN').format(Math.round(n)),
+  showValueLabels = false,
+  xLabelProminent = false,
 }: LineChartProps) {
   const [hover, setHover] = useState<number | null>(null);
+
+  // Y-axis labels reuse the caller's value formatter (so currency charts show
+  // ₹ amounts, not bare quantities), but shortened for compact tick spacing.
+  const axisLabel = (v: number) => {
+    const formatted = formatValue(v);
+    const prefix = /^[^\d\s]/.test(formatted) ? formatted[0] : '';
+    return prefix + shortNum(v);
+  };
 
   const width = 560;
   const padX = 44;
   const padY = 20;
+  // Reserve extra room at the bottom for the larger, bolder month labels so
+  // they are never clipped by the chart edge.
+  const bottomPad = xLabelProminent ? 24 : 0;
   const innerW = width - padX * 2;
-  const innerH = height - padY * 2;
+  const innerH = height - padY * 2 - bottomPad;
 
   const { points, maxV, path, area, ticks } = useMemo(() => {
     const values = data.map((d) => d.value);
@@ -61,7 +78,7 @@ export default function LineChart({
           return (
             <g key={i}>
               <line x1={padX} y1={y} x2={width - padX} y2={y} stroke="#eef2f7" strokeWidth={1} />
-              <text x={padX - 6} y={y + 3} textAnchor="end" fontSize={9} fill="#94a3b8">{shortNum(t)}</text>
+              <text x={padX - 6} y={y + 3} textAnchor="end" fontSize={9} fill="#94a3b8">{axisLabel(t)}</text>
             </g>
           );
         })}
@@ -74,12 +91,44 @@ export default function LineChart({
         </defs>
         {area && <path d={area} fill="url(#lc-grad)" />}
         {/* Line */}
-        {path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+        {path && <path d={path} fill="none" stroke={color} strokeWidth={2.75} strokeLinejoin="round" strokeLinecap="round" />}
         {/* Dots + X labels + hover targets */}
         {points.map((p, i) => (
           <g key={i}>
-            <text x={p.x} y={height - 4} textAnchor="middle" fontSize={9} fill="#94a3b8">{p.label}</text>
-            <circle cx={p.x} cy={p.y} r={hover === i ? 5 : 3.5} fill="#fff" stroke={color} strokeWidth={2} />
+            <text
+              x={p.x}
+              y={height - (xLabelProminent ? 8 : 4)}
+              textAnchor="middle"
+              fontSize={xLabelProminent ? 13 : 9}
+              fontWeight={xLabelProminent ? 700 : 400}
+              fill={xLabelProminent ? '#1e293b' : '#94a3b8'}
+            >
+              {p.label}
+            </text>
+            {showValueLabels && p.value > 0 && (() => {
+              // Draw the value in a small pill above the point so it stays
+              // legible even when points sit close together or the line is flat.
+              const text = formatValue(p.value);
+              const labelY = Math.max(padY + 14, p.y - 12);
+              const w = Math.max(28, text.length * 7 + 10);
+              const bx = Math.min(Math.max(p.x - w / 2, 2), width - w - 2);
+              return (
+                <g>
+                  <rect x={bx} y={labelY - 12} width={w} height={16} rx={8} fill={color} opacity={0.1} />
+                  <text
+                    x={bx + w / 2}
+                    y={labelY}
+                    textAnchor="middle"
+                    fontSize={11}
+                    fontWeight={700}
+                    fill={color}
+                  >
+                    {text}
+                  </text>
+                </g>
+              );
+            })()}
+            <circle cx={p.x} cy={p.y} r={hover === i ? 6 : 4.5} fill="#fff" stroke={color} strokeWidth={2.5} />
             <rect
               x={p.x - (innerW / Math.max(1, points.length)) / 2}
               y={padY}

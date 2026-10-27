@@ -345,60 +345,40 @@ export async function approveSelected(requestId, itemIds, approvalData, approved
         // Check if there's an existing pending pricing record
         const [[existingPricing]] = await conn.query(
           `SELECT id FROM supplier_pricing 
-           WHERE supplier_id = ? AND material_id = ? AND status = 'Pending' AND deleted_at IS NULL
+           WHERE supplier_id = ? AND material_id = ? AND status = 'Pending'
            ORDER BY id DESC LIMIT 1`,
           [item.supplier_id, item.material_id]
         );
 
         if (existingPricing) {
-          // Update existing pricing record
+          // Use the base supplier_pricing columns so approval works with both
+          // the deployed schema and newer database backups.
           await conn.query(
             `UPDATE supplier_pricing SET
-              unit_price=?, status=?, approved_by=?, approved_date=?, approval_notes=?,
-              last_approved_price=?, last_approved_date=?, updated_by=?, updated_at=CURRENT_TIMESTAMP
-             WHERE id=? AND deleted_at IS NULL`,
+              price=?, status=?, updated_by=?, updated_at=CURRENT_TIMESTAMP
+             WHERE id=?`,
             [
               parseFloat(item.requested_price) || 0,
               'Approved',
-              approvedBy,
-              new Date().toISOString().split('T')[0],
-              approvalData.approval_notes || null,
-              parseFloat(item.requested_price) || 0,
-              new Date().toISOString().split('T')[0],
               approvedBy,
               existingPricing.id
             ]
           );
         } else {
-          // Create new supplier pricing record
+          // These columns are present in both the deployed and newer schemas.
           const [pricingResult] = await conn.query(
             `INSERT INTO supplier_pricing (
-              supplier_id, material_id, item_group, supplier_part_no, uom, unit_price,
-              currency, min_order_qty, price_type, valid_from, valid_to, status,
-              remarks, approved_by, approved_date, approval_notes, last_approved_price, last_approved_date,
-              created_by, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              supplier_id, material_id, uom, price, valid_from, valid_to, status, created_by
+            ) VALUES (?,?,?,?,?,?,?,?)`,
             [
               item.supplier_id,
               item.material_id,
-              item.item_group || null,
-              item.supplier_part_no || null,
               item.uom || 'KG',
               parseFloat(item.requested_price) || 0,
-              item.currency || 'INR',
-              parseFloat(item.min_order_qty) || 0,
-              'Purchase Price',
               item.effective_from || null,
               item.effective_to || null,
               'Approved',
-              item.remarks || null,
-              approvedBy,
-              new Date().toISOString().split('T')[0],
-              approvalData.approval_notes || null,
-              parseFloat(item.requested_price) || 0,
-              new Date().toISOString().split('T')[0],
-              approvedBy,
-              new Date().toISOString()
+              approvedBy
             ]
           );
 
@@ -433,7 +413,7 @@ export async function approveSelected(requestId, itemIds, approvalData, approved
       ) VALUES (?,?,?,?,?,?)`,
       [
         requestId,
-        'Approve Selected',
+        'Approved',
         approvedBy,
         approvalData.approval_notes || `Approved ${items.length} items`,
         request.status,
@@ -442,22 +422,18 @@ export async function approveSelected(requestId, itemIds, approvalData, approved
     );
 
     // Update request status
-    const [[countApproved]] = await conn.query(
-      `SELECT COUNT(*) AS approved_count, COUNT(*) AS total_count 
+    const [[counts]] = await conn.query(
+      `SELECT COUNT(*) AS total_count,
+              SUM(status = 'Approved') AS approved_count,
+              SUM(status = 'Rejected') AS rejected_count
        FROM price_approval_items WHERE request_id = ?`,
       [requestId]
     );
 
-    const [[countRejected]] = await conn.query(
-      `SELECT COUNT(*) AS rejected_count 
-       FROM price_approval_items WHERE request_id = ? AND status = 'Rejected'`,
-      [requestId]
-    );
-
     let newStatus = 'Partially Approved';
-    if (countApproved.approved_count === countApproved.total_count) {
+    if (Number(counts.approved_count) === Number(counts.total_count)) {
       newStatus = 'Approved';
-    } else if (countRejected.rejected_count === countApproved.total_count) {
+    } else if (Number(counts.rejected_count) === Number(counts.total_count)) {
       newStatus = 'Rejected';
     }
 
@@ -504,7 +480,7 @@ export async function rejectSelected(requestId, itemIds, rejectionReason, reject
         `UPDATE price_approval_items SET
           status=?, remarks=?, updated_at=CURRENT_TIMESTAMP
          WHERE id IN (${placeholders}) AND request_id = ?`,
-        [rejectionReason, rejectionReason, ...itemIds, requestId]
+        ['Rejected', rejectionReason, ...itemIds, requestId]
       );
 
       // Insert workflow entry
@@ -514,7 +490,7 @@ export async function rejectSelected(requestId, itemIds, rejectionReason, reject
         ) VALUES (?,?,?,?,?,?)`,
         [
           requestId,
-          'Reject Selected',
+          'Rejected',
           rejectedBy,
           rejectionReason || `Rejected ${items.length} items`,
           request.status,
@@ -523,22 +499,18 @@ export async function rejectSelected(requestId, itemIds, rejectionReason, reject
       );
 
       // Update request status
-      const [[countApproved]] = await conn.query(
-        `SELECT COUNT(*) AS approved_count, COUNT(*) AS total_count 
+      const [[counts]] = await conn.query(
+        `SELECT COUNT(*) AS total_count,
+                SUM(status = 'Approved') AS approved_count,
+                SUM(status = 'Rejected') AS rejected_count
          FROM price_approval_items WHERE request_id = ?`,
         [requestId]
       );
 
-      const [[countRejected]] = await conn.query(
-        `SELECT COUNT(*) AS rejected_count 
-         FROM price_approval_items WHERE request_id = ? AND status = 'Rejected'`,
-        [requestId]
-      );
-
       let newStatus = 'Partially Approved';
-      if (countApproved.approved_count === countApproved.total_count) {
+      if (Number(counts.approved_count) === Number(counts.total_count)) {
         newStatus = 'Approved';
-      } else if (countRejected.rejected_count === countApproved.total_count) {
+      } else if (Number(counts.rejected_count) === Number(counts.total_count)) {
         newStatus = 'Rejected';
       }
 

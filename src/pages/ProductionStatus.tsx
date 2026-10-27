@@ -15,6 +15,7 @@ import { toast } from 'react-toastify';
 interface OrderRow {
   id: number;
   order_no: string;
+  sale_order_no: string | null;
   customer_name: string;
   article: string;
   color: string;
@@ -22,10 +23,12 @@ interface OrderRow {
   issued_qty: number;
   completed_qty: number;
   balance_qty: number;
+  rejection_qty?: number;
   status: string;
   uom: string;
   plan_date: string;
   posted_at: string | null;
+  transaction_date: string | null;
 }
 
 type SortField = 'order_no' | 'customer_name' | 'article' | 'color' | 'issued_qty' | 'completed_qty' | 'balance_qty' | 'status';
@@ -39,7 +42,7 @@ const STATUS_COLORS: Record<string, string> = {
   Planned: 'bg-slate-50 text-slate-700 border border-slate-200',
 };
 
-interface StageOption { id: number; name: string; uom?: string; }
+interface StageOption { id: number; name: string; uom?: string; seq?: number; }
 
 export default function ProductionStatus() {
   const navigate = useNavigate();
@@ -57,6 +60,7 @@ export default function ProductionStatus() {
   const [deletingId, setDeletingId] = useState<OrderRow | null>(null);
   const [activeTab, setActiveTab] = useState<'order' | 'transaction'>('order');
   const [planSearch, setPlanSearch] = useState('');
+  const [saleOrderSearch, setSaleOrderSearch] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -65,6 +69,7 @@ export default function ProductionStatus() {
       if (processStage !== 'All') params.set('process_stage', processStage);
       if (statusFilter !== 'All') params.set('status_filter', statusFilter);
       if (planSearch.trim()) params.set('plan_no', planSearch.trim());
+      if (saleOrderSearch.trim()) params.set('sale_order_no', saleOrderSearch.trim());
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
       if (sortBy) { params.set('sortBy', sortBy); params.set('sortOrder', sortOrder); }
@@ -78,17 +83,27 @@ export default function ProductionStatus() {
     } finally {
       setLoading(false);
     }
-  }, [processStage, statusFilter, planSearch, currentPage, pageSize, sortBy, sortOrder, activeTab]);
+  }, [processStage, statusFilter, planSearch, saleOrderSearch, currentPage, pageSize, sortBy, sortOrder, activeTab]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { setCurrentPage(1); }, [processStage, statusFilter, planSearch, sortBy, sortOrder, activeTab]);
+  useEffect(() => { setCurrentPage(1); }, [processStage, statusFilter, planSearch, saleOrderSearch, sortBy, sortOrder, activeTab]);
 
   // Load process stages from master
   useEffect(() => {
     (async () => {
       try {
         const res = await api<{ data: StageOption[] }>('/process-stages?limit=100');
-        setStageOptions(res.data || []);
+        // Sort stages by their master sequence (1,2,3…) so the Stage filter
+        // lists them in production order rather than insertion order.
+        const seqNum = (v: unknown) => {
+          const n = Number(v);
+          return Number.isFinite(n) && v !== null && v !== undefined && v !== '' ? n : Number.MAX_SAFE_INTEGER;
+        };
+        const sorted = [...(res.data || [])].sort((a, b) => {
+          const sa = seqNum(a.seq), sb = seqNum(b.seq);
+          return sa !== sb ? sa - sb : (a.name || '').localeCompare(b.name || '');
+        });
+        setStageOptions(sorted);
       } catch { setStageOptions([]); }
     })();
   }, []);
@@ -111,8 +126,8 @@ export default function ProductionStatus() {
   };
 
   const handleExport = () => {
-    const headers = ['Plan No', 'Customer', 'Article', 'Color', 'Planned Qty', 'Completed Qty', 'Balance Qty', 'Status'];
-    const csvRows = rows.map(r => [r.order_no, r.customer_name, r.article, r.color, r.issued_qty, r.completed_qty, r.balance_qty, r.status].join(','));
+    const headers = ['Sale Order No', 'Plan No', 'Customer', 'Article', 'Color', 'Planned Qty', 'Completed Qty', 'Balance Qty', 'Status'];
+    const csvRows = rows.map(r => [r.sale_order_no || '', r.order_no, r.customer_name, r.article, r.color, r.issued_qty, r.completed_qty, r.balance_qty, r.status].join(','));
     const csv = [headers.join(','), ...csvRows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -126,6 +141,10 @@ export default function ProductionStatus() {
   };
 
   const formatNumber = (n: number) => new Intl.NumberFormat('en-IN').format(n || 0);
+  const formatDate = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+
+  const isTransactionTab = activeTab === 'transaction';
 
   const selectedStageUom = processStage !== 'All'
     ? (stageOptions.find(s => s.name === processStage)?.uom || '')
@@ -162,6 +181,16 @@ export default function ProductionStatus() {
               value={planSearch}
               onChange={e => setPlanSearch(e.target.value)}
               placeholder="Search plan no..."
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[180px]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Search Sale Order No</label>
+            <input
+              type="text"
+              value={saleOrderSearch}
+              onChange={e => setSaleOrderSearch(e.target.value)}
+              placeholder="Search sale order no..."
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[180px]"
             />
           </div>
@@ -221,10 +250,14 @@ export default function ProductionStatus() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Sale Order</th>
                   <th onClick={() => handleSort('order_no')} className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Plan No. <SortIcon field="order_no" /></span>
                   </th>
                   <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Plan Date</th>
+                  {isTransactionTab && (
+                    <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Transaction Date</th>
+                  )}
                   <th className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Customer</th>
                   <th onClick={() => handleSort('article')} className="px-3 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-gray-900 select-none">
                     <span className="inline-flex items-center gap-1">Article <SortIcon field="article" /></span>
@@ -253,14 +286,18 @@ export default function ProductionStatus() {
                     className={`transition-colors hover:bg-blue-50/60 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
                     onClick={() => navigate(`/production-status/${row.id}`)}
                   >
+                    <td className="px-3 py-3.5 text-sm text-indigo-700 font-mono font-medium">{row.sale_order_no || '—'}</td>
                     <td className="px-3 py-3.5 text-sm text-blue-700 font-mono font-medium">{row.order_no || '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-600">{row.plan_date ? new Date(row.plan_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-700">{(row as any).customer_name || '—'}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-600">{formatDate(row.plan_date)}</td>
+                    {isTransactionTab && (
+                      <td className="px-3 py-3.5 text-sm text-gray-600">{formatDate(row.transaction_date)}</td>
+                    )}
+                    <td className="px-3 py-3.5 text-sm text-gray-700">{row.customer_name || '—'}</td>
                     <td className="px-3 py-3.5 text-sm text-gray-700">{row.article || '—'}</td>
-                    <td className="px-3 py-3.5 text-sm text-gray-600">{(row as any).process_stage || '—'}</td>
+                    <td className="px-3 py-3.5 text-sm text-gray-600">{row.process_stage || '—'}</td>
                     <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.issued_qty)}</td>
                     <td className="px-3 py-3.5 text-sm text-gray-900 font-semibold text-right tabular-nums">{formatNumber(row.completed_qty)}</td>
-                    <td className="px-3 py-3.5 text-sm text-rose-600 font-semibold text-right tabular-nums">{formatNumber((row as any).rejection_qty || 0)}</td>
+                    <td className="px-3 py-3.5 text-sm text-rose-600 font-semibold text-right tabular-nums">{formatNumber(row.rejection_qty || 0)}</td>
                     <td className={`px-3 py-3.5 text-sm font-semibold text-right tabular-nums ${Number(row.balance_qty) < 0 ? 'text-rose-600' : 'text-amber-700'}`}>{formatNumber(row.balance_qty)}</td>
                     <td className="px-3 py-3.5 text-center">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_COLORS[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>

@@ -392,3 +392,37 @@ export async function getStats() {
   );
   return data;
 }
+
+// Bulk set status (Draft/Posted) via the normal update() path so stock/ledger
+// behaviour matches a single-record post. Returns { success, failed }.
+export async function bulkSetStatus(ids, status, updatedBy = null) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const existing = await getById(id);
+      if (!existing) { failed.push({ id, error: 'Not found' }); continue; }
+      if (existing.status === status) { success++; continue; }
+      const { items = [], ...header } = existing;
+      await update(id, { ...header, status }, items, updatedBy);
+      success++;
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}
+
+export async function bulkDelete(ids) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const ok = await remove(id);
+      if (ok) success++; else failed.push({ id, error: 'Not found' });
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}

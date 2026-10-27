@@ -38,6 +38,7 @@ export default function ReportShell<T extends Record<string, unknown>>({
   const [rows, setRows] = useState<T[]>([]);
   const [totals, setTotals] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 350);
 
@@ -56,6 +57,7 @@ export default function ReportShell<T extends Record<string, unknown>>({
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const params = new URLSearchParams();
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (showDate) {
@@ -75,9 +77,10 @@ export default function ReportShell<T extends Record<string, unknown>>({
       setTotals(res.totals || null);
       setTotalRecords(res.total || 0);
       setTotalPages(res.totalPages || 0);
-    } catch {
+    } catch (err) {
       setRows([]);
       setTotals(null);
+      setError(err instanceof Error ? err.message : 'Failed to load report data.');
     } finally {
       setLoading(false);
     }
@@ -163,6 +166,13 @@ export default function ReportShell<T extends Record<string, unknown>>({
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span className="font-semibold">Could not load report:</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       <ReportTable<T>
         columns={columns}

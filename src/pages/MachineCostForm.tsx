@@ -218,7 +218,10 @@ export default function MachineCostForm() {
   };
 
   const addLine = (focusNewLine = false) => {
-    recalculate([...formData.items, { machine_name: '', machine_id: 0, group_id: null, group_name: '', uom: '', total_qty: 0, cost_per_uom: 0, amount: 0, cost_per_piece: 0, remarks: '' }]);
+    // A new line defaults its Total Quantity to the order's Output Qty; the user
+    // can still change it afterwards.
+    const defaultQty = Number(formData.output_qty) || 0;
+    recalculate([...formData.items, { machine_name: '', machine_id: 0, group_id: null, group_name: '', uom: '', total_qty: defaultQty, cost_per_uom: 0, amount: 0, cost_per_piece: 0, remarks: '' }]);
     if (focusNewLine) setFocusedNewLine(formData.items.length);
   };
   const removeLine = (index: number) => recalculate(formData.items.filter((_, i) => i !== index));
@@ -244,11 +247,8 @@ export default function MachineCostForm() {
         items[index].group_name = machine.group_name || '';
         items[index].uom = machine.uom || '';
         items[index].cost_per_uom = machine.rate || 0;
-        // If UOM is "Piece", pre-fill Total Quantity with Output Qty (still editable).
-        // For any other UOM, leave Total Quantity untouched.
-        if ((machine.uom || '').trim().toLowerCase() === 'piece') {
-          items[index].total_qty = Number(formData.output_qty) || 0;
-        }
+        // Total Quantity already defaults to Output Qty when the line is added,
+        // so selecting a machine keeps whatever quantity is currently entered.
       }
     }
 

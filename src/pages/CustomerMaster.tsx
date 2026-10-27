@@ -4,6 +4,8 @@ import { Users } from 'lucide-react';
 import TransactionListPage from '../components/ui/TransactionListPage';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
+import { previewPDF, downloadPDF } from '../lib/pdfExport';
+import { exportToExcel } from '../lib/excelExport';
 
 export default function CustomerMaster() {
   const navigate = useNavigate();
@@ -40,6 +42,39 @@ export default function CustomerMaster() {
     toast.success(res.message || 'Customer deleted!');
   };
 
+  const fetchAll = async () => {
+    const res = await api<{ data: any[] }>('/customers?page=1&limit=99999');
+    return res.data || [];
+  };
+
+  const exportColumns = [
+    { key: 'code', header: 'Code' },
+    { key: 'name', header: 'Name' },
+    { key: 'contact_person', header: 'Contact Person' },
+    { key: 'phone', header: 'Phone' },
+    { key: 'email', header: 'Email' },
+    { key: 'city', header: 'City' },
+    { key: 'status', header: 'Status' },
+  ];
+
+  const pdfColumns = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'City', 'Status'];
+  const pdfRows = (data: any[]) => data.map((r: any) => [
+    r.code || '', r.name || '', r.contact_person || '', r.phone || '', r.email || '', r.city || '', r.status || '',
+  ]);
+
+  const handlePreviewPDF = async () => {
+    try { previewPDF({ title: 'Customers', columns: pdfColumns, rows: pdfRows(await fetchAll()), fileName: 'Customers' }); }
+    catch { toast.error('Failed to generate PDF preview'); }
+  };
+  const handleDownloadPDF = async () => {
+    try { downloadPDF({ title: 'Customers', columns: pdfColumns, rows: pdfRows(await fetchAll()), fileName: 'Customers' }); toast.success('PDF downloaded!'); }
+    catch { toast.error('Failed to download PDF'); }
+  };
+  const handleExportExcel = async () => {
+    try { exportToExcel({ data: await fetchAll(), columns: exportColumns, fileName: 'Customers' }); toast.success('Excel downloaded!'); }
+    catch { toast.error('Failed to download Excel'); }
+  };
+
   return (
     <TransactionListPage
       title="Customers"
@@ -60,6 +95,7 @@ export default function CustomerMaster() {
       searchPlaceholder="Search customers..."
       enableBulkDelete={true}
       defaultFilters={{ status: 'Active' }}
+      exportActions={{ onPreview: handlePreviewPDF, onDownload: handleDownloadPDF, onExcel: handleExportExcel }}
     />
   );
 }

@@ -279,17 +279,284 @@ export async function getCostingFilters() {
     `SELECT DISTINCT customer_name AS name FROM production_status_orders
      WHERE deleted_at IS NULL AND customer_name IS NOT NULL AND customer_name <> '' ORDER BY customer_name`
   );
-  // Get stages from both production_status_orders and material_issues to ensure all stages are included
+  // Stages from production_plan_stages, production_status_orders and material_issues
+  // so every stage used anywhere in costing is selectable. Collations are
+  // normalised across the UNION branches to avoid "illegal mix of collations".
   const [stages] = await pool.query(
-    `SELECT DISTINCT process_stage AS name FROM production_status_orders
-     WHERE deleted_at IS NULL AND process_stage IS NOT NULL AND process_stage <> ''
-     UNION
-     SELECT DISTINCT process_stage AS name FROM material_issues
-     WHERE process_stage IS NOT NULL AND process_stage <> ''
+    `SELECT DISTINCT name FROM (
+       SELECT stage_name COLLATE utf8mb4_0900_ai_ci AS name FROM production_plan_stages
+        WHERE stage_name IS NOT NULL AND stage_name <> ''
+       UNION
+       SELECT process_stage COLLATE utf8mb4_0900_ai_ci AS name FROM production_status_orders
+        WHERE deleted_at IS NULL AND process_stage IS NOT NULL AND process_stage <> ''
+       UNION
+       SELECT process_stage COLLATE utf8mb4_0900_ai_ci AS name FROM material_issues
+        WHERE process_stage IS NOT NULL AND process_stage <> ''
+     ) t
      ORDER BY name`
   );
   return {
     customers: customers.map(c => c.name),
     stages: stages.map(s => s.name),
   };
+}
+
+// ─── WIP Cost Summary (Order-wise & Stage-wise) ──────────────────────────────
+// One row per sales order + process stage. Mirrors the "ORDER-WISE & STAGE-WISE
+// WIP COST SUMMARY" sheet. For each (sales order, stage):
+//   WIP Qty          = Σ stage WIP across all production plans of the order
+//                      (planned_qty − output_qty, floored at 0 per plan+stage)
+//   Material WIP Cost = (Σ issue amount / Σ issue qty) for the order+stage × WIP qty
+//                      i.e. unit material issue cost × WIP qty
+//   General WIP Cost = (Σ general_cost_items.cost_per_uom for order+stage) × WIP qty
+//   Machine WIP Cost = (Σ machine_cost_items.cost_per_uom for order+stage) × WIP qty
+//   Total WIP Cost   = Material + General + Machine
+// Only stages that still carry WIP (> 0) are returned.
+const CO = 'COLLATE utf8mb4_0900_ai_ci';
+
+async function wipCostSummaryLegacy({ stage, search, page = 1, limit = 10 }) {
+  const params = [];
+  let where = 'pp.deleted_at IS NULL';
+  if (stage) { where += ` AND s.stage_name ${CO} = ? ${CO}`; params.push(stage); }
+  if (search) {
+    where += ` AND (so.order_no LIKE ? OR pp.article LIKE ? OR c.name LIKE ? OR s.stage_name LIKE ?)`;
+    const t = `%${search}%`; params.push(t, t, t, t);
+  }
+  const offset = (page - 1) * limit;
+
+  // Step 1 — grouped base: one row per sales order + stage with the summed WIP
+  // qty (per plan+stage WIP floored at 0, summed across all plans of the order).
+  // Collation-normalised order_no / stage keys are carried out so the cost
+  // sub-queries in step 2 can correlate against them deterministically.
+  const grouped = `
+     SELECT
+        COALESCE(MIN(so.order_no), MIN(pp.plan_no)) AS order_no,
+        COALESCE(MIN(c.name), '—') AS customer_name,
+        MIN(pp.article) AS article,
+        MIN(pp.color) AS color,
+        s.stage_name AS process_stage,
+        -- Order stages by the company-wide production sequence defined in the
+        -- master process_stages table (Wet End -> Measurement -> Finishing ->
+        -- Packing), falling back to the plan's own stage seq only when the
+        -- stage is not in the master. This keeps every order's stages in the
+        -- same canonical order regardless of how each plan was created.
+        MIN(COALESCE(
+          (SELECT ps.seq FROM process_stages ps
+            WHERE ps.name ${CO} = s.stage_name ${CO}
+            ORDER BY (ps.status='Active') DESC, ps.id ASC LIMIT 1),
+          s.seq,
+          999999
+        )) AS stage_seq,
+        SUM(GREATEST(0, COALESCE(s.planned_qty,0) - COALESCE(s.output_qty,0))) AS wip_qty
+     FROM production_plan_stages s
+     JOIN production_plans pp ON s.plan_id = pp.id AND pp.deleted_at IS NULL
+     LEFT JOIN sales_orders so ON pp.sales_order_id = so.id
+     LEFT JOIN customers c ON so.customer_id = c.id
+     WHERE ${where}
+     GROUP BY COALESCE(so.order_no, pp.plan_no), s.stage_name
+     HAVING wip_qty > 0`;
+
+  // Step 2 — attach the per-UOM / per-piece unit costs for each order+stage.
+  // Unit material cost = Σ issue amount (issue value) / Σ planned qty for the
+  // order+stage. Planned qty comes from production_plan_stages for the matching
+  // stage across all plans of the order (mirrors the sample costing sheet:
+  // "issue value / planned qty").
+  const matUnitCost = `
+    COALESCE((
+      SELECT CASE WHEN (
+                   SELECT SUM(COALESCE(s2.planned_qty,0))
+                   FROM production_plan_stages s2
+                   JOIN production_plans ppp ON s2.plan_id = ppp.id AND ppp.deleted_at IS NULL
+                   LEFT JOIN sales_orders sso ON ppp.sales_order_id = sso.id
+                   WHERE COALESCE(sso.order_no, ppp.plan_no) ${CO} = g.order_no ${CO}
+                     AND s2.stage_name ${CO} = g.process_stage ${CO}
+                 ) > 0
+                  THEN SUM(mii.amount) / (
+                   SELECT SUM(COALESCE(s2.planned_qty,0))
+                   FROM production_plan_stages s2
+                   JOIN production_plans ppp ON s2.plan_id = ppp.id AND ppp.deleted_at IS NULL
+                   LEFT JOIN sales_orders sso ON ppp.sales_order_id = sso.id
+                   WHERE COALESCE(sso.order_no, ppp.plan_no) ${CO} = g.order_no ${CO}
+                     AND s2.stage_name ${CO} = g.process_stage ${CO}
+                 )
+                  ELSE 0 END
+      FROM material_issues mi2
+      JOIN material_issue_items mii ON mii.issue_id = mi2.id
+      JOIN production_plans pp2 ON mi2.production_batch ${CO} = pp2.plan_no ${CO}
+      LEFT JOIN sales_orders so2 ON pp2.sales_order_id = so2.id
+      WHERE COALESCE(so2.order_no, pp2.plan_no) ${CO} = g.order_no ${CO}
+        AND COALESCE(mi2.process_stage,'') ${CO} = g.process_stage ${CO}
+    ), 0)`;
+  // Σ cost_per_uom from general cost entries recorded for the order+stage.
+  const genUnitCost = `
+    COALESCE((
+      SELECT SUM(gci.cost_per_uom)
+      FROM general_cost_headers gch
+      JOIN general_cost_items gci ON gci.general_cost_id = gch.id
+      JOIN production_status_orders pso2 ON gch.production_plan_id = pso2.id
+      JOIN production_plans pp2 ON pso2.production_plan_id = pp2.id
+      LEFT JOIN sales_orders so2 ON pp2.sales_order_id = so2.id
+      WHERE COALESCE(so2.order_no, pp2.plan_no) ${CO} = g.order_no ${CO}
+        AND COALESCE(gch.process_stage,'') ${CO} = g.process_stage ${CO}
+    ), 0)`;
+  // Σ cost_per_uom from machine cost entries recorded for the order+stage.
+  const machUnitCost = `
+    COALESCE((
+      SELECT SUM(mci.cost_per_uom)
+      FROM machine_cost_headers mch
+      JOIN machine_cost_items mci ON mci.machine_cost_id = mch.id
+      JOIN production_status_orders pso3 ON mch.production_plan_id = pso3.id
+      JOIN production_plans pp3 ON pso3.production_plan_id = pp3.id
+      LEFT JOIN sales_orders so3 ON pp3.sales_order_id = so3.id
+      WHERE COALESCE(so3.order_no, pp3.plan_no) ${CO} = g.order_no ${CO}
+        AND COALESCE(mch.process_stage,'') ${CO} = g.process_stage ${CO}
+    ), 0)`;
+
+  const [rows] = await pool.query(
+    `SELECT
+        g.order_no, g.customer_name, g.article, g.color, g.process_stage,
+        g.stage_seq, g.wip_qty,
+        g.wip_qty * (${matUnitCost})  AS material_wip_cost,
+        g.wip_qty * (${genUnitCost})  AS general_wip_cost,
+        g.wip_qty * (${machUnitCost}) AS machine_wip_cost,
+        g.wip_qty * ((${matUnitCost}) + (${genUnitCost}) + (${machUnitCost})) AS total_wip_cost
+     FROM ( ${grouped} ) g
+     -- Primary sort by the canonical production stage sequence (Wet End ->
+     -- Measurement -> Finishing -> Packing from master process_stages), then
+     -- by sales order within each stage.
+     ORDER BY g.stage_seq ASC, g.order_no ASC`,
+    params
+  );
+
+  const total = rows.length;
+  const paged = rows.slice(offset, offset + Number(limit));
+  const totals = rows.reduce((a, r) => ({
+    wip_qty: a.wip_qty + Number(r.wip_qty || 0),
+    material_wip_cost: a.material_wip_cost + Number(r.material_wip_cost || 0),
+    general_wip_cost: a.general_wip_cost + Number(r.general_wip_cost || 0),
+    machine_wip_cost: a.machine_wip_cost + Number(r.machine_wip_cost || 0),
+    total_wip_cost: a.total_wip_cost + Number(r.total_wip_cost || 0),
+  }), { wip_qty: 0, material_wip_cost: 0, general_wip_cost: 0, machine_wip_cost: 0, total_wip_cost: 0 });
+
+  return { rows: paged, total, totals };
+}
+
+// WIP Cost Summary uses the Production Plan stage as its source of truth.
+// Costs are allocated per plan + stage before being rolled up by sales order,
+// so costs from one stage or plan cannot be applied to another.
+export async function wipCostSummary({ stage, search, page = 1, limit = 10 }) {
+  const params = [];
+  let where = 'pp.deleted_at IS NULL';
+  if (stage) { where += ` AND s.stage_name ${CO} = ? ${CO}`; params.push(stage); }
+  if (search) {
+    where += ' AND (so.order_no LIKE ? OR pp.article LIKE ? OR c.name LIKE ? OR s.stage_name LIKE ?)';
+    const term = `%${search}%`;
+    params.push(term, term, term, term);
+  }
+  const offset = (page - 1) * Number(limit);
+
+  const grouped = `
+    SELECT
+      COALESCE(MIN(so.order_no), MIN(pp.plan_no)) AS order_no,
+      COALESCE(MIN(c.name), '—') AS customer_name,
+      MIN(pp.article) AS article,
+      MIN(pp.color) AS color,
+      s.stage_name AS process_stage,
+      MIN(COALESCE((
+        SELECT ps.seq FROM process_stages ps
+        WHERE ps.name ${CO} = s.stage_name ${CO}
+        ORDER BY (ps.status = 'Active') DESC, ps.id ASC LIMIT 1
+      ), s.seq, 999999)) AS stage_seq,
+      SUM(GREATEST(0, COALESCE(s.issue_input_qty, 0) - COALESCE(s.output_qty, 0))) AS wip_qty
+    FROM production_plan_stages s
+    JOIN production_plans pp ON pp.id = s.plan_id AND pp.deleted_at IS NULL
+    LEFT JOIN sales_orders so ON so.id = pp.sales_order_id
+    LEFT JOIN customers c ON c.id = so.customer_id
+    WHERE ${where}
+    GROUP BY COALESCE(so.order_no, pp.plan_no), s.stage_name
+    HAVING wip_qty > 0`;
+
+  const planStageWhere = `
+    FROM production_plan_stages s2
+    JOIN production_plans pp2 ON pp2.id = s2.plan_id AND pp2.deleted_at IS NULL
+    LEFT JOIN sales_orders so2 ON so2.id = pp2.sales_order_id
+    WHERE COALESCE(so2.order_no, pp2.plan_no) ${CO} = g.order_no ${CO}
+      AND s2.stage_name ${CO} = g.process_stage ${CO}`;
+
+  const materialWipCost = `
+    COALESCE((
+      SELECT SUM(CASE WHEN COALESCE(s2.issue_input_qty, 0) > 0
+                       THEN GREATEST(0, COALESCE(s2.issue_input_qty, 0) - COALESCE(s2.output_qty, 0)) *
+                         COALESCE((
+                           SELECT SUM(mii.amount) / NULLIF(s2.issue_input_qty, 0)
+                           FROM material_issues mi
+                           JOIN material_issue_items mii ON mii.issue_id = mi.id
+                           WHERE mi.production_batch ${CO} = pp2.plan_no ${CO}
+                             AND COALESCE(mi.process_stage, '') ${CO} = s2.stage_name ${CO}
+                         ), 0)
+                       ELSE 0 END)
+      ${planStageWhere}
+    ), 0)`;
+
+  const generalWipCost = `
+    COALESCE((
+      SELECT SUM(CASE WHEN COALESCE(s2.issue_input_qty, 0) > 0
+                       THEN GREATEST(0, COALESCE(s2.issue_input_qty, 0) - COALESCE(s2.output_qty, 0)) *
+                         COALESCE((
+                           SELECT COALESCE(
+                             NULLIF(SUM(gch.total_amount) / NULLIF(SUM(gch.production_qty), 0), 0),
+                             SUM(gch.total_cost_per_piece),
+                             0
+                           )
+                           FROM production_status_orders pso
+                           JOIN general_cost_headers gch ON gch.production_plan_id = pso.id
+                           WHERE pso.production_plan_id = pp2.id
+                             AND pso.deleted_at IS NULL
+                             AND pso.process_stage ${CO} = s2.stage_name ${CO}
+                         ), 0)
+                       ELSE 0 END)
+      ${planStageWhere}
+    ), 0)`;
+
+  const machineWipCost = `
+    COALESCE((
+      SELECT SUM(CASE WHEN COALESCE(s2.issue_input_qty, 0) > 0
+                       THEN GREATEST(0, COALESCE(s2.issue_input_qty, 0) - COALESCE(s2.output_qty, 0)) *
+                         COALESCE((
+                           SELECT COALESCE(
+                             NULLIF(SUM(mch.total_amount) / NULLIF(SUM(mch.production_qty), 0), 0),
+                             SUM(mch.total_cost_per_piece),
+                             0
+                           )
+                           FROM production_status_orders pso
+                           JOIN machine_cost_headers mch ON mch.production_plan_id = pso.id
+                           WHERE pso.production_plan_id = pp2.id
+                             AND pso.deleted_at IS NULL
+                             AND pso.process_stage ${CO} = s2.stage_name ${CO}
+                         ), 0)
+                       ELSE 0 END)
+      ${planStageWhere}
+    ), 0)`;
+
+  const [rows] = await pool.query(
+    `SELECT g.order_no, g.customer_name, g.article, g.color, g.process_stage,
+            g.stage_seq, g.wip_qty,
+            ${materialWipCost} AS material_wip_cost,
+            ${generalWipCost} AS general_wip_cost,
+            ${machineWipCost} AS machine_wip_cost,
+            (${materialWipCost} + ${generalWipCost} + ${machineWipCost}) AS total_wip_cost
+     FROM (${grouped}) g
+     ORDER BY g.stage_seq ASC, g.order_no ASC`,
+    params
+  );
+
+  const totals = rows.reduce((sum, row) => ({
+    wip_qty: sum.wip_qty + Number(row.wip_qty || 0),
+    material_wip_cost: sum.material_wip_cost + Number(row.material_wip_cost || 0),
+    general_wip_cost: sum.general_wip_cost + Number(row.general_wip_cost || 0),
+    machine_wip_cost: sum.machine_wip_cost + Number(row.machine_wip_cost || 0),
+    total_wip_cost: sum.total_wip_cost + Number(row.total_wip_cost || 0),
+  }), { wip_qty: 0, material_wip_cost: 0, general_wip_cost: 0, machine_wip_cost: 0, total_wip_cost: 0 });
+
+  return { rows: rows.slice(offset, offset + Number(limit)), total: rows.length, totals };
 }

@@ -3,8 +3,24 @@ import { updateStock, addLedgerEntry, allowsNegativeStock, rebuildAndReprice } f
 import { getIssueItemInfo, replaceReferenceTransactions, ensureOpeningStockSeeded } from './materialTransactionModel.js';
 import { isPlanCostLockedByPlanNo } from './standardCostModel.js';
 
+// Reject the save when any line's issue quantity exceeds available stock, so an
+// out-of-stock material issue is never persisted — not even as a Draft. Skipped
+// for warehouses explicitly configured to allow negative stock.
+async function assertStockAvailable(conn, data, items = []) {
+  if (!data.warehouse_id || !items.length) return;
+  if (await allowsNegativeStock(data.warehouse_id)) return;
+  for (const item of items) {
+    const requested = parseFloat(item.issue_qty) || 0;
+    if (requested <= 0) continue;
+    const info = await getIssueItemInfo({ warehouseId: data.warehouse_id, itemId: item.material_id, date: data.issue_date });
+    if (requested > info.available_qty + 0.000001) {
+      throw new Error(`Insufficient stock. Available stock: ${info.available_qty}. Requested issue quantity: ${requested}`);
+    }
+  }
+}
+
 export async function getAll({ search, status, warehouse_id, process_stage, page = 1, limit = 10, sortBy, sortOrder }) {
-  let where = '1=1';
+  let where = 'mi.deleted_at IS NULL';
   const params = [];
   if (search) {
     where += ' AND (mi.issue_no LIKE ? OR mi.production_batch LIKE ? OR mi.job_order_no LIKE ? OR w.name LIKE ?)';
@@ -41,7 +57,7 @@ export async function getById(id) {
     `SELECT mi.*, w.name AS warehouse_name, w.code AS warehouse_code
      FROM material_issues mi
      LEFT JOIN warehouses w ON mi.warehouse_id = w.id
-     WHERE mi.id = ?`, [id]
+     WHERE mi.id = ? AND mi.deleted_at IS NULL`, [id]
   );
   if (!issue) return null;
   const [items] = await pool.query(
@@ -60,6 +76,8 @@ export async function getNextNo() {
     `SELECT issue_no FROM material_issues WHERE issue_no LIKE ? ORDER BY id DESC LIMIT 1`,
     [`ISS-${year}-%`]
   );
+  // Note: deleted (soft) issues are intentionally still considered here so a
+  // reused number is never generated after a soft delete.
   if (!row) return `ISS-${year}-00001`;
   const num = parseInt(row.issue_no.split('-')[2], 10) + 1;
   return `ISS-${year}-${String(num).padStart(5, '0')}`;
@@ -72,7 +90,6 @@ export async function create(data, items = [], createdBy = null) {
     const issue_no = data.issue_no || await getNextNo();
     const status = data.status || 'Draft';
 
-    // Only validate stock and compute server-side costs if posting
     if (status === 'Posted') {
       for (const item of items) {
         // Materialize master opening stock into a real transaction/ledger row
@@ -87,6 +104,11 @@ export async function create(data, items = [], createdBy = null) {
         item.unit_cost = info.avg_rate;
         item.amount = Number((requested * info.avg_rate).toFixed(2));
       }
+    } else {
+      // Even for Draft saves, never persist an issue whose quantity exceeds
+      // available stock. This keeps out-of-stock entries out of the DB entirely
+      // (the record must not be created at all when insufficient).
+      await assertStockAvailable(conn, data, items);
     }
 
     const totalCost = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
@@ -227,6 +249,13 @@ export async function update(id, data, items = [], updatedBy = null) {
         item.unit_cost = info.avg_rate;
         item.amount = Number((requested * info.avg_rate).toFixed(2));
       }
+    } else if (!wasPosted) {
+      // Pure Draft update (record was never Posted): reject if any line exceeds
+      // available stock so an out-of-stock issue is never persisted. We skip
+      // this when the record WAS Posted, because the in-transaction stock
+      // reversal above isn't yet visible to the availability read and would
+      // cause a false "insufficient" during un-posting back to Draft.
+      await assertStockAvailable(conn, data, items);
     }
 
     const totalCost = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
@@ -324,7 +353,9 @@ export async function remove(id) {
 
     if (wasPosted) {
       // Reverse the stock the posted issue consumed, then remove its ledger and
-      // transaction effects and rebuild valuation.
+      // transaction effects and rebuild valuation. The stock side-effects must
+      // be undone so inventory stays accurate even though the header is only
+      // soft-deleted.
       for (const item of items) {
         await updateStock(conn, item.warehouse_id, item.material_id, item.uom, parseFloat(item.issue_qty), 0);
       }
@@ -332,8 +363,12 @@ export async function remove(id) {
       await replaceReferenceTransactions(conn, 'material_issue', id, []);
     }
 
-    await conn.query('DELETE FROM material_issue_items WHERE issue_id=?', [id]);
-    const [result] = await conn.query('DELETE FROM material_issues WHERE id=?', [id]);
+    // Soft delete: flag the header with deleted_at instead of physically
+    // removing it. Child items are kept intact so the record can be restored
+    // and remains available for audit/history.
+    const [result] = await conn.query(
+      'UPDATE material_issues SET deleted_at = CURRENT_TIMESTAMP WHERE id=? AND deleted_at IS NULL', [id]
+    );
 
     // Rebuild valuation only for Posted issues (Draft never touched stock).
     if (wasPosted) {
@@ -358,9 +393,46 @@ export async function getStats() {
        SUM(status='Posted') AS posted,
        SUM(status='Draft') AS draft,
        SUM(grand_total) AS total_value
-     FROM material_issues`
+     FROM material_issues
+     WHERE deleted_at IS NULL`
   );
   return data;
+}
+
+// Bulk set status (Draft/Posted) for several issues at once. Each record is
+// processed through the normal update() path so stock validation, ledger
+// writes and valuation rebuilds behave exactly like a single-record post.
+// Returns { success, failed: [{ id, error }] }.
+export async function bulkSetStatus(ids, status, updatedBy = null) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const existing = await getById(id);
+      if (!existing) { failed.push({ id, error: 'Not found' }); continue; }
+      if (existing.status === status) { success++; continue; } // already in target state
+      const { items = [], ...header } = existing;
+      await update(id, { ...header, status }, items, updatedBy);
+      success++;
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
+}
+
+export async function bulkDelete(ids) {
+  const failed = [];
+  let success = 0;
+  for (const id of ids) {
+    try {
+      const ok = await remove(id);
+      if (ok) success++; else failed.push({ id, error: 'Not found' });
+    } catch (err) {
+      failed.push({ id, error: err.message });
+    }
+  }
+  return { success, failed };
 }
 
 // --- Batches Dropdown for Material Issue ---
@@ -424,7 +496,7 @@ export async function getPreviousIssueByArticle(article, excludeId = null) {
   let extra = '';
   if (excludeId) { extra = ' AND mi.id <> ?'; params.push(excludeId); }
   const [[header]] = await pool.query(
-    `SELECT mi.* FROM material_issues mi WHERE mi.article=?${extra} ORDER BY mi.issue_date DESC, mi.id DESC LIMIT 1`, params
+    `SELECT mi.* FROM material_issues mi WHERE mi.article=? AND mi.deleted_at IS NULL${extra} ORDER BY mi.issue_date DESC, mi.id DESC LIMIT 1`, params
   );
   if (!header) return null;
   const [items] = await pool.query(

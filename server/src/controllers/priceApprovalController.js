@@ -53,6 +53,9 @@ export const bulkSoftDelete = catchAsync(async (req, res) => {
 export const approveSelected = catchAsync(async (req, res) => {
   const { requestId } = req.params;
   const { item_ids, approval_notes } = req.body;
+  if (!Array.isArray(item_ids) || item_ids.length === 0) {
+    return res.status(400).json({ success: false, message: 'At least one item must be selected' });
+  }
   const userId = req.user?.id || null;
   const result = await approvalModel.approveSelected(requestId, item_ids, { approval_notes }, userId);
   res.json({ success: true, ...result });
@@ -61,8 +64,14 @@ export const approveSelected = catchAsync(async (req, res) => {
 export const rejectSelected = catchAsync(async (req, res) => {
   const { requestId } = req.params;
   const { item_ids, rejection_reason } = req.body;
+  if (!Array.isArray(item_ids) || item_ids.length === 0) {
+    return res.status(400).json({ success: false, message: 'At least one item must be selected' });
+  }
+  if (!String(rejection_reason || '').trim()) {
+    return res.status(400).json({ success: false, message: 'Rejection reason is required' });
+  }
   const userId = req.user?.id || null;
-  const result = await approvalModel.rejectSelected(requestId, item_ids, rejection_reason, userId);
+  const result = await approvalModel.rejectSelected(requestId, item_ids, rejection_reason.trim(), userId);
   res.json({ success: true, ...result });
 });
 

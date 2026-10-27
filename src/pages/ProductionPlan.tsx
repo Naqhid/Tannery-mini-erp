@@ -62,7 +62,7 @@ export default function ProductionPlan() {
   // Delete
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number | null; itemId?: number; plan_row?: any }>({ open: false, id: null });
 
-  // Accordion
+  // Accordion — one sale order can have multiple production plans
   const [expandedRow, setExpandedRow] = useState<number | null>(() => {
     const saved = sessionStorage.getItem('productionPlan_expandedRow');
     return saved ? Number(saved) : null;
@@ -80,18 +80,17 @@ export default function ProductionPlan() {
   }, [expandedRow]);
 
   // Fetch all plans created for a given sales-order-item row (there can be multiple)
-  // Declared before the effects that depend on it to avoid a temporal-dead-zone
-  // "Cannot access before initialization" crash in the minified build.
   const fetchRowPlans = useCallback(async (row: any) => {
     setRowPlansLoading((prev) => ({ ...prev, [row.item_id]: true }));
     try {
       const params = new URLSearchParams();
       params.set('limit', '100');
       // Prefer the exact plan_id the sales-order-item already resolved — this
-      // avoids fragile article-name matching (e.g. "Sheep  Softy Black" on the
-      // order item vs "Sheep Softy" on the plan). Fall back to article/color.
+      // avoids fragile article-name matching. Fall back to article/color.
       if (row.plan_id) {
-        params.set('plan_id', String(row.plan_id));
+        params.set('sales_order_no', row.sales_order_no || '');
+        if (row.article) params.set('article', row.article);
+        if (row.color) params.set('color', row.color);
       } else {
         if (row.sales_order_no) params.set('sales_order_no', row.sales_order_no);
         if (row.article) params.set('article', row.article);
@@ -106,26 +105,8 @@ export default function ProductionPlan() {
     }
   }, []);
 
-  // When data finishes loading and there's a restored expandedRow, fetch its plans
-  useEffect(() => {
-    if (!loading && expandedRow !== null && data.length > 0) {
-      const row = data.find((r) => r.item_id === expandedRow);
-      if (row && !rowPlans[expandedRow]) {
-        fetchRowPlans(row);
-      }
-    }
-  }, [loading, expandedRow, data, rowPlans, fetchRowPlans]);
-
   const createNewPlan = (row: any) => {
     navigate(`/production-plan/new?sales_order_id=${row.sales_order_id}&article=${encodeURIComponent(row.article || '')}&color=${encodeURIComponent(row.color || '')}&customer_id=${row.customer_id || ''}&order_qty=${row.order_qty || 0}`);
-  };
-
-  const goToPlan = (row: any) => {
-    if (row.plan_id) {
-      navigate(`/production-plan/${row.plan_id}`);
-    } else {
-      createNewPlan(row);
-    }
   };
 
   const toggleRow = (row: any) => {
@@ -172,6 +153,16 @@ export default function ProductionPlan() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // When data finishes loading and there's a restored expandedRow, fetch its plans
+  useEffect(() => {
+    if (!loading && expandedRow !== null && data.length > 0) {
+      const row = data.find((r) => r.item_id === expandedRow);
+      if (row && !rowPlans[expandedRow]) {
+        fetchRowPlans(row);
+      }
+    }
+  }, [loading, expandedRow, data, rowPlans, fetchRowPlans]);
+
   const handleSearch = () => {
     const params: Record<string, string> = {};
     if (customerId) params.customer_id = customerId;
@@ -204,7 +195,7 @@ export default function ProductionPlan() {
     try {
       await api(`/production-plans/${deleteConfirm.id}`, { method: 'DELETE' });
       toast.success('Production plan deleted!');
-      // Refresh the accordion plans for the affected row, and the main list
+      // Refresh the expanded row's plans and the main list
       if (deleteConfirm.plan_row) fetchRowPlans(deleteConfirm.plan_row);
       fetchData();
     } catch (err) {
@@ -243,7 +234,7 @@ export default function ProductionPlan() {
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
             <SearchableSelect
-              options={[{ value: '', label: 'All' }, ...['Pending', 'In Progress', 'Completed'].map((s) => ({ value: s, label: s }))]}
+              options={[{ value: '', label: 'All' }, ...['Pending', 'In-Process', 'Completed'].map((s) => ({ value: s, label: s }))]}
               value={status}
               onChange={setStatus}
               placeholder="All"
@@ -332,14 +323,15 @@ export default function ProductionPlan() {
               <col className="w-8" />
               <col className="w-8" />
               <col className="w-[12%]" />
-              <col className="w-[16%]" />
               <col className="w-[14%]" />
-              <col className="w-[16%]" />
-              <col className="w-[10%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[10%]" />
+              <col className="w-[14%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[8%]" />
+              <col className="w-[9%]" />
             </colgroup>
             <thead>
               <tr className="bg-slate-50 border-b border-gray-200">
@@ -347,13 +339,13 @@ export default function ProductionPlan() {
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">#</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Sale Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer</th>
-                <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Customer Order No.</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Article</th>
                 <th className="text-left py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Color</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Order Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Completed Qty<br />(Sq.Ft.)</th>
                 <th className="text-right py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Balance Qty<br />(Sq.Ft.)</th>
                 <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Status</th>
+                <th className="text-center py-3 px-3 text-[11px] font-bold text-gray-600 uppercase">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -390,7 +382,6 @@ export default function ProductionPlan() {
                     <td className="py-2.5 px-3 text-xs text-gray-500 font-medium">{(currentPage - 1) * pageSize + i + 1}</td>
                     <td className="py-2.5 px-3 text-xs font-medium text-blue-700">{row.sales_order_no || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-800">{row.customer_name || '—'}</td>
-                    <td className="py-2.5 px-3 text-xs text-gray-700">{row.customer_order_no || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.article || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700">{row.color || '—'}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-900 font-semibold text-right">{formatQty(row.order_qty)}</td>
@@ -401,29 +392,40 @@ export default function ProductionPlan() {
                         {row.status}
                       </span>
                     </td>
+                    <td className="py-2.5 px-3 text-center">
+                      {canWrite && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
+                          className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-all whitespace-nowrap"
+                        >
+                          <Plus size={12} /> New Plan
+                        </button>
+                      )}
+                    </td>
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-50/30">
                       <td colSpan={11} className="px-6 py-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Sale Order</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.sales_order_no || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Article Code</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.article_code || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">UOM</p><p className="text-xs font-medium text-gray-800 mt-0.5">{row.uom || '—'}</p></div>
-                          <div><p className="text-[10px] text-gray-400 uppercase font-semibold">Total Planned Qty</p><p className="text-xs font-medium text-gray-800 mt-0.5">{formatQty(row.planned_qty)}</p></div>
-                        </div>
-
-                        {/* Plans created for this row */}
+                        {/* Plans created for this row (a sale order can have multiple plans) */}
                         <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
                           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-slate-50">
-                            <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                              Plans ({(rowPlans[row.item_id] || []).length})
-                            </span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all"
-                            >
-                              <Plus size={12} /> Create New Plan
-                            </button>
+                            <div className="flex items-center gap-4">
+                              <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                                Plans ({(rowPlans[row.item_id] || []).length})
+                              </span>
+                              <span className="text-[11px] text-gray-500">
+                                <span className="font-semibold text-gray-400 uppercase">Customer Order No.</span>
+                                <span className="ml-1.5 font-medium text-gray-800">{row.customer_order_no || '—'}</span>
+                              </span>
+                            </div>
+                            {canWrite && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); createNewPlan(row); }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all"
+                              >
+                                <Plus size={12} /> Create New Plan
+                              </button>
+                            )}
                           </div>
                           {rowPlansLoading[row.item_id] ? (
                             <div className="p-4 space-y-2">
@@ -436,17 +438,19 @@ export default function ProductionPlan() {
                           ) : (
                             <table className="w-full text-sm table-fixed">
                               <colgroup>
-                                <col className="w-[20%]" />
-                                <col className="w-[20%]" />
-                                <col className="w-[20%]" />
-                                <col className="w-[20%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[16%]" />
                                 <col className="w-[20%]" />
                               </colgroup>
                               <thead>
                                 <tr className="border-b border-gray-100">
                                   <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan No.</th>
                                   <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Plan Date</th>
-                                  <th className="text-left py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
+                                  <th className="text-right py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Planned Qty</th>
+                                  <th className="text-right py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">WIP Qty</th>
                                   <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Status</th>
                                   <th className="text-center py-2 px-4 text-[10px] font-bold text-gray-500 uppercase">Action</th>
                                 </tr>
@@ -456,7 +460,8 @@ export default function ProductionPlan() {
                                   <tr key={plan.id} className="hover:bg-blue-50/40">
                                     <td className="py-2 px-4 text-xs font-medium text-blue-700">{plan.plan_no || '—'}</td>
                                     <td className="py-2 px-4 text-xs text-gray-700">{plan.plan_date ? new Date(plan.plan_date).toLocaleDateString('en-IN') : '—'}</td>
-                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-left">{formatQty(plan.planned_qty)}</td>
+                                    <td className="py-2 px-4 text-xs text-gray-900 font-semibold text-right">{formatQty(plan.planned_qty)}</td>
+                                    <td className="py-2 px-4 text-xs text-orange-700 font-semibold text-right">{formatQty(plan.wip_qty)}</td>
                                     <td className="py-2 px-4 text-center">
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_COLORS[plan.status] || 'bg-gray-100 text-gray-700'}`}>
                                         {plan.status}
@@ -509,8 +514,10 @@ export default function ProductionPlan() {
               <p className="text-sm text-gray-500">No production plans found</p>
             </div>
           ) : (
-            data.map((row) => (
-              <div key={row.item_id} onClick={() => goToPlan(row)} className="p-4 active:bg-blue-50 transition-colors cursor-pointer">
+            data.map((row) => {
+              const mWip = Math.max(0, (Number(row.planned_qty) || 0) - (Number(row.completed_qty) || 0));
+              return (
+              <div key={row.item_id} className="p-4 active:bg-blue-50 transition-colors">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.customer_name || '—'}</p>
@@ -522,7 +529,7 @@ export default function ProductionPlan() {
                   <span className="truncate">{row.article || '—'}</span>
                   {row.color && <><span className="text-gray-300">•</span><span>{row.color}</span></>}
                 </div>
-                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-100">
+                <div className="grid grid-cols-4 gap-2 pt-2.5 border-t border-gray-100">
                   <div className="text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-medium">Order</p>
                     <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.order_qty)}</p>
@@ -532,12 +539,25 @@ export default function ProductionPlan() {
                     <p className="text-xs font-bold text-gray-900 tabular-nums">{formatQty(row.completed_qty)}</p>
                   </div>
                   <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium">WIP</p>
+                    <p className="text-xs font-bold text-orange-700 tabular-nums">{formatQty(mWip)}</p>
+                  </div>
+                  <div className="text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-medium">Balance</p>
                     <p className="text-xs font-bold text-amber-700 tabular-nums">{formatQty(row.balance_qty)}</p>
                   </div>
                 </div>
+                <div className="flex items-center gap-2 mt-3">
+                  {row.plan_id && (
+                    <button onClick={(e) => { e.stopPropagation(); navigate(`/production-plan/${row.plan_id}`); }} className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold text-blue-700 bg-white border border-blue-200 rounded-md">Open</button>
+                  )}
+                  {canWrite && (
+                    <button onClick={(e) => { e.stopPropagation(); createNewPlan(row); }} className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-md"><Plus size={12} /> New Plan</button>
+                  )}
+                </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
 

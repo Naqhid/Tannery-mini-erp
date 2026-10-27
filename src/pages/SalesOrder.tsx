@@ -35,6 +35,7 @@ export default function SalesOrder() {
     { key: 'order_date', header: 'Order Date', sortable: true, render: (row: any) => <span className="text-xs text-gray-600">{formatDate(row.order_date)}</span> },
     { key: 'delivery_date', header: 'Delivery Date', sortable: true, render: (row: any) => <span className="text-xs text-gray-600">{formatDate(row.delivery_date)}</span> },
     { key: 'total_quantity', header: 'Quantity', sortable: false, render: (row: any) => <span className="text-xs font-semibold text-gray-900">{parseFloat(row.total_quantity || 0).toLocaleString('en-IN')}</span> },
+    { key: 'shipped_qty', header: 'Shipped Qty', sortable: false, render: (row: any) => <span className="text-xs font-semibold text-violet-700">{row.shipped_qty != null ? parseFloat(row.shipped_qty).toLocaleString('en-IN') : '—'}</span> },
     { key: 'grand_total', header: 'Amount', sortable: true, render: (row: any) => <span className="text-xs font-semibold text-gray-900">{formatCurrency(row.grand_total)}</span> },
     { key: 'status', header: 'Status', sortable: true, render: (row: any) => <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_COLORS[row.status] || ''}`}>{row.status}</span> },
   ];
@@ -45,7 +46,6 @@ export default function SalesOrder() {
     { label: 'Confirmed', value: stats.confirmed, color: 'text-emerald-900', bg: 'bg-emerald-50 border-emerald-200', iconColor: 'from-emerald-500 to-green-600' },
     { label: 'Processing', value: stats.processing, color: 'text-blue-900', bg: 'bg-blue-50 border-blue-200', iconColor: 'from-blue-500 to-indigo-600' },
     { label: 'Shipped', value: stats.shipped, color: 'text-violet-900', bg: 'bg-violet-50 border-violet-200', iconColor: 'from-violet-500 to-purple-600' },
-    { label: 'Delivered', value: stats.delivered, color: 'text-purple-900', bg: 'bg-purple-50 border-purple-200', iconColor: 'from-purple-500 to-violet-600' },
   ];
 
   const filterOptions = [

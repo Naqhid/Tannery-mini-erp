@@ -107,10 +107,10 @@ export default function MaterialIssueToBatchDetail() {
   const fetchPlans = useCallback(async () => {
     try {
       const res = await api<{ data: any[] }>('/production-plans?limit=500&sortBy=id&sortOrder=desc');
-      // Only show plans that still need material issued (Pending / Planned /
-      // In Progress). Completed plans are excluded from the Plan No dropdown.
+      // Show all plans in the Plan No dropdown, including Completed ones, so
+      // material can still be issued/adjusted against a plan after it has been
+      // marked Completed.
       setPlanOptions((res.data || [])
-        .filter((p: any) => String(p.status || '').trim().toLowerCase() !== 'completed')
         .map((p: any) => ({
           id: p.id, plan_no: p.plan_no, article: p.article || '', color: p.color || '',
           planned_qty: Number(p.planned_qty) || 0, product_id: p.product_id || null, uom: p.uom || '',
@@ -543,6 +543,16 @@ export default function MaterialIssueToBatchDetail() {
   useEffect(() => {
     const validItems = items.filter((item) => item.material_id && item.issue_qty);
     if (loading || saving || isPosted || !issue.warehouse_id || !issue.issue_date || !validItems.length) return;
+
+    // Do NOT persist anything to the server while any line exceeds available
+    // stock. Otherwise an out-of-stock entry would silently land in the DB as a
+    // Draft even though Post is rejected. The browser-local draft still keeps
+    // the user's input safe until the quantities are valid.
+    const hasStockError = validItems.some((item) => item.stock_error);
+    if (hasStockError) {
+      setDraftStatus('Not saved — insufficient stock. Fix quantities to save.');
+      return;
+    }
 
     const timer = window.setTimeout(async () => {
       if (automaticSaveInFlight.current) return;

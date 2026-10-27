@@ -26,7 +26,6 @@ export default function StockLedgerReport({ embedded }: { embedded?: boolean }) 
 
   const columns: Column<Row>[] = [
     { key: 'transaction_date', header: 'Txn Date', render: r => fmtDate(r.transaction_date) },
-    { key: 'transaction_type', header: 'Type', render: r => <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700">{r.transaction_type}</span> },
     { key: 'reference_no', header: 'Ref No', render: r => <span className="font-mono text-blue-700">{r.reference_no || '—'}</span> },
     { key: 'material_code', header: 'Item Code', render: r => <span className="font-mono">{r.material_code || '—'}</span> },
     { key: 'material_name', header: 'Item', render: r => <span className="font-medium text-gray-900">{r.material_name}</span> },
@@ -60,7 +59,7 @@ export default function StockLedgerReport({ embedded }: { embedded?: boolean }) 
       }
       footer={(rows, totals) => totals && (
         <tr>
-          <td className="px-4 py-3 text-sm" colSpan={6}>Total</td>
+          <td className="px-4 py-3 text-sm" colSpan={5}>Total</td>
           <td className="px-4 py-3 text-sm text-right">{fmtQty(totals.total_opening || 0)}</td>
           <td className="px-4 py-3 text-sm text-right text-emerald-700">{fmtQty(totals.total_receipt || 0)}</td>
           <td className="px-4 py-3 text-sm text-right text-red-600">{fmtQty(totals.total_issue || 0)}</td>

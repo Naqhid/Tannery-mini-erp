@@ -22,6 +22,7 @@ export async function getAll({ search, status, customer_id, page = 1, limit = 10
        so.customer_po_no, so.order_type, so.payment_terms, so.currency,
        so.sales_person, so.status, so.sub_total, so.discount, so.freight,
        so.tax_percent, so.tax_amount, so.grand_total, so.created_at,
+       so.shipped_qty, so.shipped_date,
        c.name AS customer_name, c.code AS customer_code,
        COALESCE((SELECT SUM(soi.quantity) FROM sales_order_items soi WHERE soi.sales_order_id = so.id), 0) AS total_quantity
      FROM sales_orders so
@@ -38,7 +39,19 @@ export async function getAll({ search, status, customer_id, page = 1, limit = 10
 
 export async function getById(id) {
   const [[order]] = await pool.query(
-    `SELECT so.*, c.name AS customer_name, c.code AS customer_code
+    `SELECT so.*, c.name AS customer_name, c.code AS customer_code,
+       -- Cumulative Packing-stage production output across all plans linked to
+       -- this sales order. Used to prefill the (editable) Shipped Qty.
+       COALESCE((
+         SELECT SUM(t.output_qty)
+         FROM production_plans pp
+         JOIN production_status_orders pso
+           ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+          AND pso.process_stage COLLATE utf8mb4_unicode_ci = 'Packing' COLLATE utf8mb4_unicode_ci
+         JOIN production_status_transactions t
+           ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+         WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+       ), 0) AS packing_output_qty
      FROM sales_orders so
      LEFT JOIN customers c ON so.customer_id = c.id
      WHERE so.id = ?`,
@@ -144,16 +157,19 @@ export async function create(data, items = [], createdBy = null) {
       `INSERT INTO sales_orders (
         order_no, customer_id, order_date, delivery_date, customer_po_no, order_type,
         contact_person, delivery_address, payment_terms, currency, price_list,
-        sales_person, status, terms_conditions, discount, freight,
+        sales_person, status, shipped_qty, shipped_date, terms_conditions, discount, freight,
         tax_percent, sub_total, tax_amount, cgst_amount, sgst_amount, igst_amount, tax_type,
         grand_total, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         order_no, data.customer_id, data.order_date, data.delivery_date || null,
         data.customer_po_no || null, data.order_type || 'Standard',
         data.contact_person || null, data.delivery_address || null,
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
-        data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
+        data.sales_person || null, data.status || 'Draft',
+        data.shipped_qty != null && data.shipped_qty !== '' ? data.shipped_qty : null,
+        data.shipped_date || null,
+        data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
         subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
         grandTotal, data.remarks || null, createdBy,
@@ -166,12 +182,15 @@ export async function create(data, items = [], createdBy = null) {
         `INSERT INTO sales_order_items (
           sales_order_id, item_code, item_description, product_id,
           leather_type, finish_color, thickness, uom, quantity,
+          shipped_qty, shipped_date,
           delivery_date, unit_price, discount_percent, amount
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           orderId, item.item_code || null, item.item_description || null, item.product_id || null,
           item.leather_type || null, item.finish_color || null, item.thickness || null,
           item.uom || null, item.quantity || 0,
+          item.shipped_qty != null && item.shipped_qty !== '' ? item.shipped_qty : null,
+          item.shipped_date || null,
           item.delivery_date || null,
           item.unit_price || 0, item.discount_percent || 0, item.amount || 0,
         ]
@@ -201,7 +220,7 @@ export async function update(id, data, items = [], updatedBy = null) {
       `UPDATE sales_orders SET
         customer_id=?, order_date=?, delivery_date=?, customer_po_no=?, order_type=?,
         contact_person=?, delivery_address=?, payment_terms=?, currency=?, price_list=?,
-        sales_person=?, status=?, terms_conditions=?, discount=?, freight=?,
+        sales_person=?, status=?, shipped_qty=?, shipped_date=?, terms_conditions=?, discount=?, freight=?,
         tax_percent=?, sub_total=?, tax_amount=?, cgst_amount=?, sgst_amount=?, igst_amount=?, tax_type=?,
         grand_total=?, remarks=?, updated_by=?
        WHERE id=?`,
@@ -210,7 +229,10 @@ export async function update(id, data, items = [], updatedBy = null) {
         data.customer_po_no || null, data.order_type || 'Standard',
         data.contact_person || null, data.delivery_address || null,
         data.payment_terms || null, data.currency || 'INR', data.price_list || null,
-        data.sales_person || null, data.status || 'Draft', data.terms_conditions || null,
+        data.sales_person || null, data.status || 'Draft',
+        data.shipped_qty != null && data.shipped_qty !== '' ? data.shipped_qty : null,
+        data.shipped_date || null,
+        data.terms_conditions || null,
         data.discount || 0, data.freight || 0, data.tax_percent || 18,
         subTotal, taxAmount, gst.cgst_amount, gst.sgst_amount, gst.igst_amount, gst.tax_type,
         grandTotal, data.remarks || null, updatedBy, id,
@@ -223,12 +245,15 @@ export async function update(id, data, items = [], updatedBy = null) {
         `INSERT INTO sales_order_items (
           sales_order_id, item_code, item_description, product_id,
           leather_type, finish_color, thickness, uom, quantity,
+          shipped_qty, shipped_date,
           delivery_date, unit_price, discount_percent, amount
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id, item.item_code || null, item.item_description || null, item.product_id || null,
           item.leather_type || null, item.finish_color || null, item.thickness || null,
           item.uom || null, item.quantity || 0,
+          item.shipped_qty != null && item.shipped_qty !== '' ? item.shipped_qty : null,
+          item.shipped_date || null,
           item.delivery_date || null,
           item.unit_price || 0, item.discount_percent || 0, item.amount || 0,
         ]
@@ -296,14 +321,28 @@ export async function recalcStatusFromProduction(orderId) {
   if (LOCKED.includes(order.status)) return;
 
   // Auto-managed lifecycle covers only Draft → Confirmed → Processing,
-  // driven purely by linked production plans.
+  // driven purely by linked production plans. Output is the cumulative Daily
+  // Production (production_status_transactions) of each plan's measurement
+  // stage — the same live source the stats and production module use — rather
+  // than the stored (often stale) production_plans.output_qty column.
   const [[plan]] = await pool.query(
     `SELECT
-       COUNT(*) AS plan_count,
-       COALESCE(SUM(output_qty), 0) AS total_output
-     FROM production_plans
-     WHERE sales_order_id = ? AND deleted_at IS NULL`,
-    [orderId]
+       (SELECT COUNT(*) FROM production_plans pp
+         WHERE pp.sales_order_id = ? AND pp.deleted_at IS NULL) AS plan_count,
+       COALESCE((
+         SELECT SUM(t.output_qty)
+         FROM production_plans pp
+         JOIN production_status_orders pso
+           ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+          AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+            SELECT s2.stage_name FROM production_plan_stages s2
+            WHERE s2.plan_id = pp.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+          )
+         JOIN production_status_transactions t
+           ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+         WHERE pp.sales_order_id = ? AND pp.deleted_at IS NULL
+       ), 0) AS total_output`,
+    [orderId, orderId]
   );
 
   let status = order.status || 'Draft';
@@ -334,16 +373,51 @@ export async function resyncAllStatuses() {
 }
 
 export async function getStats() {
+  // Processing is NOT read from the stored status column (which can lag behind
+  // actual production). Instead it's derived live: a non-terminal sales order
+  // is "Processing" when any of its linked production plans has real output,
+  // where output = cumulative Daily Production (production_status_transactions)
+  // of the plan's measurement stage (last stage by sequence). This matches the
+  // output logic used across the production module and fixes the count that
+  // previously always showed 0.
+  //
+  // Confirmed = non-terminal orders that have a linked plan but no output yet.
+  // Draft     = non-terminal orders with no linked plan.
+  const PLAN_OUTPUT_SQL = `
+    COALESCE((
+      SELECT SUM(t.output_qty)
+      FROM production_plans pp
+      JOIN production_status_orders pso
+        ON pso.production_plan_id = pp.id AND pso.deleted_at IS NULL
+       AND pso.process_stage COLLATE utf8mb4_unicode_ci = (
+         SELECT s2.stage_name FROM production_plan_stages s2
+         WHERE s2.plan_id = pp.id ORDER BY s2.seq DESC, s2.id DESC LIMIT 1
+       )
+      JOIN production_status_transactions t
+        ON t.production_status_order_id = pso.id AND t.deleted_at IS NULL
+      WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL
+    ), 0)`;
+
+  const PLAN_COUNT_SQL = `
+    (SELECT COUNT(*) FROM production_plans pp
+      WHERE pp.sales_order_id = so.id AND pp.deleted_at IS NULL)`;
+
   const [[data]] = await pool.query(
     `SELECT COUNT(*) AS total,
-       SUM(status='Draft') AS draft,
-       SUM(status='Confirmed') AS confirmed,
-       SUM(status='Processing') AS processing,
-       SUM(status='Shipped') AS shipped,
-       SUM(status='Delivered') AS delivered,
-       SUM(status='Cancelled') AS cancelled,
-       SUM(grand_total) AS total_value
-     FROM sales_orders`
+       -- Terminal / user-controlled statuses still come straight from the
+       -- stored status column.
+       SUM(so.status='Shipped') AS shipped,
+       SUM(so.status='Delivered') AS delivered,
+       SUM(so.status='Cancelled') AS cancelled,
+       -- Live, production-driven lifecycle for non-terminal orders.
+       SUM(CASE WHEN so.status NOT IN ('Shipped','Delivered','Cancelled')
+                 AND ${PLAN_COUNT_SQL} = 0 THEN 1 ELSE 0 END) AS draft,
+       SUM(CASE WHEN so.status NOT IN ('Shipped','Delivered','Cancelled')
+                 AND ${PLAN_COUNT_SQL} > 0 AND ${PLAN_OUTPUT_SQL} <= 0 THEN 1 ELSE 0 END) AS confirmed,
+       SUM(CASE WHEN so.status NOT IN ('Shipped','Delivered','Cancelled')
+                 AND ${PLAN_COUNT_SQL} > 0 AND ${PLAN_OUTPUT_SQL} > 0 THEN 1 ELSE 0 END) AS processing,
+       SUM(so.grand_total) AS total_value
+     FROM sales_orders so`
   );
   return data;
 }
