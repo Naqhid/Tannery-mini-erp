@@ -188,7 +188,7 @@ export default function Select({
             )}
             {addNewPath && (
               <a
-                href={addNewPath}
+                href={`${import.meta.env.BASE_URL}${addNewPath.replace(/^\/+/, '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}

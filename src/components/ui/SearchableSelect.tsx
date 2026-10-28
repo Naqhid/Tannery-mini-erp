@@ -195,7 +195,7 @@ const SearchableSelect = forwardRef<HTMLButtonElement, SearchableSelectProps>(fu
               in-progress form isn't lost. */}
           {addNewPath && (
             <a
-              href={addNewPath}
+              href={`${import.meta.env.BASE_URL}${addNewPath.replace(/^\/+/, '')}`}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
