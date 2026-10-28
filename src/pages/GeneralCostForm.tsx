@@ -13,10 +13,10 @@ interface CostItem {
   cost_category_id: number;
   group_name: string;
   uom: string;
-  total_qty: number;      // user-entered quantity
-  cost_per_uom: number;   // fetched from cost component master (rate)
-  amount: number;         // total_qty * cost_per_uom
-  cost_per_piece: number; // amount / output qty
+  total_qty: number;      // retained for compatibility with existing records
+  cost_per_uom: number;   // standard rate from cost component master
+  amount: number;         // user-entered total cost
+  cost_per_piece: number; // actual cost per UOM: amount / output qty
   remarks: string;
 }
 
@@ -221,14 +221,17 @@ export default function GeneralCostForm() {
     setFormData(prev => {
       let changed = false;
       const items = prev.items.map(item => {
-        if (item.cost_category_id) return item; // already resolved
-        const match = costComponents.find(c => c.name === item.cost_category);
+        const match = costComponents.find(c => c.id === item.cost_category_id || c.name === item.cost_category);
         if (match) {
-          changed = true;
-          const cost_per_uom = item.cost_per_uom || match.rate || 0;
-          // Derive total_qty from a previously saved amount when we can.
-          const total_qty = item.total_qty || (cost_per_uom > 0 ? Number(((Number(item.amount) || 0) / cost_per_uom).toFixed(3)) : 0);
-          return { ...item, cost_category_id: match.id, group_name: item.group_name || match.group_name || '', cost_per_uom, total_qty };
+          const next = {
+            ...item,
+            cost_category_id: match.id,
+            group_name: item.group_name || match.group_name || '',
+            uom: match.primary_uom_name || match.uom || item.uom,
+            cost_per_uom: match.rate || 0,
+          };
+          if (next.cost_category_id !== item.cost_category_id || next.group_name !== item.group_name || next.uom !== item.uom || next.cost_per_uom !== item.cost_per_uom) changed = true;
+          return next;
         }
         return item;
       });
@@ -258,37 +261,43 @@ export default function GeneralCostForm() {
       .catch(() => {});
   }, [formData.production_plan_id]);
 
-  // When output qty changes, recompute cost/piece for every row (amount stays,
-  // but cost/piece = amount / output qty depends on the divisor).
+  // When output qty changes, recompute cost/piece for every row.
+  // Amount and total_qty stay the same, only cost_per_piece is recalculated.
   useEffect(() => {
     setFormData(prev => {
       if (!prev.items.length) return prev;
-      const divideBy = prev.output_qty || prev.planned_qty || 0;
+      const divideBy = Number(prev.output_qty) || 0;
       const items = prev.items.map(i => {
-        const amount = Number(((Number(i.total_qty) || 0) * (Number(i.cost_per_uom) || 0)).toFixed(2));
+        const amount = Number(i.amount || 0);
         const costPerPiece = divideBy > 0 ? Number((amount / divideBy).toFixed(2)) : 0;
-        return { ...i, amount, cost_per_piece: costPerPiece };
+        return { ...i, cost_per_piece: costPerPiece };
       });
       const totalAmount = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-      const totalCostPerPiece = items.reduce((s, i) => s + (Number(i.cost_per_piece) || 0), 0);
+      const totalCostPerPiece = divideBy > 0 ? Number((totalAmount / divideBy).toFixed(2)) : 0;
       return { ...prev, items, total_amount: totalAmount, total_cost_per_piece: totalCostPerPiece, cost_after_adjustments: totalCostPerPiece };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.output_qty]);
 
   const recalculate = useCallback((items: CostItem[]) => {
-    const totalAmount = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-    const totalCostPerPiece = items.reduce((sum, i) => sum + (Number(i.cost_per_piece) || 0), 0);
     setFormData(prev => ({
       ...prev,
-      items,
-      total_amount: totalAmount,
-      total_cost_per_piece: totalCostPerPiece,
-      cost_after_adjustments: totalCostPerPiece,
+      items: items.map(item => {
+        const outputQty = Number(prev.output_qty) || 0;
+        const amount = Number(item.amount) || 0;
+        return { ...item, amount, cost_per_piece: outputQty > 0 ? Number((amount / outputQty).toFixed(2)) : 0 };
+      }),
+      total_amount: items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
+      total_cost_per_piece: Number(prev.output_qty) > 0
+        ? Number((items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) / Number(prev.output_qty)).toFixed(2))
+        : 0,
+      cost_after_adjustments: Number(prev.output_qty) > 0
+        ? Number((items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) / Number(prev.output_qty)).toFixed(2))
+        : 0,
     }));
   }, []);
 
-  const focusGridField = (index: number, field: 'category' | 'quantity' | 'remarks') => {
+  const focusGridField = (index: number, field: 'category' | 'amount' | 'remarks') => {
     requestAnimationFrame(() => {
       const target = document.querySelector<HTMLElement>(`[data-grid-field="general-cost-${index}-${field}"]`);
       target?.focus({ preventScroll: true });
@@ -306,10 +315,10 @@ export default function GeneralCostForm() {
     recalculate(formData.items.filter((_, i) => i !== index));
   };
 
-  // Recompute a row's amount and cost/piece from total_qty, cost_per_uom and output.
+  // Total cost is entered directly; actual cost per UOM is derived from output.
   const recomputeRow = (item: CostItem): CostItem => {
-    const amount = Number(((Number(item.total_qty) || 0) * (Number(item.cost_per_uom) || 0)).toFixed(2));
-    const divideBy = formData.output_qty || formData.planned_qty || 0;
+    const amount = Number(item.amount) || 0;
+    const divideBy = Number(formData.output_qty) || 0;
     const costPerPiece = divideBy > 0 ? Number((amount / divideBy).toFixed(2)) : 0;
     return { ...item, amount, cost_per_piece: costPerPiece };
   };
@@ -327,28 +336,21 @@ export default function GeneralCostForm() {
         const uom = comp.primary_uom_name || comp.uom || 'Sq.Ft.';
         items[index].uom = uom;
         items[index].cost_per_uom = comp.rate || 0;
-        // If UOM is "Piece", pre-fill Total Quantity with Output Qty (still editable).
-        // For any other UOM, leave Total Quantity untouched.
-        if (uom.trim().toLowerCase() === 'piece') {
-          items[index].total_qty = Number(formData.output_qty) || 0;
-        }
       }
     }
 
-    // Amount = Total Qty * Cost/UOM ; Cost/Piece = Amount / Output Qty.
-    // Recompute whenever the inputs that feed the formula change.
-    if (field === 'cost_category_id' || field === 'total_qty' || field === 'cost_per_uom') {
+    if (field === 'cost_category_id' || field === 'amount') {
       items[index] = recomputeRow(items[index]);
     }
 
     recalculate(items);
-    if (field === 'cost_category_id' && value) focusGridField(index, 'quantity');
+    if (field === 'cost_category_id' && value) focusGridField(index, 'amount');
   };
 
-  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number, field: 'quantity' | 'remarks') => {
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number, field: 'amount' | 'remarks') => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    if (field === 'quantity') focusGridField(index, 'remarks');
+    if (field === 'amount') focusGridField(index, 'remarks');
     else addLine(true);
   };
 
@@ -376,12 +378,12 @@ export default function GeneralCostForm() {
       if (formData.process_stage && formData.process_stage !== 'All') params.set('process_stage', formData.process_stage);
       if (id && !isNew) params.set('exclude_id', String(id));
       const res = await api<{ data: { items: any[]; source_transaction_no: string } }>(`/general-costs/previous-cost?${params}`);
-      const divideBy = Number(formData.output_qty || formData.planned_qty) || 0;
+      const divideBy = Number(formData.output_qty) || 0;
       const imported: CostItem[] = (res.data.items || []).map((it: any) => {
         const matched = costComponents.find(c => c.name === it.cost_category);
         const totalQty = Number(it.total_qty) || 0;
         const costPerUom = Number(it.cost_per_uom) || (matched?.rate || 0);
-        const amount = Number((totalQty * costPerUom).toFixed(2));
+        const amount = Number(it.amount) || 0;
         return {
           cost_category: it.cost_category || '',
           cost_category_id: matched?.id || 0,
@@ -632,10 +634,9 @@ export default function GeneralCostForm() {
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-40">Group</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[200px]">Cost Category</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-24">UOM</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-28">Total Quantity</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-28">Cost / UOM (INR)</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-28">Amount (INR)</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-28">Cost / Piece (INR)</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-32">Total Cost (INR)</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-32">Cost / UOM Actual (INR)</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-32">Cost / UOM Std (INR)</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[180px]">Remarks</th>
                 {!isPosted && canWrite && <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-16">Action</th>}
               </tr>
@@ -643,7 +644,7 @@ export default function GeneralCostForm() {
             <tbody className="divide-y divide-gray-100">
               {formData.items.length === 0 ? (
                 <tr>
-                  <td colSpan={isPosted ? 9 : 10} className="px-4 py-12 text-center">
+                  <td colSpan={isPosted ? 8 : 9} className="px-4 py-12 text-center">
                     <div className="text-gray-400">
                       <Plus size={32} className="mx-auto mb-2 opacity-40" />
                       <p className="text-sm font-medium">No cost components added</p>
@@ -680,19 +681,18 @@ export default function GeneralCostForm() {
                       <span className="text-sm text-gray-700">{item.uom || '—'}</span>
                     </td>
                     <td className="px-4 py-3">
-                      {isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{item.total_qty || 0}</span> : (
-                        <input data-grid-field={`general-cost-${idx}-quantity`} type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} onKeyDown={e => handleGridKeyDown(e, idx, 'quantity')} placeholder="0.00"
-                          className="w-24 px-2 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
+                      {isPosted ? (
+                        <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span>
+                      ) : (
+                        <input data-grid-field={`general-cost-${idx}-amount`} type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} onKeyDown={e => handleGridKeyDown(e, idx, 'amount')} placeholder="0.00"
+                          className="w-28 px-2 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white tabular-nums" />
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm font-medium text-gray-700 block text-right tabular-nums">{formatCurrency(item.cost_per_uom)}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span>
-                    </td>
-                    <td className="px-4 py-3">
                       <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.cost_per_piece)}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm font-medium text-gray-700 block text-right tabular-nums">{formatCurrency(item.cost_per_uom)}</span>
                     </td>
                     <td className="px-4 py-3">
                       {isPosted ? <span className="text-sm text-gray-600">{item.remarks || '—'}</span> : (
@@ -764,30 +764,28 @@ export default function GeneralCostForm() {
                         <p className="text-sm text-gray-700">{item.uom || '—'}</p>
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Total Quantity</label>
-                        {isPosted ? <p className="text-sm font-semibold text-gray-900 tabular-nums">{item.total_qty || 0}</p> : (
-                          <input type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} placeholder="0.00"
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Total Cost (INR)</label>
+                        {isPosted ? (
+                          <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.amount)}</p>
+                        ) : (
+                          <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} placeholder="0.00"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg text-right bg-white tabular-nums" />
                         )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / UOM (INR)</label>
-                        <p className="text-sm font-medium text-gray-700 tabular-nums">{formatCurrency(item.cost_per_uom)}</p>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / UOM Actual (INR)</label>
+                        <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.cost_per_piece)}</p>
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Amount (INR)</label>
-                        <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.amount)}</p>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / UOM Std (INR)</label>
+                        <p className="text-sm font-medium text-gray-700 tabular-nums">{formatCurrency(item.cost_per_uom)}</p>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / Piece (INR)</label>
-                        <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.cost_per_piece)}</p>
-                      </div>
                       <div>
                         <label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Remarks</label>
                         {isPosted ? <p className="text-sm text-gray-600">{item.remarks || '—'}</p> : (
@@ -813,7 +811,7 @@ export default function GeneralCostForm() {
                 <p className="text-base md:text-xl font-bold text-gray-900 tabular-nums">{formatCurrency(formData.total_amount)}</p>
               </div>
               <div className="bg-white border border-gray-200 rounded-lg p-3">
-                <p className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Cost / Piece (INR)</p>
+                <p className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Cost / UOM Actual (INR)</p>
                 <p className="text-base md:text-xl font-bold text-gray-900 tabular-nums">{formatCurrency(formData.total_cost_per_piece)}</p>
               </div>
               <div className="bg-white border border-gray-200 rounded-lg p-3">
