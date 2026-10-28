@@ -149,13 +149,18 @@ export default function MachineCostForm() {
     setFormData(prev => {
       let changed = false;
       const items = prev.items.map(item => {
-        if (item.machine_id) return item; // already resolved
-        const match = machines.find(m => m.name === item.machine_name);
+        const match = machines.find(m => m.id === item.machine_id || m.name === item.machine_name);
         if (match) {
-          changed = true;
-          const cost_per_uom = item.cost_per_uom || match.rate || 0;
-          const total_qty = item.total_qty || (cost_per_uom > 0 ? Number(((Number(item.amount) || 0) / cost_per_uom).toFixed(3)) : 0);
-          return { ...item, machine_id: match.id, group_id: item.group_id ?? match.group_id, group_name: item.group_name || match.group_name || '', cost_per_uom, total_qty };
+          const next = {
+            ...item,
+            machine_id: match.id,
+            group_id: item.group_id ?? match.group_id,
+            group_name: item.group_name || match.group_name || '',
+            uom: match.uom || item.uom,
+            cost_per_uom: match.rate || 0,
+          };
+          if (next.machine_id !== item.machine_id || next.group_id !== item.group_id || next.group_name !== item.group_name || next.uom !== item.uom || next.cost_per_uom !== item.cost_per_uom) changed = true;
+          return next;
         }
         return item;
       });
@@ -185,13 +190,13 @@ export default function MachineCostForm() {
       .catch(() => {});
   }, [formData.production_plan_id]);
 
-  // When output qty changes, recompute amount & cost/piece for every row.
+  // When output qty changes, recompute actual cost per UOM for every row.
   useEffect(() => {
     setFormData(prev => {
       if (!prev.items.length) return prev;
       const divideBy = prev.output_qty || 0;
       const items = prev.items.map(i => {
-        const amount = Number(((Number(i.total_qty) || 0) * (Number(i.cost_per_uom) || 0)).toFixed(2));
+        const amount = Number(i.amount) || 0;
         const costPerPiece = divideBy > 0 ? Number((amount / divideBy).toFixed(2)) : 0;
         return { ...i, amount, cost_per_piece: costPerPiece };
       });
@@ -203,13 +208,23 @@ export default function MachineCostForm() {
   }, [formData.output_qty]);
 
   const recalculate = useCallback((items: CostItem[]) => {
-    const totalAmount = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-    const outputQty = formData.output_qty || 1;
-    const totalCostPerPiece = outputQty > 0 ? Number((totalAmount / outputQty).toFixed(2)) : 0;
-    setFormData(prev => ({ ...prev, items, total_amount: totalAmount, total_cost_per_piece: totalCostPerPiece }));
-  }, [formData.output_qty]);
+    setFormData(prev => {
+      const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const outputQty = Number(prev.output_qty) || 0;
+      const totalCostPerPiece = outputQty > 0 ? Number((totalAmount / outputQty).toFixed(2)) : 0;
+      return {
+        ...prev,
+        items: items.map(item => {
+          const amount = Number(item.amount) || 0;
+          return { ...item, amount, cost_per_piece: outputQty > 0 ? Number((amount / outputQty).toFixed(2)) : 0 };
+        }),
+        total_amount: totalAmount,
+        total_cost_per_piece: totalCostPerPiece,
+      };
+    });
+  }, []);
 
-  const focusGridField = (index: number, field: 'machine' | 'quantity' | 'remarks') => {
+  const focusGridField = (index: number, field: 'machine' | 'amount' | 'remarks') => {
     requestAnimationFrame(() => {
       const target = document.querySelector<HTMLElement>(`[data-grid-field="machine-cost-${index}-${field}"]`);
       target?.focus({ preventScroll: true });
@@ -218,17 +233,14 @@ export default function MachineCostForm() {
   };
 
   const addLine = (focusNewLine = false) => {
-    // A new line defaults its Total Quantity to the order's Output Qty; the user
-    // can still change it afterwards.
-    const defaultQty = Number(formData.output_qty) || 0;
-    recalculate([...formData.items, { machine_name: '', machine_id: 0, group_id: null, group_name: '', uom: '', total_qty: defaultQty, cost_per_uom: 0, amount: 0, cost_per_piece: 0, remarks: '' }]);
+    recalculate([...formData.items, { machine_name: '', machine_id: 0, group_id: null, group_name: '', uom: '', total_qty: 0, cost_per_uom: 0, amount: 0, cost_per_piece: 0, remarks: '' }]);
     if (focusNewLine) setFocusedNewLine(formData.items.length);
   };
   const removeLine = (index: number) => recalculate(formData.items.filter((_, i) => i !== index));
 
-  // Recompute a row's amount and cost/piece from total_qty, cost_per_uom and output.
+  // Total cost is entered directly; actual cost per UOM is derived from output.
   const recomputeRow = (item: CostItem): CostItem => {
-    const amount = Number(((Number(item.total_qty) || 0) * (Number(item.cost_per_uom) || 0)).toFixed(2));
+    const amount = Number(item.amount) || 0;
     const divideBy = formData.output_qty || 0;
     const costPerPiece = divideBy > 0 ? Number((amount / divideBy).toFixed(2)) : 0;
     return { ...item, amount, cost_per_piece: costPerPiece };
@@ -247,24 +259,21 @@ export default function MachineCostForm() {
         items[index].group_name = machine.group_name || '';
         items[index].uom = machine.uom || '';
         items[index].cost_per_uom = machine.rate || 0;
-        // Total Quantity already defaults to Output Qty when the line is added,
-        // so selecting a machine keeps whatever quantity is currently entered.
       }
     }
 
-    // Amount = Total Qty * Cost/UOM ; Cost/Piece = Amount / Output Qty.
-    if (field === 'machine_id' || field === 'total_qty' || field === 'cost_per_uom') {
+    if (field === 'machine_id' || field === 'amount') {
       items[index] = recomputeRow(items[index]);
     }
 
     recalculate(items);
-    if (field === 'machine_id' && value) focusGridField(index, 'quantity');
+    if (field === 'machine_id' && value) focusGridField(index, 'amount');
   };
 
-  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number, field: 'quantity' | 'remarks') => {
+  const handleGridKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number, field: 'amount' | 'remarks') => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    if (field === 'quantity') focusGridField(index, 'remarks');
+    if (field === 'amount') focusGridField(index, 'remarks');
     else addLine(true);
   };
 
@@ -297,7 +306,7 @@ export default function MachineCostForm() {
         const matched = machines.find(m => m.name === it.machine_name);
         const totalQty = Number(it.total_qty) || 0;
         const costPerUom = Number(it.cost_per_uom) || (matched?.rate || 0);
-        const amount = Number((totalQty * costPerUom).toFixed(2));
+        const amount = Number(it.amount) || 0;
         return {
           machine_name: it.machine_name || '',
           machine_id: matched?.id || 0,
@@ -413,26 +422,24 @@ export default function MachineCostForm() {
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase min-w-[180px]">Group</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase min-w-[200px]">Machine Name</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase w-32">UOM</th>
-              <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-28">Total Quantity</th>
-              <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-28">Cost / UOM (INR)</th>
-              <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-40">Amount (INR)</th>
-              <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-44">Machine Cost (Per Pc) (INR)</th>
+              <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-32">Total Cost (INR)</th>
+              <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-36">Cost / UOM Actual (INR)</th>
+              <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase w-36">Cost / UOM Std (INR)</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase min-w-[180px]">Remarks</th>
               {!isPosted && canWrite && <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase w-16">Action</th>}
             </tr></thead>
             <tbody className="divide-y divide-gray-100">
               {formData.items.length === 0 ? (
-                <tr><td colSpan={isPosted ? 9 : 10} className="px-4 py-12 text-center"><div className="text-gray-400"><Plus size={32} className="mx-auto mb-2 opacity-40" /><p className="text-sm font-medium">No machines added</p><p className="text-xs mt-0.5">Click "+ Add Line" to start.</p></div></td></tr>
+                <tr><td colSpan={isPosted ? 8 : 9} className="px-4 py-12 text-center"><div className="text-gray-400"><Plus size={32} className="mx-auto mb-2 opacity-40" /><p className="text-sm font-medium">No machines added</p><p className="text-xs mt-0.5">Click "+ Add Line" to start.</p></div></td></tr>
               ) : formData.items.map((item, idx) => (
                 <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/30 focus-within:bg-blue-50/60`}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-400">{idx + 1}</td>
                   <td className="px-4 py-3"><span className="text-sm text-gray-700">{item.group_name || '—'}</span></td>
                   <td className="px-4 py-3">{isPosted ? <span className="text-sm font-medium text-gray-900">{item.machine_name}</span> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} addNewPath="/cost-components/new" addNewLabel="Add Cost Component" onRefresh={loadMachines} autoFocus={focusedNewLine === idx} dataGridField={`machine-cost-${idx}-machine`} />}</td>
                   <td className="px-4 py-3"><span className="text-sm text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100 inline-block">{item.uom || '—'}</span></td>
-                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{item.total_qty || 0}</span> : <input data-grid-field={`machine-cost-${idx}-quantity`} type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} onKeyDown={e => handleGridKeyDown(e, idx, 'quantity')} placeholder="0.00" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />}</td>
-                  <td className="px-4 py-3"><span className="text-sm font-medium text-gray-700 block text-right tabular-nums">{formatCurrency(item.cost_per_uom)}</span></td>
-                  <td className="px-4 py-3"><span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span></td>
+                  <td className="px-4 py-3">{isPosted ? <span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.amount)}</span> : <input data-grid-field={`machine-cost-${idx}-amount`} type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} onKeyDown={e => handleGridKeyDown(e, idx, 'amount')} placeholder="0.00" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white tabular-nums" />}</td>
                   <td className="px-4 py-3"><span className="text-sm font-semibold text-gray-900 block text-right tabular-nums">{formatCurrency(item.cost_per_piece)}</span></td>
+                  <td className="px-4 py-3"><span className="text-sm font-medium text-gray-700 block text-right tabular-nums">{formatCurrency(item.cost_per_uom)}</span></td>
                   <td className="px-4 py-3">{isPosted ? <span className="text-sm text-gray-600">{item.remarks || '—'}</span> : <input data-grid-field={`machine-cost-${idx}-remarks`} type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} onKeyDown={e => handleGridKeyDown(e, idx, 'remarks')} placeholder="Optional" className="w-full px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" />}</td>
                   {!isPosted && canWrite && <td className="px-4 py-3 text-center"><button onClick={() => removeLine(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button></td>}
                 </tr>
@@ -458,14 +465,13 @@ export default function MachineCostForm() {
                     <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Machine Name</label>{isPosted ? <p className="text-sm font-medium text-gray-900">{item.machine_name}</p> : <SearchableSelect options={[{ value: '', label: 'Select Machine' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))]} value={item.machine_id ? String(item.machine_id) : ''} onChange={val => updateLine(idx, 'machine_id', Number(val))} placeholder="Search machine..." disabled={outputZero} addNewPath="/cost-components/new" addNewLabel="Add Cost Component" onRefresh={loadMachines} />}</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">UOM</label><p className="text-sm text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100">{item.uom || '—'}</p></div>
-                      <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Total Quantity</label>{isPosted ? <p className="text-sm font-semibold text-gray-900 tabular-nums">{item.total_qty || 0}</p> : <input type="number" step="0.001" value={item.total_qty || ''} onChange={e => updateLine(idx, 'total_qty', Number(e.target.value))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg text-right bg-white tabular-nums" />}</div>
+                      <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Total Cost (INR)</label>{isPosted ? <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.amount)}</p> : <input type="number" step="0.01" value={item.amount || ''} onChange={e => updateLine(idx, 'amount', Number(e.target.value))} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg text-right bg-white tabular-nums" />}</div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / UOM (INR)</label><p className="text-sm font-medium text-gray-700 tabular-nums">{formatCurrency(item.cost_per_uom)}</p></div>
-                      <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Amount (INR)</label><p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.amount)}</p></div>
+                      <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / UOM Actual (INR)</label><p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.cost_per_piece)}</p></div>
+                      <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost / UOM Std (INR)</label><p className="text-sm font-medium text-gray-700 tabular-nums">{formatCurrency(item.cost_per_uom)}</p></div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Cost/Pc (INR)</label><p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(item.cost_per_piece)}</p></div>
                       <div><label className="text-[10px] font-semibold text-gray-400 uppercase block mb-1">Remarks</label>{isPosted ? <p className="text-sm text-gray-600">{item.remarks || '—'}</p> : <input type="text" value={item.remarks} onChange={e => updateLine(idx, 'remarks', e.target.value)} placeholder="Optional" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white" />}</div>
                     </div>
                   </div>
@@ -481,7 +487,7 @@ export default function MachineCostForm() {
             <h3 className="text-sm font-bold text-gray-900 mb-3 md:mb-4">Cost Summary</h3>
             <div className="grid grid-cols-2 gap-3 md:gap-4">
               <div className="bg-white border border-gray-200 rounded-lg p-3"><p className="text-[10px] md:text-[11px] font-semibold text-gray-400 uppercase mb-1">Total Amount (INR)</p><p className="text-base md:text-xl font-bold text-gray-900 tabular-nums">{formatCurrency(formData.total_amount)}</p></div>
-              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3"><p className="text-[10px] md:text-[11px] font-semibold text-emerald-600 uppercase mb-1">Total Machine Cost/Pc (INR)</p><p className="text-lg md:text-2xl font-bold text-emerald-700 tabular-nums">{formatCurrency(formData.total_cost_per_piece)}</p></div>
+              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3"><p className="text-[10px] md:text-[11px] font-semibold text-emerald-600 uppercase mb-1">Total Machine Cost / UOM Actual (INR)</p><p className="text-lg md:text-2xl font-bold text-emerald-700 tabular-nums">{formatCurrency(formData.total_cost_per_piece)}</p></div>
             </div>
           </div>
         )}

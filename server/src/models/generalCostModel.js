@@ -364,7 +364,8 @@ export async function create(data, userId = null) {
     const items = data.items || [];
     const orderQty = Number(data.order_qty) || 1;
     const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const totalCostPerPiece = items.reduce((sum, item) => sum + (Number(item.cost_per_piece) || 0), 0);
+    const outputQty = Number(data.production_qty) || 0;
+    const totalCostPerPiece = outputQty > 0 ? Number((totalAmount / outputQty).toFixed(2)) : 0;
 
     const [result] = await conn.query(
       `INSERT INTO general_cost_headers
@@ -393,7 +394,7 @@ export async function create(data, userId = null) {
       await conn.query(
         `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
          VALUES (?,?,?,?,?,?,?,?,?)`,
-        [headerId, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        [headerId, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, outputQty > 0 ? Number(((Number(item.amount) || 0) / outputQty).toFixed(2)) : 0, item.remarks || null, i + 1]
       );
     }
 
@@ -427,7 +428,8 @@ export async function update(id, data, userId = null) {
 
     const items = data.items || [];
     const totalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const totalCostPerPiece = items.reduce((sum, item) => sum + (Number(item.cost_per_piece) || 0), 0);
+    const outputQty = Number(data.production_qty) || 0;
+    const totalCostPerPiece = outputQty > 0 ? Number((totalAmount / outputQty).toFixed(2)) : 0;
 
     await conn.query(
       `UPDATE general_cost_headers SET
@@ -450,7 +452,7 @@ export async function update(id, data, userId = null) {
       await conn.query(
         `INSERT INTO general_cost_items (general_cost_id, cost_category, uom, total_qty, cost_per_uom, amount, cost_per_piece, remarks, sort_order)
          VALUES (?,?,?,?,?,?,?,?,?)`,
-        [id, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, item.cost_per_piece || 0, item.remarks || null, i + 1]
+        [id, item.cost_category, item.uom || 'Sq.Ft.', item.total_qty || 0, item.cost_per_uom || 0, item.amount || 0, outputQty > 0 ? Number(((Number(item.amount) || 0) / outputQty).toFixed(2)) : 0, item.remarks || null, i + 1]
       );
     }
 
