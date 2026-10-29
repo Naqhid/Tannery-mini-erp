@@ -230,7 +230,7 @@ export async function getLastExecution(req, res, next) {
  * For each material, get the last entry's balance_qty, balance_value, unit_cost
  * and update materials table: opening_stock, opening_stock_value, rate
  */
-async function updateMaterialMasterFromLedger(conn, to_date) {
+async function updateMaterialMasterFromLedger(conn, to_date, financialYear = null, userId = null) {
   // Get the last entry for each material from stock_ledger_archive as of to_date
   const [lastEntries] = await conn.query(
     `SELECT 
@@ -264,20 +264,26 @@ async function updateMaterialMasterFromLedger(conn, to_date) {
     const unitCost = _n(entry.unit_cost);
     const uom = entry.uom || 'KG';
     
-    // Update materials table
+    // Update materials table with closing balance info
     await conn.query(
       `UPDATE materials SET 
          opening_stock = ?,
          opening_stock_value = ?,
          rate = ?,
          opening_stock_uom = ?,
+         closing_balance_date = ?,
+         closing_balance_financial_year = ?,
+         closing_balance_updated_by = ?,
          updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [
-        Number(balanceQty.toFixed(2)),
+        Number(balanceQty.toFixed(3)),
         Number(balanceValue.toFixed(2)),
         Number(unitCost.toFixed(6)),
         uom,
+        to_date,
+        financialYear,
+        userId,
         materialId,
       ]
     );
@@ -781,7 +787,7 @@ export async function executeMonthlyBatchProcess(req, res, next) {
     results.step3 = step3Result;
     
     // Step 4: Update material master from stock ledger
-    const step4Result = await updateMaterialMasterFromLedger(conn, to_date);
+    const step4Result = await updateMaterialMasterFromLedger(conn, to_date, financialYear, userId);
     results.step4 = step4Result;
     
     // Step 5: Create opening stocks

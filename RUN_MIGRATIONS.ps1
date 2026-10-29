@@ -1,54 +1,160 @@
-# PowerShell script to run database migrations for Tannery Mini ERP
-# Run this from PowerShell (not cmd)
+<#
+.SYNOPSIS
+    Runs all Monthly Batch Process related database migrations.
+.DESCRIPTION
+    This script executes migrations 071-074 in order to set up the Monthly Batch Process.
+    Migrations include:
+    - 071: Comprehensive archive tables
+    - 072: Batch process config tracking
+    - 073: Sales order blocking
+    - 074: Materials closing balance date tracking
 
-$mysqlPath = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
-$dbUser = "root"
-$dbPass = "Shoe@123"
-$dbHost = "localhost"
-$dbPort = "3306"
-$dbName = "tannery_mini_erp"
+.NOTES
+    File Name      : run_migrations.ps1
+    Author         : Mistral Vibe
+    Prerequisite   : MySQL server running, MySQL client installed
+#>
 
-Write-Host "Running database migrations..." -ForegroundColor Cyan
+#Requires -RunAsAdministrator
 
-# Migration 007 - Main schema for all new tables
-Write-Host "Running migration 007..." -ForegroundColor Yellow
-& $mysqlPath -u $dbUser -p$dbPass -h $dbHost -P $dbPort $dbName < server\sql\migrations\007_new_modules_batch_pricing_stock.sql
+param (
+    [string]$DbUser = "root",
+    [string]$DbName,
+    [string]$DbPass
+)
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: Migration 007 failed!" -ForegroundColor Red
+# Check if MySQL is available
+try {
+    $mysqlVersion = mysql --version
+    Write-Host "MySQL Client Version: $mysqlVersion"
+} catch {
+    Write-Host "ERROR: MySQL client not found. Please install MySQL and ensure it's in your PATH." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "Migration 007 completed successfully!" -ForegroundColor Green
-
-# Migration 008 - Seed data (optional)
-Write-Host "Running migration 008 (seed data)..." -ForegroundColor Yellow
-& $mysqlPath -u $dbUser -p$dbPass -h $dbHost -P $dbPort $dbName < server\sql\migrations\008_seed_new_modules.sql
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "WARNING: Migration 008 failed!" -ForegroundColor Yellow
-    Write-Host "This is optional seed data, so the application may still work." -ForegroundColor Yellow
-} else {
-    Write-Host "Migration 008 completed successfully!" -ForegroundColor Green
+# Validate database name
+if ([string]::IsNullOrEmpty($DbName)) {
+    $DbName = Read-Host "Enter database name"
+    if ([string]::IsNullOrEmpty($DbName)) {
+        Write-Host "ERROR: Database name is required." -ForegroundColor Red
+        exit 1
+    }
 }
 
-Write-Host "" -ForegroundColor Cyan
-Write-Host "All database migrations completed!" -ForegroundColor Green
-Write-Host "" -ForegroundColor Cyan
-Write-Host "The following tables should now exist:" -ForegroundColor Cyan
-Write-Host "  - batches" -ForegroundColor White
-Write-Host "  - batch_line_items" -ForegroundColor White
-Write-Host "  - supplier_pricing (enhanced)" -ForegroundColor White
-Write-Host "  - price_breaks" -ForegroundColor White
-Write-Host "  - price_change_history" -ForegroundColor White
-Write-Host "  - supplier_pricing_attachments" -ForegroundColor White
-Write-Host "  - price_approval_requests" -ForegroundColor White
-Write-Host "  - price_approval_items" -ForegroundColor White
-Write-Host "  - price_approval_workflow" -ForegroundColor White
-Write-Host "  - physical_stock_entries" -ForegroundColor White
-Write-Host "  - physical_stock_entry_items" -ForegroundColor White
+# Validate password
+if ([string]::IsNullOrEmpty($DbPass)) {
+    $DbPass = Read-Host "Enter MySQL password for $DbUser" -AsSecureString
+    $DbPass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($DbPass)
+    )
+}
 
-Write-Host "Running migration 028 - material transactions and issue updates..." -ForegroundColor Yellow
-& $mysqlPath -u $dbUser -p$dbPass -h $dbHost -P $dbPort $dbName < server\sql\migrations\028_material_transactions_and_issue_updates.sql
-if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: Migration 028 failed!" -ForegroundColor Red; exit 1 }
-Write-Host "Migration 028 completed successfully!" -ForegroundColor Green
+# Migration files to run
+$migrations = @(
+    "071_comprehensive_archive_tables",
+    "072_batch_process_config",
+    "073_sales_order_blocking",
+    "074_materials_closing_balance_date"
+)
+
+$scriptPath = $PSScriptRoot
+$migrationsPath = Join-Path -Path $scriptPath -ChildPath "server\sql\migrations"
+
+Write-Host "Running Monthly Batch Process migrations..." -ForegroundColor Cyan
+Write-Host "Database: $DbName" -ForegroundColor Cyan
+Write-Host "User: $DbUser" -ForegroundColor Cyan
+Write-Host ""
+
+foreach ($migration in $migrations) {
+    $migrationFile = Join-Path -Path $migrationsPath -ChildPath "$migration.sql"
+    
+    if (-not (Test-Path -Path $migrationFile)) {
+        Write-Host "ERROR: Migration file not found: $migrationFile" -ForegroundColor Red
+        exit 1
+    }
+    
+    Write-Host "Running migration: $migration..." -ForegroundColor Yellow
+    
+    $mysqlArgs = @(
+        "-u", $DbUser,
+        "-p$DbPass",
+        $DbName
+    )
+    
+    try {
+        # Run the migration
+        $result = mysql $mysqlArgs < $migrationFile
+        Write-Host "Migration $migration completed successfully." -ForegroundColor Green
+        Write-Host ""
+    } catch {
+        Write-Host "ERROR: Migration $migration failed!" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
+        exit 1
+    }
+}
+
+Write-Host "============================================================================" -ForegroundColor Cyan
+Write-Host "ALL MIGRATIONS COMPLETED SUCCESSFULLY!" -ForegroundColor Green
+Write-Host "============================================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Verification
+Write-Host "Running verification checks..." -ForegroundColor Yellow
+Write-Host ""
+
+# Check archive tables
+Write-Host "1. Archive tables:" -ForegroundColor Cyan
+try {
+    $archiveTables = mysql $mysqlArgs -e "SHOW TABLES LIKE '%archive%'"
+    $archiveTables | ForEach-Object { Write-Host "   - $_" -ForegroundColor Green }
+} catch {
+    Write-Host "   No archive tables found" -ForegroundColor Yellow
+}
+
+Write-Host ""
+
+# Check materials table new columns
+Write-Host "2. Materials table - new columns:" -ForegroundColor Cyan
+try {
+    $columns = mysql $mysqlArgs -e "DESCRIBE materials" | Select-String "closing_balance"
+    if ($columns) {
+        $columns | ForEach-Object { Write-Host "   - $_" -ForegroundColor Green }
+    } else {
+        Write-Host "   No closing_balance columns found" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "   Error checking materials table: $_" -ForegroundColor Red
+}
+
+Write-Host ""
+
+# Check sales_orders blocking columns
+Write-Host "3. Sales Orders table - blocking columns:" -ForegroundColor Cyan
+try {
+    $columns = mysql $mysqlArgs -e "DESCRIBE sales_orders" | Select-String "is_blocked"
+    if ($columns) {
+        $columns | ForEach-Object { Write-Host "   - $_" -ForegroundColor Green }
+    } else {
+        Write-Host "   No blocking columns found" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "   Error checking sales_orders table: $_" -ForegroundColor Red
+}
+
+Write-Host ""
+
+# Check batch_process_config table
+Write-Host "4. Batch process config table:" -ForegroundColor Cyan
+try {
+    $tables = mysql $mysqlArgs -e "SHOW TABLES LIKE 'batch_process_config'"
+    if ($tables) {
+        $tables | ForEach-Object { Write-Host "   - $_" -ForegroundColor Green }
+    } else {
+        Write-Host "   batch_process_config table not found" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "   Error checking batch_process_config table: $_" -ForegroundColor Red
+}
+
+Write-Host ""
+Write-Host "Migration script completed." -ForegroundColor Green
