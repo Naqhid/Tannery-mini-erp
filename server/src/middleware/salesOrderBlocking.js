@@ -11,14 +11,14 @@
  *   router.post('/material-issues', salesOrderBlocking, createMaterialIssue);
  */
 
-const db = require('../config/database');
+import db from '../config/db.js';
 
 /**
  * Middleware to block transactions for shipped sale orders
  * Expects req.body to contain sales_order_id
  * If transaction references a sales order, checks if it's blocked
  */
-async function salesOrderBlocking(req, res, next) {
+export async function salesOrderBlocking(req, res, next) {
   try {
     // Skip if not creating a new record (e.g., GET, UPDATE on existing)
     if (req.method !== 'POST' && req.method !== 'PUT') {
@@ -121,7 +121,7 @@ async function salesOrderBlocking(req, res, next) {
  * Helper function to check if a sales order is blocked
  * Can be used in services/controllers directly
  */
-async function isSaleOrderBlocked(salesOrderId) {
+export async function isSaleOrderBlocked(salesOrderId) {
   try {
     if (!salesOrderId) return false;
     
@@ -148,7 +148,7 @@ async function isSaleOrderBlocked(salesOrderId) {
 /**
  * Get block reason for a sales order
  */
-async function getSaleOrderBlockReason(salesOrderId) {
+export async function getSaleOrderBlockReason(salesOrderId) {
   try {
     if (!salesOrderId) return null;
     
@@ -177,8 +177,3 @@ async function getSaleOrderBlockReason(salesOrderId) {
   }
 }
 
-module.exports = {
-  salesOrderBlocking,
-  isSaleOrderBlocked,
-  getSaleOrderBlockReason
-};

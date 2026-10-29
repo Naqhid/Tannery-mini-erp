@@ -18,7 +18,7 @@
  *   router.post('/production-plans', productionCompletionBlocking, createProductionPlan);
  */
 
-const db = require('../config/database');
+import db from '../config/db.js';
 
 /**
  * Check if a production plan is completed
@@ -26,7 +26,7 @@ const db = require('../config/database');
  * @param {number} productionPlanId - The production plan ID
  * @returns {Promise<{completed: boolean, message: string | null, plan?: object}>}
  */
-async function isProductionPlanCompleted(productionPlanId) {
+export async function isProductionPlanCompleted(productionPlanId) {
   try {
     if (!productionPlanId) return { completed: false, message: null };
     
@@ -117,7 +117,7 @@ async function isProductionPlanCompleted(productionPlanId) {
  * Middleware to block transactions for completed production plans
  * Checks if the request references a production plan that is completed
  */
-async function productionCompletionBlocking(req, res, next) {
+export async function productionCompletionBlocking(req, res, next) {
   try {
     // Skip for GET requests
     if (req.method === 'GET') {
@@ -212,7 +212,7 @@ async function productionCompletionBlocking(req, res, next) {
 /**
  * Check if a production plan is completed (standalone function)
  */
-async function checkProductionPlanCompletion(productionPlanId) {
+export async function checkProductionPlanCompletion(productionPlanId) {
   const result = await isProductionPlanCompleted(productionPlanId);
   return result.completed;
 }
@@ -220,7 +220,7 @@ async function checkProductionPlanCompletion(productionPlanId) {
 /**
  * Get completion info for a production plan
  */
-async function getProductionPlanCompletionInfo(productionPlanId) {
+export async function getProductionPlanCompletionInfo(productionPlanId) {
   const result = await isProductionPlanCompleted(productionPlanId);
   return {
     completed: result.completed,
@@ -229,9 +229,3 @@ async function getProductionPlanCompletionInfo(productionPlanId) {
   };
 }
 
-module.exports = {
-  productionCompletionBlocking,
-  isProductionPlanCompleted,
-  checkProductionPlanCompletion,
-  getProductionPlanCompletionInfo
-};

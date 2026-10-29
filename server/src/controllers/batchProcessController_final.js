@@ -968,10 +968,6 @@ async function createOpeningStocksInternal(conn, from_date, to_date, financialYe
 
 // Export all functions
 export {
-  getLastExecution,
-  getBatchProcessStatus,
-  executeMonthlyBatchProcess,
-  calculateAverageRates,
   archiveAllTransactions,
   archiveClosingBalance,
   updateMaterialMasterFromLedger,
