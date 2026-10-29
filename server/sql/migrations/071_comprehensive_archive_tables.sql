@@ -25,17 +25,18 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_ledger_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE stock_ledger_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Add archived_at - check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_ledger' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE stock_ledger_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE stock_ledger_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
+-- Add financial_year - check if archived_at exists
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_ledger_archive' AND COLUMN_NAME='financial_year');
 SET @sql := IF(@c=0,
-  "ALTER TABLE stock_ledger_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at",
+  'ALTER TABLE stock_ledger_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -47,17 +48,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_receipts_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE material_receipts_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_receipts' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE material_receipts_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE material_receipts_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_receipts_archive' AND COLUMN_NAME='financial_year');
 SET @sql := IF(@c=0,
-  "ALTER TABLE material_receipts_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at",
+  'ALTER TABLE material_receipts_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -69,17 +70,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_receipt_items_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE material_receipt_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_receipt_items' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE material_receipt_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE material_receipt_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_receipt_items_archive' AND COLUMN_NAME='original_id');
 SET @sql := IF(@c=0,
-  "ALTER TABLE material_receipt_items_archive ADD COLUMN original_id INT AFTER archived_at",
+  'ALTER TABLE material_receipt_items_archive ADD COLUMN original_id INT AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -91,17 +92,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_issues_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE material_issues_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_issues' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE material_issues_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE material_issues_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_issues_archive' AND COLUMN_NAME='financial_year');
 SET @sql := IF(@c=0,
-  "ALTER TABLE material_issues_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at",
+  'ALTER TABLE material_issues_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -113,17 +114,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_issue_items_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE material_issue_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_issue_items' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE material_issue_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE material_issue_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='material_issue_items_archive' AND COLUMN_NAME='original_id');
 SET @sql := IF(@c=0,
-  "ALTER TABLE material_issue_items_archive ADD COLUMN original_id INT AFTER archived_at",
+  'ALTER TABLE material_issue_items_archive ADD COLUMN original_id INT AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -135,17 +136,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_transfers_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE stock_transfers_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_transfers' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE stock_transfers_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE stock_transfers_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_transfers_archive' AND COLUMN_NAME='financial_year');
 SET @sql := IF(@c=0,
-  "ALTER TABLE stock_transfers_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at",
+  'ALTER TABLE stock_transfers_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -157,17 +158,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_transfer_items_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE stock_transfer_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_transfer_items' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE stock_transfer_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE stock_transfer_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='stock_transfer_items_archive' AND COLUMN_NAME='original_id');
 SET @sql := IF(@c=0,
-  "ALTER TABLE stock_transfer_items_archive ADD COLUMN original_id INT AFTER archived_at",
+  'ALTER TABLE stock_transfer_items_archive ADD COLUMN original_id INT AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -179,17 +180,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='outbound_deliveries_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE outbound_deliveries_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='outbound_deliveries' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE outbound_deliveries_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE outbound_deliveries_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='outbound_deliveries_archive' AND COLUMN_NAME='financial_year');
 SET @sql := IF(@c=0,
-  "ALTER TABLE outbound_deliveries_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at",
+  'ALTER TABLE outbound_deliveries_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -201,17 +202,17 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='outbound_delivery_items_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE outbound_delivery_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='outbound_delivery_items' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE outbound_delivery_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE outbound_delivery_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='outbound_delivery_items_archive' AND COLUMN_NAME='original_id');
 SET @sql := IF(@c=0,
-  "ALTER TABLE outbound_delivery_items_archive ADD COLUMN original_id INT AFTER archived_at",
+  'ALTER TABLE outbound_delivery_items_archive ADD COLUMN original_id INT AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -223,39 +224,39 @@ SET @sql := IF(@c=0,
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='physical_stock_entries_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE physical_stock_entries_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='physical_stock_entries' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE physical_stock_entries_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE physical_stock_entries_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='physical_stock_entries_archive' AND COLUMN_NAME='financial_year');
 SET @sql := IF(@c=0,
-  "ALTER TABLE physical_stock_entries_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at",
+  'ALTER TABLE physical_stock_entries_archive ADD COLUMN financial_year VARCHAR(20) AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- 6b. physical_stock_items_archive
+-- 6b. physical_stock_items_archive (note: actual table is physical_stock_entry_items)
 SET @c := (SELECT COUNT(*) FROM information_schema.TABLES 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='physical_stock_items_archive');
 SET @sql := IF(@c=0,
-  'CREATE TABLE physical_stock_items_archive LIKE physical_stock_items',
+  'CREATE TABLE physical_stock_items_archive LIKE physical_stock_entry_items',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
-  WHERE TABLE_SCHEMA=@db AND TABLE_NAME='physical_stock_items_archive' AND COLUMN_NAME='archived_at');
-SET @sql := IF(@c=0,
-  "ALTER TABLE physical_stock_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at",
-  'SELECT 1');
+-- Check if updated_at exists in source table
+SET @has_updated_at := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='physical_stock_entry_items' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@has_updated_at>0,
+  'ALTER TABLE physical_stock_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updated_at',
+  'ALTER TABLE physical_stock_items_archive ADD COLUMN archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @c := (SELECT COUNT(*) FROM information_schema.COLUMNS 
   WHERE TABLE_SCHEMA=@db AND TABLE_NAME='physical_stock_items_archive' AND COLUMN_NAME='original_id');
 SET @sql := IF(@c=0,
-  "ALTER TABLE physical_stock_items_archive ADD COLUMN original_id INT AFTER archived_at",
+  'ALTER TABLE physical_stock_items_archive ADD COLUMN original_id INT AFTER archived_at',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
