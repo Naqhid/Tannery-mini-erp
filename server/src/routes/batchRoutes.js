@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireWriteAccess } from '../middleware/auth.js';
+import { salesOrderBlocking } from '../middleware/salesOrderBlocking.js';
 import * as batchController from '../controllers/batchController.js';
 
 const router = Router();
@@ -26,10 +27,10 @@ router.get('/summary/:batchId', batchController.getBatchSummary);
 router.get('/barcode/:barcode', batchController.getBatchByBarcode);
 
 // POST /api/batches - Create new batch
-router.post('/', batchController.create);
+router.post('/', requireWriteAccess, salesOrderBlocking, batchController.create);
 
 // PUT /api/batches/:id - Update batch
-router.put('/:id', batchController.update);
+router.put('/:id', requireWriteAccess, salesOrderBlocking, batchController.update);
 
 // DELETE /api/batches/:id - Soft delete batch
 router.delete('/:id', batchController.softDelete);

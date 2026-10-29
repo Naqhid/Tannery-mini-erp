@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as ctrl from '../controllers/salesOrderController.js';
 import { validateId } from '../middleware/validators.js';
 import { requireWriteAccess } from '../middleware/auth.js';
+import { salesOrderBlocking } from '../middleware/salesOrderBlocking.js';
 
 const router = Router();
 
@@ -16,18 +17,18 @@ router.delete('/:id', validateId, requireWriteAccess, ctrl.remove);
 
 // Delivery notes
 router.get('/:id/delivery', validateId, ctrl.getDelivery);
-router.post('/:id/delivery', validateId, ctrl.createDelivery);
+router.post('/:id/delivery', validateId, requireWriteAccess, salesOrderBlocking, ctrl.createDelivery);
 router.put('/:id/delivery/:dnId', validateId, ctrl.updateDelivery);
 router.delete('/:id/delivery/:dnId', validateId, ctrl.deleteDelivery);
 
 // Payment receipts
 router.get('/:id/payments', validateId, ctrl.getPayments);
-router.post('/:id/payments', validateId, ctrl.createReceipt);
+router.post('/:id/payments', validateId, requireWriteAccess, salesOrderBlocking, ctrl.createReceipt);
 router.put('/:id/payments/:receiptId', validateId, ctrl.updateReceipt);
 router.delete('/:id/payments/:receiptId', validateId, ctrl.deleteReceipt);
 
 // Invoices
-router.post('/:id/invoices', validateId, ctrl.createInvoice);
+router.post('/:id/invoices', validateId, requireWriteAccess, salesOrderBlocking, ctrl.createInvoice);
 router.put('/:id/invoices/:invoiceId', validateId, ctrl.updateInvoice);
 router.delete('/:id/invoices/:invoiceId', validateId, ctrl.deleteInvoice);
 
