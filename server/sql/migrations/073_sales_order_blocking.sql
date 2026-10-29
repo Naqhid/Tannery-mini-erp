@@ -58,20 +58,28 @@ WHERE status IN ('Shipped', 'Delivered')
   AND is_blocked = 0;
 
 -- Create trigger to automatically block orders when they are marked as Shipped or Delivered
-DELIMITER //
+-- First check if trigger already exists
+SET @trigger_exists := (SELECT COUNT(*) FROM information_schema.TRIGGERS 
+  WHERE TRIGGER_SCHEMA = @db AND TRIGGER_NAME = 'after_sales_order_shipped');
+
+SET @sql := IF(@trigger_exists = 0,
+'DELIMITER //
 CREATE TRIGGER after_sales_order_shipped 
 AFTER UPDATE ON sales_orders 
 FOR EACH ROW 
 BEGIN 
-    IF NEW.status IN ('Shipped', 'Delivered') AND OLD.status NOT IN ('Shipped', 'Delivered') THEN
+    IF NEW.status IN (\'Shipped\', \'Delivered\') AND OLD.status NOT IN (\'Shipped\', \'Delivered\') THEN
         UPDATE sales_orders 
         SET is_blocked = 1, 
-            blocked_reason = CONCAT('Automatically blocked: Status changed to ', NEW.status),
+            blocked_reason = CONCAT(\'Automatically blocked: Status changed to \', NEW.status),
             blocked_at = NOW()
         WHERE id = NEW.id;
     END IF;
 END//
-DELIMITER ;
+DELIMITER ;',
+  'SELECT \'Trigger after_sales_order_shipped already exists\' as message');
+
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 -- Add note: To check if a sale order is blocked, use:
 -- SELECT id, order_no, status, is_blocked, blocked_reason, blocked_at FROM sales_orders WHERE is_blocked = 1;
