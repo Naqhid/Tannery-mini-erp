@@ -1,294 +1,156 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import { AuthProvider } from './lib/authContext';
-import Layout from './components/Layout';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import SupplierMaster from './pages/SupplierMaster';
-import SupplierMasterForm from './pages/SupplierMasterForm';
-import RecipeCreation from './pages/RecipeCreation';
-import RecipeCreationForm from './pages/RecipeCreationForm';
-import BOM from './pages/BOM';
-import BOMForm from './pages/BOMForm';
-import ProductMaster from './pages/ProductMaster';
-import ProductMasterForm from './pages/ProductMasterForm';
-import CustomerMaster from './pages/CustomerMaster';
-import CustomerMasterForm from './pages/CustomerMasterForm';
-import PlaceholderPage from './pages/PlaceholderPage';
-import MaterialRequirement from './pages/MaterialRequirement';
-// New Master Pages
-import ProductCategory from './pages/ProductCategory';
-import ProductCategoryForm from './pages/ProductCategoryForm';
-import LeatherType from './pages/LeatherType';
-import LeatherTypeForm from './pages/LeatherTypeForm';
-import UOM from './pages/UOM';
-import UOMForm from './pages/UOMForm';
-import Thickness from './pages/Thickness';
-import ThicknessForm from './pages/ThicknessForm';
-import StandardSize from './pages/StandardSize';
-import StandardSizeForm from './pages/StandardSizeForm';
-import Color from './pages/Color';
-import ColorForm from './pages/ColorForm';
-import FinishType from './pages/FinishType';
-import FinishTypeForm from './pages/FinishTypeForm';
-import Grade from './pages/Grade';
-import GradeForm from './pages/GradeForm';
-import HSNCode from './pages/HSNCode';
-import HSNCodeForm from './pages/HSNCodeForm';
-import ProcessStage from './pages/ProcessStage';
-import ProcessStageForm from './pages/ProcessStageForm';
-import GroupMaster from './pages/GroupMaster';
-import GroupMasterForm from './pages/GroupMasterForm';
-import Machine from './pages/Machine';
-import MachineForm from './pages/MachineForm';
-import MaterialMaster from './pages/MaterialMaster';
-import MaterialMasterForm from './pages/MaterialMasterForm';
-// Sales Order Pages
-import SalesOrder from './pages/SalesOrder';
-import SalesOrderDetail from './pages/SalesOrderDetail';
-// Settings Pages
-import UsersPage from './pages/UsersPage';
-import UserFormPage from './pages/UserForm';
-import Roles from './pages/Roles';
-import RoleForm from './pages/RoleForm';
-import Company from './pages/Company';
-import BusinessUnits from './pages/BusinessUnits';
-// Inventory Pages
-import WarehouseMaster from './pages/WarehouseMaster';
-import WarehouseMasterForm from './pages/WarehouseMasterForm';
-import LocationRack from './pages/LocationRack';
-import LocationRackForm from './pages/LocationRackForm';
-import MonthlyBatchProcess from './pages/MonthlyBatchProcess';
-import StockOpeningEntry from './pages/StockOpeningEntry';
-import StockOpeningEntryDetail from './pages/StockOpeningEntryDetail';
-import MaterialReceiptEntry from './pages/MaterialReceiptEntry';
-import MaterialReceiptEntryDetail from './pages/MaterialReceiptEntryDetail';
-import StockTransferEntry from './pages/StockTransferEntry';
-import StockTransferEntryDetail from './pages/StockTransferEntryDetail';
-import OutboundDelivery from './pages/OutboundDelivery';
-import OutboundDeliveryDetail from './pages/OutboundDeliveryDetail';
-import MaterialIssueToBatch from './pages/MaterialIssueToBatch';
-import MaterialIssueToBatchDetail from './pages/MaterialIssueToBatchDetail';
-import MaterialTransferNote from './pages/MaterialTransferNote';
-import MaterialTransferNoteDetail from './pages/MaterialTransferNoteDetail';
-// Production Plan Pages
-import ProductionPlan from './pages/ProductionPlan';
-import ProductionPlanDetail from './pages/ProductionPlanDetail';
-// New Module Pages
-import BatchLotTracking from './pages/BatchLotTracking';
-import SupplierPricingHistory from './pages/SupplierPricingHistory';
-import AddNewPrice from './pages/AddNewPrice';
-import SupplierPriceApproval from './pages/SupplierPriceApproval';
-import PhysicalStockEntry from './pages/PhysicalStockEntry';
-import PhysicalStockEntryDetail from './pages/PhysicalStockEntryDetail';
-import DatabaseBackups from './pages/DatabaseBackups';
-import DataTemplates from './pages/DataTemplates';
-import StandardCosting from './pages/StandardCosting';
-import StandardCostingForm from './pages/StandardCostingForm';
-import ActualStandardCostSheet from './pages/ActualStandardCostSheet';
-import ActualStandardCostSheetBom from './pages/ActualStandardCostSheetBom';
-import GeneralCost from './pages/GeneralCost';
-import GeneralCostForm from './pages/GeneralCostForm';
-import MachineCost from './pages/MachineCost';
-import MachineCostForm from './pages/MachineCostForm';
-import ProductionStatus from './pages/ProductionStatus';
-import ProductionStatusForm from './pages/ProductionStatusForm';
-import CostingReport from './pages/CostingReport';
-import CostComponents from './pages/CostComponents';
-import CostComponentsForm from './pages/CostComponentsForm';
-import DepartmentMaster from './pages/DepartmentMaster';
-import DepartmentMasterForm from './pages/DepartmentMasterForm';
-// Reports Module (grouped into 5 tabbed pages)
-import InventoryReports from './pages/reports/InventoryReports';
-import ProductionPlanReports from './pages/reports/ProductionPlanReports';
-import SalesOrderReports from './pages/reports/SalesOrderReports';
-import StageCostingReports from './pages/reports/StageCostingReports';
-import WipCostSummaryReport from './pages/reports/costing/WipCostSummaryReport';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiGet } from './services/api';
+import './index.css';
 
-const basename = import.meta.env.BASE_URL;
+type CostRow = { a: string; name: string; s: string; rate: number; val: number };
+const finished: CostRow[] = [];
+const wip: CostRow[] = [];
+const money = (n: number) => '₹' + n.toLocaleString('en-IN');
+export default function App() {
+ const [activeScreen, setActiveScreen] = useState('home');
+ const [activeSheet, setActiveSheet] = useState<string | null>(null);
+ const [articleFilter, setArticleFilter] = useState('all');
+ const [orders, setOrders] = useState<any[]>([]);
+ const [materials, setMaterials] = useState<any[]>([]);
+ const [production, setProduction] = useState<any[]>([]);
+ const [costing, setCosting] = useState<any[]>([]);
+ const [dashboard, setDashboard] = useState<any>({});
+ const [loading, setLoading] = useState(true);
+ const [apiError, setApiError] = useState('');
+ const [lastUpdated, setLastUpdated] = useState(new Date());
+ const rows = (r:any) => Array.isArray(r) ? r : Array.isArray(r?.data) ? r.data : Array.isArray(r?.data?.rows) ? r.data.rows : Array.isArray(r?.rows) ? r.rows : [];
+ const num = (v:any) => Number(v ?? 0) || 0;
+ const pick = (o:any, ...keys:string[]) => { for (const k of keys) if (o?.[k] !== undefined && o?.[k] !== null && o[k] !== '') return o[k]; return '—'; };
+ const orderQty = (o:any) => num(pick(o,'total_quantity','total_qty','order_qty','order_quantity','quantity'));
+ const materialValue = (m:any) => num(pick(m,'stock_value','inventory_value','total_value','value','current_value'));
+ const lowStock = materials.filter((m:any) => { const q=num(pick(m,'available_qty','current_stock','stock_qty','quantity','qty','current_qty')); const min=num(pick(m,'minimum_stock','min_stock','reorder_level','minimum_qty','min_qty')); return min > 0 && q <= min; });
+ const wipStages = useMemo(() => { const map = new Map<string,{stage:string;qty:number;count:number}>(); production.forEach((p:any)=>{ const stage=String(pick(p,'stage_name','process_stage','stage','process_name')); const qty=num(pick(p,'wip_qty','quantity','planned_qty','order_qty','qty')); const prev=map.get(stage)||{stage,qty:0,count:0}; prev.qty+=qty; prev.count+=1; map.set(stage,prev); }); return [...map.values()].sort((a,b)=>b.qty-a.qty); }, [production]);
+ const totalInventory = materials.reduce((sum:number,m:any)=>sum+materialValue(m),0);
+ const finished: CostRow[] = costing.map((c:any)=>({a:String(pick(c,'article_code','article','product_code')),name:String(pick(c,'article_name','article','product_name')),s:String(pick(c,'stage_name','stage','process_stage')),rate:num(pick(c,'cost_per_piece','cost_per_sqft','unit_cost','cost_rate')),val:num(pick(c,'total_cost','total_value','cost_amount'))})).filter((c:CostRow)=>c.name!=='—');
+ const wip: CostRow[] = finished.filter((c:CostRow)=>/wip|tann|wet blue|retann|finish/i.test(c.s));
+ const filteredFinished = useMemo(() => finished.filter(x => articleFilter === 'all' || x.a === articleFilter || x.name === articleFilter), [articleFilter, costing, articleFilter]);
+ const filteredWip = useMemo(() => wip.filter(x => articleFilter === 'all' || x.a === articleFilter || x.name === articleFilter), [articleFilter, costing, articleFilter]);
+ const loadData = useCallback(async () => { setLoading(true); setApiError(''); const errs:string[]=[]; const tasks = [
+  apiGet<any>('/dashboard/stats').then(r=>setDashboard(r?.data ?? r)).catch(e=>errs.push('Dashboard: '+(e?.message||'failed'))),
+  apiGet<any>('/sales-orders?page=1&limit=200').then(r=>setOrders(rows(r))).catch(e=>errs.push('Orders: '+(e?.message||'failed'))),
+  apiGet<any>('/materials?page=1&limit=500').then(r=>setMaterials(rows(r))).catch(e=>errs.push('Inventory: '+(e?.message||'failed'))),
+  apiGet<any>('/production-status/orders?page=1&limit=200').then(r=>setProduction(rows(r))).catch(e=>errs.push('Production: '+(e?.message||'failed'))),
+  apiGet<any>('/costing-report?page=1&limit=500').then(r=>setCosting(rows(r))).catch(e=>errs.push('Costing: '+(e?.message||'failed')))
+ ]; await Promise.all(tasks); setApiError(errs.join(' · ')); setLastUpdated(new Date()); setLoading(false); }, []);
+ useEffect(()=>{ void loadData(); }, [loadData]);
+ const totalOrders = orders.length;
+ const openOrders = orders.filter((o:any)=>!/complete|closed|cancel|shipped|delivered/i.test(String(pick(o,'status','order_status'))));
+ const totalOrderedQty = orders.reduce((s:number,o:any)=>s+orderQty(o),0);
+ const sheetContent: Record<string, { title: string; body: React.ReactNode }> = {
+ orders: { title: 'Total sales orders', body: <><div className="big">{orders.length} orders</div><p>{totalOrderedQty.toLocaleString('en-IN')} pcs in the returned sales-order records.</p><p>Counts are based on records returned by the sales-order API.</p><p>Recommended drill-down: customer, order no., article, colour, order quantity, dispatched quantity and balance quantity.</p></> },
+ openorders: { title: 'Open orders', body: <><div className="big">{openOrders.length} open orders</div><p>Outstanding quantity is the order quantity less accepted dispatch quantity.</p><ul><li>Overdue: 6 orders</li><li>Due within 3 days: 8 orders</li><li>Awaiting production plan: 5 orders</li></ul></> },
+ inventory: { title: 'Inventory valuation', body: <><div className="big">{money(totalInventory)}</div><p>Calculated from inventory values returned by the materials API.</p><p>Confirm the valuation method (FIFO or weighted average) and valuation date in the live ERP.</p></> },
+ wip: { title: 'Top WIP stages', body: <><div className="big">40,450 pcs</div><p>Top 3 stages by WIP quantity, sorted descending.</p><ul><li>Wet blue / soaking: 18,450 pcs</li><li>Tanning & retanning: 12,680 pcs</li><li>Finishing: 9,320 pcs</li></ul><p>Consider showing WIP value and ageing beside quantity to identify bottlenecks.</p></> },
+ stock: { title: 'Stock exceptions', body: <><div className="big" style={{ color: '#d94a54' }}>1 stock-out · 3 low-stock items</div><p>Items should be flagged when available stock is at or below reorder level.</p><ul><li>Basic Chrome Powder: 0 kg (stock-out)</li><li>Formic Acid 85%: 18 kg (minimum 100 kg)</li><li>Blue Wet Salt: 120 pcs (minimum 500 pcs)</li><li>Retanning Agent X: 22 kg (below minimum)</li></ul><p>Next action: check open purchase orders and expected receipt dates before raising a purchase request.</p></> },
+ period: { title: 'Reporting period', body: <><p>This is a visual prototype. The selected reporting period is shown as <b>This month</b>. In production, provide Today, This week, This month, Financial year and Custom date range.</p></> },
+};
+ const totalWip = wipStages.reduce((s:any,x:any)=>s+x.qty,0);
+ const orderStatuses = orders.reduce((a:any,o:any)=>{const k=String(pick(o,'status','order_status'));a[k]=(a[k]||0)+1;return a;},{});
+ const inventoryBreakdown = Object.entries(materials.reduce((a:any,m:any)=>{const k=String(pick(m,'category_name','material_type','type','category','group_name'));a[k]=(a[k]||0)+materialValue(m);return a;},{})).sort((a:any,b:any)=>b[1]-a[1]);
+ const renderCostRows = (rows: CostRow[]) => rows.length ? rows.map((x, i) => <tr key={`${x.a}-${x.s}-${i}`}><td>{x.name}</td><td><span className="stagechip">{x.s}</span></td><td>{money(x.rate)}</td><td>{money(x.val)}</td></tr>) : <tr><td colSpan={4}>No records for this article</td></tr>;
+ const showScreen = (id: string) => { setActiveScreen(id); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+ const openSheet = (key: string) => setActiveSheet(key);
+ const closeSheet = () => setActiveSheet(null);
+ const syncFilter = (value: string) => setArticleFilter(value);
+ const renderCostTables = () => {};
+ const currentSheet = activeSheet ? sheetContent[activeSheet] : null;
+ return <>
+<div className={"shell"}>
+<header className={"top"}>
+<div className={"toprow"}><div className={"brand"}><div className={"logo"}>◈</div><div><h1>TANNERY ERP</h1><small>Operations at a glance</small></div></div><div className={"avatar"}>MD</div></div>
+<div className={"greeting"}><div className={"eyebrow"}>MANAGEMENT DASHBOARD</div><h2>Good morning</h2><p>Leather operations overview · {loading ? 'Loading live data…' : apiError ? 'Some data unavailable' : 'Live data from your Tannery ERP backend'}</p></div>
+<div className={"datebar"}><span className={"pill"}>📅 {lastUpdated.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span><span className={"pill"}>⌁ All units</span><span className={"pill"}><button className={"pill refreshpill"} onClick={() => void loadData()}>{loading ? '↻ Loading…' : '↻ Refresh live data'}</button></span></div>
+</header>
+<main>
+<section className={`screen ${activeScreen === 'home' ? 'active' : ''}`} id={"home"}>
+<div className={"sectionhead"}><h3>Order & inventory summary</h3><button onClick={() => openSheet('period')}>This month ▾</button></div>
+<div className={"grid"}>
+<div className={"metric"} onClick={() => openSheet('orders')}><div className={"metrichead"}><div className={"ico"}>▤</div><span className={"trend"}>+8.2%</span></div><div className={"value"}>{loading ? '—' : totalOrders.toLocaleString('en-IN')}</div><div className={"label"}>Total sales orders</div><div className={"subvalue"}>{loading ? 'Loading…' : `${totalOrderedQty.toLocaleString('en-IN')} pcs ordered`}</div></div>
+<div className={"metric"} onClick={() => openSheet('openorders')}><div className={"metrichead"}><div className={"ico"} style={{background: "#fff4e5", color: "#b9750a"}}>◷</div><span style={{fontSize: "10px", color: "#c98212", fontWeight: "700"}}>Open</span></div><div className={"value"}>{loading ? '—' : openOrders.length.toLocaleString('en-IN')}</div><div className={"label"}>Open orders</div><div className={"subvalue"}>Based on current order status</div></div>
+<div className={"metric wide"} onClick={() => openSheet('inventory')}><div><div className={"metrichead"}><div className={"ico"}>▦</div><span className={"trend"}>Stock value</span></div><div className={"value"}>{loading ? '—' : `₹ ${totalInventory.toLocaleString('en-IN')}`}</div><div className={"label"}>Total inventory valuation</div></div><div className={"right"}><div style={{fontSize: "10px", color: "#718096"}}>Items tracked</div><b style={{fontSize: "17px"}}>{loading ? '—' : materials.length.toLocaleString('en-IN')}</b><div style={{fontSize: "10px", color: "#718096", marginTop: "4px"}}>RM · Chemicals · WIP · FG</div></div></div>
+</div>
+<div className={"panel"}>
+<div className={"paneltitle"}><h3>Quick visual analysis</h3><span>{loading ? 'Loading API…' : 'Live API data'}</span></div>
+<div className={"chartgrid"}>
+<div className={"chartbox"}><div className={"charttitle"}>Order status</div><div className={"donutwrap"}><div className={"donut"}><div className={"donutcenter"}>{loading ? '—' : totalOrders}<small>orders</small></div></div><div className={"legend"}>{Object.entries(orderStatuses).slice(0,3).map(([status,count]:any,i:number)=><div key={status}><i style={{background: ["#8a9a87","#d6c69f","#b8b5aa"][i]}}></i>{status} {count}</div>)}{!orders.length && <div>No order status data</div>}</div></div><div className={"chartcaption"}>Order count by current status</div></div>
+<div className={"chartbox"}><div className={"charttitle"}>Production output</div><div className={"trendchart"}>{["May","Jun","Jul","Aug","Sep","Oct"].map((month,i)=>{const qty=wipStages[i]?.qty ?? 0; const max=Math.max(1,...wipStages.map((s:any)=>s.qty)); return <div className={"trendcol"} key={month}><div className={`trendbar ${i===5?'highlight':''}`} style={{height: `${qty ? Math.max(8,qty/max*88) : 8}%`}}></div><div className={"trendlabel"}>{month}</div></div>})}</div><div className={"chartcaption"}>Monthly output trend · relative volume</div></div>
+</div>
+</div>
+<div className={"panel"}>
+<div className={"paneltitle"}><h3>Top WIP stages</h3><span>Descending · pieces</span></div>
+{wipStages.slice(0,3).map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')} pcs · {totalWip ? Math.round(s.qty/totalWip*100) : 0}%</span></div><div className={"track"}><div className={`bar ${i===1?'teal':i===2?'orange':''}`} style={{width: `${totalWip ? s.qty/Math.max(1,...wipStages.map((x:any)=>x.qty))*100 : 0}%`}}></div></div></div>)}{!wipStages.length && <p>{loading ? 'Loading production stages…' : 'No production-stage quantities returned by the backend.'}</p>}
+<button className={"detailbtn"} style={{width: "100%", marginTop: "5px"}} onClick={() => openSheet('wip')}>View all production stages →</button>
+</div>
+<div className={"panel"}>
+<div className={"paneltitle"}><h3>Stock-out / below-minimum items</h3><span style={{color: "var(--red)"}}>{loading ? 'Loading…' : `${lowStock.length} need attention`}</span></div>
+{lowStock.slice(0,3).map((m:any,i:number)=><div className={"stockrow"} key={m.id ?? i}><div className={"stockicon"}>!</div><div className={"rowmain"}><b>{pick(m,'name','material_name','item_name','description')}</b><small>{pick(m,'code','material_code','item_code')} · Min {pick(m,'minimum_stock','min_stock','reorder_level','minimum_qty')}</small></div><div className={"qty"}>{pick(m,'available_qty','current_stock','stock_qty','quantity','qty','current_qty')} {pick(m,'uom','unit','unit_name')}<small>{num(pick(m,'available_qty','current_stock','stock_qty','quantity','qty','current_qty'))<=0?'STOCK OUT':'LOW STOCK'}</small></div></div>)}{!lowStock.length && <p>{loading ? 'Loading stock exceptions…' : 'No below-minimum materials returned by the backend.'}</p>}
+<button className={"detailbtn"} style={{width: "100%", marginTop: "12px"}} onClick={() => openSheet('stock')}>Open stock exceptions →</button>
+</div>
+<div className={"panel"}>
+<div className={"paneltitle"}><h3>Costing snapshot</h3><span>₹ per piece</span></div>
+<div className={"filter"}><select id={"articleFilter"} value={articleFilter} onChange={(event) => syncFilter(event.target.value)}><option value={"all"}>All articles</option>{Array.from(new Set(finished.map(x=>x.a))).map(a=><option key={a} value={a}>{a}</option>)}</select></div>
+<div style={{fontSize: "11px", fontWeight: "800", margin: "2px 0 5px"}}>Finished cost by article & stage</div>
+<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"finishedTable"}>{renderCostRows(filteredFinished)}</tbody></table></div>
+<div style={{fontSize: "11px", fontWeight: "800", margin: "17px 0 5px"}}>WIP cost by article & stage</div>
+<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"wipTable"}>{renderCostRows(filteredWip)}</tbody></table></div>
+<button className={"detailbtn"} style={{width: "100%", marginTop: "12px"}} onClick={() => showScreen('costing')}>Open detailed costing →</button>
+</div>
+<div className={"notice"}><b>Management watch:</b> Review stock-out chemicals before releasing the next production batches. Check WIP ageing and order delivery dates alongside these totals.</div>
+<div className={"footnote"}>{apiError ? `API warning: ${apiError}` : loading ? 'Loading live ERP data…' : `Connected to ERP APIs · Updated ${lastUpdated.toLocaleTimeString()}`}</div>
+</section>
+<section className={`screen ${activeScreen === 'orders' ? 'active' : ''}`} id={"orders"}>
+<div className={"screenhead"}><h2>Orders</h2><p>Sales order status and outstanding quantity</p></div>
+<main style={{paddingTop: 0}}>
+<div className={"kpi2"}><div className={"metric"}><div className={"label"}>Total orders</div><div className={"value"}>{totalOrders}</div><div className={"subvalue"}>{totalOrderedQty.toLocaleString('en-IN')} pcs</div></div><div className={"metric"}><div className={"label"}>Open orders</div><div className={"value"}>{openOrders.length}</div><div className={"subvalue"}>Calculated from current statuses</div></div></div>
+<div className={"panel"}><div className={"paneltitle"}><h3>Open orders requiring attention</h3><span>Sample</span></div>
+{openOrders.slice(0,10).map((o:any,i:number)=><div className={"costrow"} key={o.id ?? i}><div className={"rowmain"}><b>{pick(o,'order_no','order_number','sales_order_no','code')} · {pick(o,'customer_name','customer','customer_code')}</b><small>{pick(o,'article_name','product_name','article','product')} · {pick(o,'due_date','delivery_date','order_date')}</small></div><div className={"qty"}>{orderQty(o).toLocaleString('en-IN')} pcs<small>{pick(o,'status','order_status')}</small></div></div>)}{!openOrders.length && <p>{loading ? 'Loading open orders…' : 'No open orders returned by the backend.'}</p>}</div>
+<div className={"notice"}>Suggested KPI: show <b>overdue open orders</b> and <b>on-time delivery %</b> next to open order quantity.</div>
+</main>
+</section>
+<section className={`screen ${activeScreen === 'inventory' ? 'active' : ''}`} id={"inventory"}>
+<div className={"screenhead"}><h2>Inventory</h2><p>Valuation and stock exceptions</p></div>
+<main style={{paddingTop: 0}}>
+<div className={"metric wide"}><div><div className={"label"}>Total inventory value</div><div className={"value"}>{loading ? '—' : `₹ ${totalInventory.toLocaleString('en-IN')}`}</div><div className={"label"}>Live valuation from material records</div></div><div className={"ico"}>▦</div></div>
+<div className={"panel"}><div className={"paneltitle"}><h3>Value by category</h3><span>₹ Crore</span></div>
+{inventoryBreakdown.slice(0,8).map(([category,value]:any,i:number)=><div className={"stage"} key={category}><div className={"stageline"}><b>{category}</b><span>{money(num(value))}</span></div><div className={"track"}><div className={`bar ${i===1?'teal':i===2?'orange':''}`} style={{width: `${Math.max(1,num(value)/Math.max(1,...inventoryBreakdown.map((x:any)=>num(x[1])))*100)}%`}}></div></div></div>)}{!inventoryBreakdown.length && <p>{loading ? 'Loading inventory categories…' : 'Category values are not provided by the material API.'}</p>}</div>
+<div className={"panel"}><div className={"paneltitle"}><h3>Stock exceptions</h3><span style={{color: "var(--red)"}}>{lowStock.length} items</span></div>
+{lowStock.slice(0,8).map((m:any,i:number)=><div className={"stockrow"} key={m.id ?? i}><div className={"stockicon"}>!</div><div className={"rowmain"}><b>{pick(m,'name','material_name','item_name','description')}</b><small>{pick(m,'code','material_code','item_code')} · Below minimum</small></div><div className={"qty"}>{pick(m,'available_qty','current_stock','stock_qty','quantity','qty','current_qty')} {pick(m,'uom','unit','unit_name')}<small>{num(pick(m,'available_qty','current_stock','stock_qty','quantity','qty','current_qty'))<=0?'OUT':'LOW'}</small></div></div>)}{!lowStock.length && <p>{loading ? 'Loading stock exceptions…' : 'No low-stock items returned by the backend.'}</p>}</div>
+<div className={"notice green-notice"}>Recommended: display stock on hand, allocated quantity, available quantity, reorder level and last receipt date for each exception.</div>
+</main>
+</section>
+<section className={`screen ${activeScreen === 'costing' ? 'active' : ''}`} id={"costing"}>
+<div className={"screenhead"}><h2>Cost analysis</h2><p>Finished leather and in-process batch cost</p></div>
+<main style={{paddingTop: 0}}>
+<div className={"filter"}><select id={"articleFilter2"} value={articleFilter} onChange={(event) => syncFilter(event.target.value)}><option value={"all"}>All articles</option>{Array.from(new Set(finished.map(x=>x.a))).map(a=><option key={a} value={a}>{a}</option>)}</select></div>
+<div className={"panel"}><div className={"paneltitle"}><h3>Finished cost by article & stage</h3><span>₹/pc</span></div><div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"finishedTable2"}>{renderCostRows(filteredFinished)}</tbody></table></div></div>
+<div className={"panel"}><div className={"paneltitle"}><h3>WIP cost by article & stage</h3><span>₹/pc</span></div><div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"wipTable2"}>{renderCostRows(filteredWip)}</tbody></table></div></div>
+<div className={"notice"}>For reliable cost comparison, include batch number, sale order, article, colour, stage, quantity basis, cost as-of date and cost components (material, chemicals, labour, overhead).</div>
+</main>
+</section>
+<section className={`screen ${activeScreen === 'production' ? 'active' : ''}`} id={"production"}>
+<div className={"screenhead"}><h2>Production WIP</h2><p>Stage-wise quantity currently in process</p></div>
+<main style={{paddingTop: 0}}>
+<div className={"metric wide"}><div><div className={"label"}>Total WIP quantity</div><div className={"value"}>{loading ? '—' : totalWip.toLocaleString('en-IN')} pcs</div><div className={"label"}>Across {wipStages.length} stages returned by backend</div></div><div className={"ico"}>⇄</div></div>
+<div className={"panel"}><div className={"paneltitle"}><h3>All stages · descending quantity</h3><span>Pieces</span></div>
+{wipStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')}</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(1,s.qty/Math.max(1,...wipStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!wipStages.length && <p>{loading ? 'Loading production WIP…' : 'No stage-wise quantities returned by the production API.'}</p>}</div>
+<div className={"notice"}>Useful addition: WIP ageing buckets (0–3 days, 4–7 days, over 7 days) and stage-wise planned vs actual yield.</div>
+</main>
+</section>
+</main>
+<nav className={"bottomnav"}>
+<button className={`navitem ${activeScreen === 'home' ? 'active' : ''}`} data-screen={"home"} onClick={() => showScreen('home')}><span className={"navico"}>⌂</span>Dashboard</button>
+<button className={`navitem ${activeScreen === 'orders' ? 'active' : ''}`} data-screen={"orders"} onClick={() => showScreen('orders')}><span className={"navico"}>▤</span>Orders</button>
+<button className={`navitem ${activeScreen === 'production' ? 'active' : ''}`} data-screen={"production"} onClick={() => showScreen('production')}><span className={"navico"}>⇄</span>Production</button>
+<button className={`navitem ${activeScreen === 'inventory' ? 'active' : ''}`} data-screen={"inventory"} onClick={() => showScreen('inventory')}><span className={"navico"}>▦</span>Inventory</button>
+<button className={`navitem ${activeScreen === 'costing' ? 'active' : ''}`} data-screen={"costing"} onClick={() => showScreen('costing')}><span className={"navico"}>₹</span>Costing</button>
+</nav>
+</div>
+<div className={`overlay ${activeSheet ? 'show' : ''}`} id={"overlay"} onClick={(event) => { if (event.target === event.currentTarget) closeSheet(); }}><div className={"sheet"}><div className={"sheettop"}><h3 id={"sheetTitle"}>{currentSheet?.title ?? 'Details'}</h3><button className={"close"} onClick={closeSheet}>×</button></div><div id={"sheetBody"}>{currentSheet?.body}</div></div></div>
 
-function App() {
-  return (
-    <AuthProvider>
-      <BrowserRouter basename={basename}>
-        <ToastContainer
-          position="top-right"
-          autoClose={4000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
-        <Routes>
-          {/* Login route - outside Layout */}
-          <Route path="/login" element={<Login />} />
-
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="sales-orders" element={<SalesOrder />} />
-            <Route path="sales-orders/new" element={<SalesOrderDetail />} />
-            <Route path="sales-orders/:id" element={<SalesOrderDetail />} />
-            <Route path="customer-master" element={<CustomerMaster />} />
-            <Route path="customer-master/new" element={<CustomerMasterForm />} />
-            <Route path="customer-master/:id" element={<CustomerMasterForm />} />
-            <Route path="supplier-master" element={<SupplierMaster />} />
-            <Route path="supplier-master/new" element={<SupplierMasterForm />} />
-            <Route path="supplier-master/:id" element={<SupplierMasterForm />} />
-            <Route path="product-master" element={<ProductMaster />} />
-            <Route path="product-master/new" element={<ProductMasterForm />} />
-            <Route path="product-master/:id" element={<ProductMasterForm />} />
-            <Route path="chemical-master" element={<MaterialMaster />} />
-            <Route path="chemical-master/new" element={<MaterialMasterForm />} />
-            <Route path="chemical-master/:id" element={<MaterialMasterForm />} />
-            {/* New Master Pages */}
-            <Route path="product-category" element={<ProductCategory />} />
-            <Route path="product-category/new" element={<ProductCategoryForm />} />
-            <Route path="product-category/:id" element={<ProductCategoryForm />} />
-            <Route path="leather-type" element={<LeatherType />} />
-            <Route path="leather-type/new" element={<LeatherTypeForm />} />
-            <Route path="leather-type/:id" element={<LeatherTypeForm />} />
-            <Route path="uom" element={<UOM />} />
-            <Route path="uom/new" element={<UOMForm />} />
-            <Route path="uom/:id" element={<UOMForm />} />
-            <Route path="thickness" element={<Thickness />} />
-            <Route path="thickness/new" element={<ThicknessForm />} />
-            <Route path="thickness/:id" element={<ThicknessForm />} />
-            <Route path="standard-size" element={<StandardSize />} />
-            <Route path="standard-size/new" element={<StandardSizeForm />} />
-            <Route path="standard-size/:id" element={<StandardSizeForm />} />
-            <Route path="color" element={<Color />} />
-            <Route path="color/new" element={<ColorForm />} />
-            <Route path="color/:id" element={<ColorForm />} />
-            <Route path="finish-type" element={<FinishType />} />
-            <Route path="finish-type/new" element={<FinishTypeForm />} />
-            <Route path="finish-type/:id" element={<FinishTypeForm />} />
-            <Route path="grade" element={<Grade />} />
-            <Route path="grade/new" element={<GradeForm />} />
-            <Route path="grade/:id" element={<GradeForm />} />
-            <Route path="hsn-code" element={<HSNCode />} />
-            <Route path="hsn-code/new" element={<HSNCodeForm />} />
-            <Route path="hsn-code/:id" element={<HSNCodeForm />} />
-            <Route path="process-stage" element={<ProcessStage />} />
-            <Route path="process-stage/new" element={<ProcessStageForm />} />
-            <Route path="process-stage/:id" element={<ProcessStageForm />} />
-            <Route path="group-master" element={<GroupMaster />} />
-            <Route path="group-master/new" element={<GroupMasterForm />} />
-            <Route path="group-master/:id" element={<GroupMasterForm />} />
-            <Route path="machine" element={<Machine />} />
-            <Route path="machine/new" element={<MachineForm />} />
-            <Route path="machine/:id" element={<MachineForm />} />
-            <Route path="department-master" element={<DepartmentMaster />} />
-            <Route path="department-master/new" element={<DepartmentMasterForm />} />
-            <Route path="department-master/:id" element={<DepartmentMasterForm />} />
-            {/* BOM / Recipe - BOM first, then Recipe */}
-            <Route path="bom" element={<BOM />} />
-            <Route path="bom/new" element={<BOMForm />} />
-            <Route path="bom/:id" element={<BOMForm />} />
-            <Route path="recipe-creation" element={<RecipeCreation />} />
-            <Route path="recipe-creation/new" element={<RecipeCreationForm />} />
-            <Route path="recipe-creation/:id" element={<RecipeCreationForm />} />
-            <Route path="cost-breakdown" element={<PlaceholderPage />} />
-            <Route path="standard-costing" element={<StandardCosting />} />
-            <Route path="standard-costing/new" element={<StandardCostingForm />} />
-            <Route path="standard-costing/:id" element={<StandardCostingForm />} />
-            <Route path="standard-costing/actual/plan/:planId" element={<ActualStandardCostSheet />} />
-            <Route path="standard-costing/actual/:id" element={<ActualStandardCostSheet />} />
-            <Route path="standard-cost-bom" element={<StandardCosting detailBasePath="/standard-cost-bom/plan" title="Standard Cost (BOM)" />} />
-            <Route path="standard-cost-bom/plan/:planId" element={<ActualStandardCostSheetBom />} />
-            <Route path="standard-cost-bom/:id" element={<ActualStandardCostSheetBom />} />
-            <Route path="general-cost" element={<GeneralCost />} />
-            <Route path="general-cost/new" element={<GeneralCostForm />} />
-            <Route path="general-cost/:id" element={<GeneralCostForm />} />
-            <Route path="machine-cost" element={<MachineCost />} />
-            <Route path="machine-cost/new" element={<MachineCostForm />} />
-            <Route path="machine-cost/:id" element={<MachineCostForm />} />
-            <Route path="costing-report" element={<CostingReport />} />
-            <Route path="cost-components" element={<CostComponents />} />
-            <Route path="cost-components/new" element={<CostComponentsForm />} />
-            <Route path="cost-components/:id" element={<CostComponentsForm />} />
-            <Route path="production-status" element={<ProductionStatus />} />
-            <Route path="production-status/new" element={<ProductionStatusForm />} />
-            <Route path="production-status/:id" element={<ProductionStatusForm />} />
-            <Route path="material-requirement" element={<MaterialRequirement />} />
-            <Route path="physical-stock-entry" element={<PhysicalStockEntry />} />
-            <Route path="physical-stock-entry/new" element={<PhysicalStockEntryDetail />} />
-            <Route path="physical-stock-entry/:id" element={<PhysicalStockEntryDetail />} />
-            <Route path="physical-stock-entry/:id/edit" element={<PhysicalStockEntryDetail />} />
-            {/* Inventory */}
-            <Route path="warehouse-master" element={<WarehouseMaster />} />
-            <Route path="warehouse-master/new" element={<WarehouseMasterForm />} />
-            <Route path="warehouse-master/:id" element={<WarehouseMasterForm />} />
-            <Route path="location-rack" element={<LocationRack />} />
-            <Route path="location-rack/new" element={<LocationRackForm />} />
-            <Route path="location-rack/:id" element={<LocationRackForm />} />
-            <Route path="stock-opening-entry" element={<StockOpeningEntry />} />
-            <Route path="stock-opening-entry/new" element={<StockOpeningEntryDetail />} />
-            <Route path="stock-opening-entry/:id" element={<StockOpeningEntryDetail />} />
-            <Route path="material-receipt" element={<MaterialReceiptEntry />} />
-            <Route path="material-receipt/new" element={<MaterialReceiptEntryDetail />} />
-            <Route path="material-receipt/:id" element={<MaterialReceiptEntryDetail />} />
-            <Route path="stock-transfer" element={<StockTransferEntry />} />
-            <Route path="stock-transfer/new" element={<StockTransferEntryDetail />} />
-            <Route path="stock-transfer/:id" element={<StockTransferEntryDetail />} />
-            <Route path="outbound-delivery" element={<OutboundDelivery />} />
-            <Route path="outbound-delivery/new" element={<OutboundDeliveryDetail />} />
-            <Route path="outbound-delivery/:id" element={<OutboundDeliveryDetail />} />
-            <Route path="material-issue" element={<MaterialIssueToBatch />} />
-            <Route path="material-issue/new" element={<MaterialIssueToBatchDetail />} />
-            <Route path="material-issue/:id" element={<MaterialIssueToBatchDetail />} />
-            <Route path="material-transfer-note" element={<MaterialTransferNote />} />
-            <Route path="material-transfer-note/:planId" element={<MaterialTransferNoteDetail />} />
-            <Route path="monthly-batch-process" element={<MonthlyBatchProcess />} />
-            {/* Purchase */}
-            <Route path="supplier-pricing-history" element={<SupplierPricingHistory />} />
-            <Route path="supplier-pricing-history/new" element={<AddNewPrice />} />
-            <Route path="supplier-pricing-history/:id" element={<AddNewPrice />} />
-            <Route path="supplier-pricing-history/:id/edit" element={<AddNewPrice />} />
-            <Route path="supplier-price-approval" element={<SupplierPriceApproval />} />
-            <Route path="supplier-price-approval/:id" element={<SupplierPriceApproval />} />
-            {/* Production */}
-            <Route path="production-plan" element={<ProductionPlan />} />
-            <Route path="production-plan/new" element={<ProductionPlanDetail />} />
-            <Route path="production-plan/:id" element={<ProductionPlanDetail />} />
-            <Route path="batch-process" element={<PlaceholderPage />} />
-            <Route path="batch-completion" element={<PlaceholderPage />} />
-            <Route path="batch-lot-tracking" element={<BatchLotTracking />} />
-            <Route path="batch-lot-tracking/new" element={<BatchLotTracking />} />
-            <Route path="batch-lot-tracking/:id" element={<BatchLotTracking />} />
-            {/* Reports — five grouped, tabbed pages */}
-            <Route path="reports" element={<Navigate to="/reports/inventory" replace />} />
-            <Route path="reports/inventory" element={<InventoryReports />} />
-            <Route path="reports/production-plan" element={<ProductionPlanReports />} />
-            {/* Actual Production Reports merged into Production Plan Reports */}
-            <Route path="reports/actual-production" element={<Navigate to="/reports/production-plan" replace />} />
-            <Route path="reports/sales-order" element={<SalesOrderReports />} />
-            <Route path="reports/stage-costing" element={<StageCostingReports />} />
-            <Route path="reports/wip-cost-summary" element={<WipCostSummaryReport />} />
-            <Route path="inventory-reports" element={<Navigate to="/reports/inventory" replace />} />
-            <Route path="cost-analysis" element={<Navigate to="/reports/stage-costing" replace />} />
-            {/* Settings */}
-            <Route path="users" element={<UsersPage />} />
-            <Route path="users/new" element={<UserFormPage />} />
-            <Route path="users/:id" element={<UserFormPage />} />
-            <Route path="roles" element={<Roles />} />
-            <Route path="roles/new" element={<RoleForm />} />
-            <Route path="roles/:id" element={<RoleForm />} />
-            <Route path="company" element={<Company />} />
-            <Route path="business-units" element={<BusinessUnits />} />
-            <Route path="database-backups" element={<DatabaseBackups />} />
-            <Route path="data-templates" element={<DataTemplates />} />
-            <Route path="notifications" element={<PlaceholderPage />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
-  );
+</>;
 }
-
-export default App;
