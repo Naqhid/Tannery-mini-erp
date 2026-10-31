@@ -218,6 +218,80 @@ async function getSalesOrderTrend() {
   return out;
 }
 
+// ─── Production output trend (last 6 months, grouped by month) ───────────────
+async function getProductionOutputTrend() {
+  const [rows] = await pool.query(
+    `SELECT DATE_FORMAT(t.production_date, '%Y-%m') AS ym,
+       COALESCE(SUM(t.output_qty), 0) AS value
+     FROM production_status_transactions t
+     JOIN production_status_orders pso ON pso.id = t.production_status_order_id
+     WHERE t.deleted_at IS NULL AND pso.deleted_at IS NULL
+       AND t.production_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01')
+     GROUP BY DATE_FORMAT(t.production_date, '%Y-%m')
+     ORDER BY DATE_FORMAT(t.production_date, '%Y-%m') ASC`
+  );
+
+  const byMonth = new Map(rows.map((row) => [row.ym, row]));
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const out = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const hit = byMonth.get(ym);
+    out.push({
+      label: `${MONTHS[date.getMonth()]} ${date.getFullYear()}`,
+      value: hit ? Number(hit.value) || 0 : 0,
+    });
+  }
+  return out;
+}
+
+// ─── Stage-level actual costs for mobile dashboard snapshots ─────────────────
+async function getStageCosts() {
+  const [rows] = await pool.query(
+    `SELECT pso.id, pp.article, pso.process_stage AS stage, pso.uom,
+       COALESCE(pso.completed_qty, 0) AS completed_qty,
+       GREATEST(0, COALESCE(pso.issued_qty, 0) - COALESCE(pso.completed_qty, 0) -
+         COALESCE((SELECT SUM(t.rejection_qty)
+           FROM production_status_transactions t
+           WHERE t.production_status_order_id = pso.id AND t.deleted_at IS NULL), 0)) AS wip_qty,
+       COALESCE((SELECT SUM(mii.amount)
+         FROM material_issues mi
+         JOIN material_issue_items mii ON mii.issue_id = mi.id
+         WHERE mi.production_batch COLLATE utf8mb4_0900_ai_ci = pp.plan_no COLLATE utf8mb4_0900_ai_ci
+           AND COALESCE(mi.process_stage, '') COLLATE utf8mb4_0900_ai_ci = COALESCE(pso.process_stage, '') COLLATE utf8mb4_0900_ai_ci), 0) AS material_cost,
+       COALESCE((SELECT SUM(gh.total_amount) FROM general_cost_headers gh WHERE gh.production_plan_id = pso.id), 0) AS general_cost,
+       COALESCE((SELECT SUM(mh.total_amount) FROM machine_cost_headers mh WHERE mh.production_plan_id = pso.id), 0) AS machine_cost
+     FROM production_status_orders pso
+     JOIN production_plans pp ON pp.id = pso.production_plan_id AND pp.deleted_at IS NULL
+     WHERE pso.deleted_at IS NULL
+     ORDER BY pso.id DESC
+     LIMIT 500`
+  );
+
+  return rows.map((row) => {
+    const materialCost = Number(row.material_cost) || 0;
+    const generalCost = Number(row.general_cost) || 0;
+    const machineCost = Number(row.machine_cost) || 0;
+    const completedQty = Number(row.completed_qty) || 0;
+    const totalCost = materialCost + generalCost + machineCost;
+    return {
+      id: row.id,
+      article: row.article || '—',
+      stage: row.stage || '—',
+      uom: row.uom || '',
+      completed_qty: completedQty,
+      wip_qty: Number(row.wip_qty) || 0,
+      material_cost: materialCost,
+      general_cost: generalCost,
+      machine_cost: machineCost,
+      total_cost: totalCost,
+      cost_per_pc: completedQty > 0 ? totalCost / completedQty : 0,
+    };
+  });
+}
+
 // ─── Inventory value by material type (live valuation) ───────────────────────
 async function getInventoryValue() {
   const [rows] = await pool.query(
@@ -302,7 +376,8 @@ export async function getDashboardStats() {
   const [
     customerStats, productStats, supplierStats, bomStats,
     recentOrders, lowStock, productionOrders, highestWipStages,
-    kpiCounts, salesTrend, inventoryValue, topProducts, recentReceipts, quickSummary,
+    kpiCounts, salesTrend, productionOutputTrend, inventoryValue, stageCosts,
+    topProducts, recentReceipts, quickSummary,
   ] = await Promise.all([
     customerModel.getStats(),
     productModel.getStats(),
@@ -314,7 +389,9 @@ export async function getDashboardStats() {
     getHighestWipStages(),
     getKpiCounts(),
     getSalesOrderTrend(),
+    getProductionOutputTrend(),
     getInventoryValue(),
+    getStageCosts(),
     getTopProducts(),
     getRecentReceipts(),
     getQuickSummary(),
@@ -339,7 +416,9 @@ export async function getDashboardStats() {
     // New live dashboard data (charts + KPI cards + quick summary).
     kpiCounts,
     salesTrend,
+    productionOutputTrend,
     inventoryValue,
+    stageCosts,
     topProducts,
     recentReceipts,
     quickSummary,
