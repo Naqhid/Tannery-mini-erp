@@ -35,10 +35,10 @@ export default function Login() {
     <div className="shell" style={{ paddingBottom: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Header - same gradient/branding as the dashboard */}
       <header className="top">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 4 }}>
-          <img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Corix logo" style={{ height: 56, width: 'auto', objectFit: 'contain' }} />
-          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: 5, color: '#fff', lineHeight: 1 }}>CORIX</div>
-          <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" style={{ height: 22, width: 'auto', objectFit: 'contain' }} />
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingTop: 4, flexWrap: 'nowrap' }}>
+          <img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Corix logo" style={{ height: 44, width: 'auto', objectFit: 'contain' }} />
+          <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 4, color: '#fff', lineHeight: 1 }}>CORIX</div>
+          <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" style={{ height: 90, width: 'auto', objectFit: 'contain' }} />
         </div>
         <div className="greeting" style={{ marginTop: 14, textAlign: 'center' }}>
           <h2>Welcome back</h2>
