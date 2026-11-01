@@ -34,18 +34,14 @@ export default function Login() {
   return (
     <div className="shell" style={{ paddingBottom: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Header - same gradient/branding as the dashboard */}
-      <header className="top">
-        <div className="toprow">
-          <div className="brand">
-            <div className="logo">◈</div>
-            <div>
-              <h1>TANNERY ERP</h1>
-              <small>Operations at a glance</small>
-            </div>
+      <header className="top" style={{ paddingTop: 0 }}>
+        <div className="toprow" style={{ marginTop: -18, marginBottom: -24 }}>
+          <div className="brand" style={{ gap: 18, alignItems: 'center' }}>
+            <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="Company logo" style={{ height: 150, width: 'auto', objectFit: 'contain' }} />
+            <img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Product logo" style={{ height: 110, width: 'auto', objectFit: 'contain' }} />
           </div>
         </div>
-        <div className="greeting">
-          <div className="eyebrow">MANAGEMENT DASHBOARD</div>
+        <div className="greeting" style={{ marginTop: 0 }}>
           <h2>Welcome back</h2>
           <p>Sign in to continue to your operations overview</p>
         </div>

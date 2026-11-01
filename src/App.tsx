@@ -137,9 +137,9 @@ export default function App() {
  const currentSheet = activeSheet ? sheetContent[activeSheet] : null;
  return <>
 <div className={"shell"}>
-<header className={"top"}>
-<div className={"toprow"}><div className={"brand"}><div className={"logo"}>◈</div><div><h1>TANNERY ERP</h1><small>Operations at a glance</small></div></div><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div className={"avatar"} title={user?.full_name || user?.username || ''}>{userInitials}</div><button className={"pill"} onClick={handleLogout} title="Sign out" style={{ cursor: 'pointer' }}>⎋ Logout</button></div></div>
-<div className={"greeting"}><div className={"eyebrow"}>MANAGEMENT DASHBOARD</div><h2>Good morning</h2><p>Leather operations overview · {loading ? 'Loading live data…' : apiError ? 'Some data unavailable' : 'Live data from your Tannery ERP backend'}</p></div>
+<header className={"top"} style={{ paddingTop: 6 }}>
+<div className={"toprow"} style={{ marginTop: -16, marginBottom: -20 }}><div className={"brand"} style={{ gap: 16 }}><img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="Company logo" style={{ height: 120, width: 'auto', objectFit: 'contain' }} /><img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Product logo" style={{ height: 78, width: 'auto', objectFit: 'contain' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div className={"avatar"} title={user?.full_name || user?.username || ''}>{userInitials}</div><button className={"pill"} onClick={handleLogout} title="Sign out" style={{ cursor: 'pointer' }}>⎋ Logout</button></div></div>
+<div className={"greeting"} style={{ marginTop: 8 }}><div className={"eyebrow"}>MANAGEMENT DASHBOARD</div><h2>Good morning</h2><p>Leather operations overview · {loading ? 'Loading live data…' : apiError ? 'Some data unavailable' : 'Live data from your Tannery ERP backend'}</p></div>
 <div className={"datebar"}><span className={"pill"}>📅 {lastUpdated.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span><span className={"pill"}>⌁ All units</span><span className={"pill"}><button className={"pill refreshpill"} onClick={() => void loadData()}>{loading ? '↻ Loading…' : '↻ Refresh live data'}</button></span></div>
 </header>
 <main>
