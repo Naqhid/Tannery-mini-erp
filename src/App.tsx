@@ -55,13 +55,15 @@ export default function App() {
    return active
     .map((s:any)=>{
      const name=String(pick(s,'name','stage_name','stage')||'—').trim();
+     const uomRaw=pick(s,'uom','unit','unit_name');
+     const uom=uomRaw && uomRaw !== '—' ? String(uomRaw).trim() : '';
      const hit=wipByStage.get(name.toLowerCase());
-     return { stage:name, seq:num(pick(s,'seq')), qty:hit?hit.qty:0, count:hit?hit.count:0 };
+     return { stage:name, seq:num(pick(s,'seq')), uom, qty:hit?hit.qty:0, count:hit?hit.count:0 };
     })
     .sort((a,b)=>a.seq-b.seq);
   }
   // Fallback: no master available — derive stages from production data.
-  return [...wipByStage.entries()].map(([k,v])=>({ stage:k, seq:0, qty:v.qty, count:v.count })).sort((a,b)=>b.qty-a.qty);
+  return [...wipByStage.entries()].map(([k,v])=>({ stage:k, seq:0, uom:'', qty:v.qty, count:v.count })).sort((a,b)=>b.qty-a.qty);
  }, [processStages, wipByStage]);
 
  // Descending-by-quantity view used by the "Top WIP stages" card.
@@ -113,7 +115,34 @@ export default function App() {
   }
   return [...map.entries()].sort((a, b) => b[1] - a[1]);
  }, [materials, dashboard?.inventoryValue?.breakdown]);
- const productionOutputTrend = Array.isArray(dashboard?.productionOutputTrend) ? dashboard.productionOutputTrend : [];
+ const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+ // Build a continuous last-6-month window from the production-status data as a
+ // resilient fallback when the dashboard trend comes back empty/all-zero. Uses
+ // each order's latest transaction date and its completed (output) quantity.
+ const productionOutputFallback = useMemo(() => {
+  const now = new Date();
+  const buckets: { key:string; label:string; value:number }[] = [];
+  for (let i=5;i>=0;i--) {
+   const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+   buckets.push({ key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label:`${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`, value:0 });
+  }
+  const byKey = new Map(buckets.map(b=>[b.key,b]));
+  production.forEach((p:any)=>{
+   const qty = num(pick(p,'completed_qty','output_qty'));
+   if (qty <= 0) return;
+   const raw = pick(p,'transaction_date','production_date','updated_at','plan_date');
+   if (!raw || raw === '—') return;
+   const d = new Date(raw);
+   if (isNaN(d.getTime())) return;
+   const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+   const b = byKey.get(key);
+   if (b) b.value += qty;
+  });
+  return buckets;
+ }, [production]);
+ const dashboardTrend = Array.isArray(dashboard?.productionOutputTrend) ? dashboard.productionOutputTrend : [];
+ const dashboardHasOutput = dashboardTrend.some((point:any) => num(point.value) > 0);
+ const productionOutputTrend = dashboardHasOutput ? dashboardTrend : productionOutputFallback;
  const hasProductionOutput = productionOutputTrend.some((point:any) => num(point.value) > 0);
  const configuredMinimums = materials.filter((m:any) => num(m.reorder_level) > 0).length;
  const stockEmptyMessage = materials.length > 0 && configuredMinimums === 0
@@ -124,7 +153,7 @@ export default function App() {
  orders: { title: 'Total sales orders', body: <><div className="big">{orders.length} orders</div><p>{totalOrderedQty.toLocaleString('en-IN')} sqft in the returned sales-order records.</p><p>Counts are based on records returned by the sales-order API.</p><p>Recommended drill-down: customer, order no., article, colour, order quantity, dispatched quantity and balance quantity.</p></> },
  openorders: { title: 'Open orders', body: <><div className="big">{openOrders.length} open orders</div><p>Orders are classified as open using their current sales-order status.</p></> },
  inventory: { title: 'Inventory valuation', body: <><div className="big">{money(totalInventory)}</div><p>Live stock value from the stock ledger.</p></> },
- wip: { title: 'Top WIP stages', body: <><div className="big">{totalWip.toLocaleString('en-IN')} sqft</div><p>Current work in progress by stage.</p>{wipStages.length ? <ul>{wipStages.map((stage:any)=><li key={stage.stage}>{stage.stage}: {stage.qty.toLocaleString('en-IN')} sqft</li>)}</ul> : <p>No active WIP quantities were returned.</p>}</> },
+ wip: { title: 'Top WIP stages', body: <><p>Current work in progress by stage (quantity in each stage's unit of measure).</p>{allStages.length ? <ul>{allStages.map((stage:any)=><li key={stage.stage}>{stage.stage}: {stage.qty.toLocaleString('en-IN')}{stage.uom ? ` ${stage.uom}` : ''}</li>)}</ul> : <p>No process stages configured in the master.</p>}</> },
  stock: { title: 'Stock exceptions', body: <><div className="big" style={{ color: '#d94a54' }}>{lowStock.length} items need attention</div>{lowStock.length ? <ul>{lowStock.map((item:any)=><li key={item.id}>{pick(item,'item','name','material_name')}: {pick(item,'qty','current_qty')} (minimum {pick(item,'threshold','reorder_level')})</li>)}</ul> : <p>{stockEmptyMessage}</p>}</> },
  period: { title: 'Reporting period', body: <><p>Order and stock cards show the current snapshot. The production chart shows the last six months of recorded output.</p></> },
 };
@@ -137,9 +166,9 @@ export default function App() {
  const currentSheet = activeSheet ? sheetContent[activeSheet] : null;
  return <>
 <div className={"shell"}>
-<header className={"top"} style={{ paddingTop: 6 }}>
-<div className={"toprow"} style={{ marginTop: -16, marginBottom: -20 }}><div className={"brand"} style={{ gap: 16 }}><img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="Company logo" style={{ height: 120, width: 'auto', objectFit: 'contain' }} /><img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Product logo" style={{ height: 78, width: 'auto', objectFit: 'contain' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div className={"avatar"} title={user?.full_name || user?.username || ''}>{userInitials}</div><button className={"pill"} onClick={handleLogout} title="Sign out" style={{ cursor: 'pointer' }}>⎋ Logout</button></div></div>
-<div className={"greeting"} style={{ marginTop: 8 }}><div className={"eyebrow"}>MANAGEMENT DASHBOARD</div><h2>Good morning</h2><p>Leather operations overview · {loading ? 'Loading live data…' : apiError ? 'Some data unavailable' : 'Live data from your Tannery ERP backend'}</p></div>
+<header className={"top"}>
+<div className={"toprow"}><div className={"brand"} style={{ gap: 10, alignItems: 'center' }}><img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Corix logo" style={{ height: 34, width: 'auto', objectFit: 'contain' }} /><div style={{ lineHeight: 1 }}><div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 2, color: '#fff' }}>CORIX</div><img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" style={{ height: 16, width: 'auto', objectFit: 'contain', marginTop: 4, display: 'block' }} /></div></div><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div className={"avatar"} title={user?.full_name || user?.username || ''}>{userInitials}</div><button className={"pill"} onClick={handleLogout} title="Sign out" style={{ cursor: 'pointer' }}>⎋ Logout</button></div></div>
+<div className={"greeting"}><div className={"eyebrow"}>MANAGEMENT DASHBOARD</div><h2>Good morning</h2><p>Leather operations overview · {loading ? 'Loading live data…' : apiError ? 'Some data unavailable' : 'Live data from your Tannery ERP backend'}</p></div>
 <div className={"datebar"}><span className={"pill"}>📅 {lastUpdated.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span><span className={"pill"}>⌁ All units</span><span className={"pill"}><button className={"pill refreshpill"} onClick={() => void loadData()}>{loading ? '↻ Loading…' : '↻ Refresh live data'}</button></span></div>
 </header>
 <main>
@@ -158,8 +187,8 @@ export default function App() {
 </div>
 </div>
 <div className={"panel"}>
-<div className={"paneltitle"}><h3>Top WIP stages</h3><span>Process sequence · sqft</span></div>
-{allStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')} sqft · {totalWip ? Math.round(s.qty/totalWip*100) : 0}%</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(0, s.qty/Math.max(1,...allStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!allStages.length && <p>{loading ? 'Loading production stages…' : 'No process stages configured in the master.'}</p>}
+<div className={"paneltitle"}><h3>Top WIP stages</h3><span>Process sequence</span></div>
+{allStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')}{s.uom ? ` ${s.uom}` : ''} · {totalWip ? Math.round(s.qty/totalWip*100) : 0}%</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(0, s.qty/Math.max(1,...allStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!allStages.length && <p>{loading ? 'Loading production stages…' : 'No process stages configured in the master.'}</p>}
 </div>
 <div className={"panel"}>
 <div className={"paneltitle"}><h3>Stock-out / below-minimum items</h3><span style={{color: "var(--red)"}}>{loading ? 'Loading…' : `${lowStock.length} need attention`}</span></div>
@@ -210,9 +239,9 @@ export default function App() {
 <section className={`screen ${activeScreen === 'production' ? 'active' : ''}`} id={"production"}>
 <div className={"screenhead"}><h2>Production WIP</h2><p>Stage-wise quantity currently in process</p></div>
 <main style={{paddingTop: 0}}>
-<div className={"metric wide"}><div><div className={"label"}>Total WIP quantity</div><div className={"value"}>{loading ? '—' : totalWip.toLocaleString('en-IN')} sqft</div><div className={"label"}>Across {allStages.length} process stage{allStages.length === 1 ? '' : 's'}</div></div><div className={"ico"}>⇄</div></div>
-<div className={"panel"}><div className={"paneltitle"}><h3>All stages · process sequence</h3><span>sqft</span></div>
-{allStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')}</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(0,s.qty/Math.max(1,...allStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!allStages.length && <p>{loading ? 'Loading production stages…' : 'No process stages configured in the master.'}</p>}</div>
+<div className={"metric wide"}><div><div className={"label"}>Active WIP stages</div><div className={"value"}>{loading ? '—' : allStages.filter((s:any)=>s.qty>0).length}</div><div className={"label"}>Of {allStages.length} process stage{allStages.length === 1 ? '' : 's'} in master</div></div><div className={"ico"}>⇄</div></div>
+<div className={"panel"}><div className={"paneltitle"}><h3>All stages · process sequence</h3><span>per stage UOM</span></div>
+{allStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')}{s.uom ? ` ${s.uom}` : ''}</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(0,s.qty/Math.max(1,...allStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!allStages.length && <p>{loading ? 'Loading production stages…' : 'No process stages configured in the master.'}</p>}</div>
 <div className={"notice"}>Useful addition: WIP ageing buckets (0–3 days, 4–7 days, over 7 days) and stage-wise planned vs actual yield.</div>
 </main>
 </section>

@@ -34,14 +34,13 @@ export default function Login() {
   return (
     <div className="shell" style={{ paddingBottom: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Header - same gradient/branding as the dashboard */}
-      <header className="top" style={{ paddingTop: 0 }}>
-        <div className="toprow" style={{ marginTop: -18, marginBottom: -24 }}>
-          <div className="brand" style={{ gap: 18, alignItems: 'center' }}>
-            <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="Company logo" style={{ height: 150, width: 'auto', objectFit: 'contain' }} />
-            <img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Product logo" style={{ height: 110, width: 'auto', objectFit: 'contain' }} />
-          </div>
+      <header className="top">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 4 }}>
+          <img src={`${import.meta.env.BASE_URL}images/product-logo-white.png`} alt="Corix logo" style={{ height: 56, width: 'auto', objectFit: 'contain' }} />
+          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: 5, color: '#fff', lineHeight: 1 }}>CORIX</div>
+          <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" style={{ height: 22, width: 'auto', objectFit: 'contain' }} />
         </div>
-        <div className="greeting" style={{ marginTop: 0 }}>
+        <div className="greeting" style={{ marginTop: 14, textAlign: 'center' }}>
           <h2>Welcome back</h2>
           <p>Sign in to continue to your operations overview</p>
         </div>
