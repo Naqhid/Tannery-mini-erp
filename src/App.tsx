@@ -1,10 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiGet } from './services/api';
+import { useAuth } from './lib/authContext';
 import './index.css';
 
 type CostRow = { a: string; name: string; s: string; rate: number; val: number };
 const money = (n: number) => '₹' + n.toLocaleString('en-IN');
 export default function App() {
+ const { user, logout } = useAuth();
+ const navigate = useNavigate();
+ const handleLogout = () => { logout(); navigate('/login', { replace: true }); };
+ const userInitials = (user?.full_name || user?.username || 'U')
+   .split(' ')
+   .map((p) => p.charAt(0))
+   .slice(0, 2)
+   .join('')
+   .toUpperCase();
  const [activeScreen, setActiveScreen] = useState('home');
  const [activeSheet, setActiveSheet] = useState<string | null>(null);
  const [articleFilter, setArticleFilter] = useState('all');
@@ -28,12 +39,21 @@ export default function App() {
   return [...map.values()].filter((s)=>s.qty>0).sort((a,b)=>b.qty-a.qty);
  }, [dashboard?.highestWipStages, production]);
  const stageCosts = Array.isArray(dashboard?.stageCosts) ? dashboard.stageCosts : [];
- const finished: CostRow[] = stageCosts
-  .filter((c:any) => num(c.completed_qty) > 0)
-  .map((c:any) => ({a:String(c.article || '—'),name:String(c.article || '—'),s:String(c.stage || '—'),rate:num(c.cost_per_pc),val:num(c.total_cost)}));
- const wip: CostRow[] = stageCosts
-  .filter((c:any) => num(c.wip_qty) > 0)
-  .map((c:any) => ({a:String(c.article || '—'),name:String(c.article || '—'),s:String(c.stage || '—'),rate:num(c.cost_per_pc),val:num(c.total_cost)}));
+ const aggregateCostRows = (items:any[], quantityField:string):CostRow[] => {
+  const grouped = new Map<string,{a:string;name:string;s:string;qty:number;cost:number}>();
+  items.forEach((item:any) => {
+    const article = String(item.article || '—').trim().replace(/\s+/g,' ');
+    const stage = String(item.stage || '—').trim().replace(/\s+/g,' ');
+    const key = `${article.toLocaleLowerCase()}|${stage.toLocaleLowerCase()}`;
+   const row = grouped.get(key) || { a:article,name:article,s:stage,qty:0,cost:0 };
+   row.qty += num(item[quantityField]);
+   row.cost += num(item.total_cost);
+   grouped.set(key,row);
+  });
+  return [...grouped.values()].map(row => ({a:row.a,name:row.name,s:row.s,rate:row.qty > 0 ? row.cost / row.qty : 0,val:row.cost}));
+ };
+ const finished: CostRow[] = aggregateCostRows(stageCosts.filter((c:any) => num(c.completed_qty) > 0), 'completed_qty');
+ const wip: CostRow[] = aggregateCostRows(stageCosts.filter((c:any) => num(c.wip_qty) > 0), 'wip_qty');
  const filteredFinished = useMemo(() => finished.filter(x => articleFilter === 'all' || x.a === articleFilter || x.name === articleFilter), [articleFilter, stageCosts]);
  const filteredWip = useMemo(() => wip.filter(x => articleFilter === 'all' || x.a === articleFilter || x.name === articleFilter), [articleFilter, stageCosts]);
  const loadData = useCallback(async () => { setLoading(true); setApiError(''); const errs:string[]=[]; const tasks = [
@@ -75,7 +95,7 @@ export default function App() {
  return <>
 <div className={"shell"}>
 <header className={"top"}>
-<div className={"toprow"}><div className={"brand"}><div className={"logo"}>◈</div><div><h1>TANNERY ERP</h1><small>Operations at a glance</small></div></div><div className={"avatar"}>MD</div></div>
+<div className={"toprow"}><div className={"brand"}><div className={"logo"}>◈</div><div><h1>TANNERY ERP</h1><small>Operations at a glance</small></div></div><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div className={"avatar"} title={user?.full_name || user?.username || ''}>{userInitials}</div><button className={"pill"} onClick={handleLogout} title="Sign out" style={{ cursor: 'pointer' }}>⎋ Logout</button></div></div>
 <div className={"greeting"}><div className={"eyebrow"}>MANAGEMENT DASHBOARD</div><h2>Good morning</h2><p>Leather operations overview · {loading ? 'Loading live data…' : apiError ? 'Some data unavailable' : 'Live data from your Tannery ERP backend'}</p></div>
 <div className={"datebar"}><span className={"pill"}>📅 {lastUpdated.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span><span className={"pill"}>⌁ All units</span><span className={"pill"}><button className={"pill refreshpill"} onClick={() => void loadData()}>{loading ? '↻ Loading…' : '↻ Refresh live data'}</button></span></div>
 </header>
@@ -105,12 +125,12 @@ export default function App() {
 <button className={"detailbtn"} style={{width: "100%", marginTop: "12px"}} onClick={() => openSheet('stock')}>Open stock exceptions →</button>
 </div>
 <div className={"panel"}>
-<div className={"paneltitle"}><h3>Costing snapshot</h3><span>₹ per piece</span></div>
+<div className={"paneltitle"}><h3>Costing snapshot</h3><span>Actual stage costs · ₹</span></div>
 <div className={"filter"}><select id={"articleFilter"} value={articleFilter} onChange={(event) => syncFilter(event.target.value)}><option value={"all"}>All articles</option>{Array.from(new Set(finished.map(x=>x.a))).map(a=><option key={a} value={a}>{a}</option>)}</select></div>
 <div style={{fontSize: "11px", fontWeight: "800", margin: "2px 0 5px"}}>Finished cost by article & stage</div>
-<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"finishedTable"}>{renderCostRows(filteredFinished)}</tbody></table></div>
+<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/output unit</th><th>Actual cost</th></tr></thead><tbody id={"finishedTable"}>{renderCostRows(filteredFinished)}</tbody></table></div>
 <div style={{fontSize: "11px", fontWeight: "800", margin: "17px 0 5px"}}>WIP cost by article & stage</div>
-<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"wipTable"}>{renderCostRows(filteredWip)}</tbody></table></div>
+<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/WIP unit</th><th>Accumulated cost</th></tr></thead><tbody id={"wipTable"}>{renderCostRows(filteredWip)}</tbody></table></div>
 <button className={"detailbtn"} style={{width: "100%", marginTop: "12px"}} onClick={() => showScreen('costing')}>Open detailed costing →</button>
 </div>
 <div className={"notice"}><b>Management watch:</b> {configuredMinimums === 0 ? 'Configure minimum stock levels to enable stock-out and below-minimum alerts.' : 'Review stock exceptions before releasing the next production batches.'} Check WIP ageing and order delivery dates alongside these totals.</div>

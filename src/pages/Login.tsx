@@ -32,115 +32,165 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 flex items-center justify-center p-4">
-      {/* Background pattern */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Large gradient orbs */}
-        <div className="absolute -top-48 -right-48 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-[100px]" />
-        <div className="absolute -bottom-48 -left-48 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-[100px]" />
-        <div className="absolute top-1/4 left-1/3 w-72 h-72 bg-cyan-500/8 rounded-full blur-[80px]" />
-
-        {/* Subtle grid overlay */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-      </div>
-
-      <div className="w-full max-w-[420px] relative z-10">
-        {/* Logo and Title - Same as main dashboard */}
-        <div className="text-center mb-4">
-          <div className="flex items-center justify-center -mt-16">
-            <img src={`${import.meta.env.BASE_URL}images/company-logo-silver.png`} alt="AKM Leather" className="h-[180px] object-contain brightness-[2] drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]" />
+    <div className="shell" style={{ paddingBottom: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      {/* Header - same gradient/branding as the dashboard */}
+      <header className="top">
+        <div className="toprow">
+          <div className="brand">
+            <div className="logo">◈</div>
+            <div>
+              <h1>TANNERY ERP</h1>
+              <small>Operations at a glance</small>
+            </div>
           </div>
-          <h1 className="text-4xl font-black text-white mb-1.5 tracking-wider -mt-12">CORIX</h1>
-          <p className="text-white text-xs font-semibold tracking-[0.25em] uppercase">Powering Modern Tanneries</p>
         </div>
+        <div className="greeting">
+          <div className="eyebrow">MANAGEMENT DASHBOARD</div>
+          <h2>Welcome back</h2>
+          <p>Sign in to continue to your operations overview</p>
+        </div>
+      </header>
 
-        {/* Login Card */}
-        <div className="bg-white/[0.07] backdrop-blur-xl rounded-2xl p-8 shadow-2xl shadow-black/20 border border-white/[0.08]">
-          <div className="text-center mb-7">
-            <h2 className="text-lg font-bold text-white">Welcome Back</h2>
-            <p className="text-white text-xs mt-1">Sign in to continue to your dashboard</p>
+      <main style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
+        <div className="panel" style={{ width: '100%', marginTop: 24, padding: 20 }}>
+          <div className="paneltitle">
+            <h3>Sign in</h3>
+            <span>Secure access</span>
           </div>
 
           {error && (
-            <div className="mb-5 p-3.5 bg-red-500/15 border border-red-400/20 rounded-xl flex items-center gap-2.5 text-red-300 text-sm">
-              <AlertCircle size={16} className="shrink-0" />
-              {error}
+            <div className="notice" style={{ background: '#f7e9e5', borderColor: '#e6c9c2', color: '#9a4a42', display: 'flex', alignItems: 'center', gap: 8, marginTop: 0, marginBottom: 14 }}>
+              <AlertCircle size={15} style={{ flexShrink: 0 }} />
+              <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs font-semibold text-white mb-2 uppercase tracking-wider">
-                Username
-              </label>
-              <div className="relative group">
-                <User size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-white group-focus-within:text-white transition-colors z-10" />
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
-                  placeholder="Enter your username"
-                  required
-                  autoFocus
-                />
-              </div>
+          <form onSubmit={handleSubmit}>
+            <label style={labelStyle}>Username</label>
+            <div style={{ position: 'relative', marginBottom: 14 }}>
+              <User size={16} style={iconStyle} />
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                style={inputStyle}
+                placeholder="Enter your username"
+                required
+                autoFocus
+              />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-white mb-2 uppercase tracking-wider">
-                Password
-              </label>
-              <div className="relative group">
-                <Lock size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-white group-focus-within:text-white transition-colors z-10" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-white placeholder-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/30 focus:bg-white/[0.08] transition-all text-sm"
-                  placeholder="Enter your password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-white transition-colors"
-                >
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
-              </div>
+            <label style={labelStyle}>Password</label>
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <Lock size={16} style={iconStyle} />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 40 }}
+                placeholder="Enter your password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={eyeBtnStyle}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-900/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-7"
-            >
+            <button type="submit" disabled={loading} style={submitStyle(loading)}>
               {loading ? (
                 <>
-                  <div className="w-4.5 h-4.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span style={spinnerStyle} />
                   <span>Signing in...</span>
                 </>
               ) : (
                 <>
-                  <LogIn size={17} />
+                  <LogIn size={16} />
                   <span>Sign In</span>
                 </>
               )}
             </button>
           </form>
-
-         
         </div>
+      </main>
 
-        {/* Footer */}
-        <div className="mt-8 text-center">
-          <p className="text-white
-           text-xs font-medium">
-            © 2026 Corix Tannery Solutions. All rights reserved.
-          </p>
-        </div>
+      <div className="footnote" style={{ marginBottom: 18 }}>
+        © 2026 Tannery ERP · Powering Modern Tanneries
       </div>
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 11,
+  fontWeight: 700,
+  color: '#66675f',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  marginBottom: 7,
+};
+
+const iconStyle: React.CSSProperties = {
+  position: 'absolute',
+  left: 12,
+  top: '50%',
+  transform: 'translateY(-50%)',
+  color: '#8b857a',
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '11px 12px 11px 36px',
+  border: '1px solid var(--line)',
+  borderRadius: 10,
+  background: '#fbfaf6',
+  fontSize: 13,
+  color: '#45463f',
+  outline: 'none',
+};
+
+const eyeBtnStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: 10,
+  top: '50%',
+  transform: 'translateY(-50%)',
+  border: 0,
+  background: 'transparent',
+  color: '#8b857a',
+  cursor: 'pointer',
+  display: 'grid',
+  placeItems: 'center',
+};
+
+const submitStyle = (loading: boolean): React.CSSProperties => ({
+  width: '100%',
+  padding: '12px 16px',
+  border: 0,
+  borderRadius: 10,
+  background: 'linear-gradient(135deg,#8d866b,#b9b19a)',
+  color: '#fff',
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: loading ? 'not-allowed' : 'pointer',
+  opacity: loading ? 0.6 : 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  boxShadow: '0 3px 10px #514d3e18',
+});
+
+const spinnerStyle: React.CSSProperties = {
+  width: 16,
+  height: 16,
+  border: '2px solid #ffffff55',
+  borderTopColor: '#fff',
+  borderRadius: '50%',
+  display: 'inline-block',
+  animation: 'spin 0.7s linear infinite',
+};

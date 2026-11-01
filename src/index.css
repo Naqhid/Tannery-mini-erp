@@ -73,3 +73,6 @@ body{background:#e9e7df;color:var(--ink)}
 
 /* Live chart visibility and mobile scroll fixes */
 .trendchart{display:flex;align-items:flex-end;gap:7px;height:94px;min-height:94px;overflow:visible}.trendcol{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}.trendbar{display:block;width:100%;min-height:5px;flex-shrink:0}.donutwrap{min-height:94px}.donut{flex-shrink:0}.chartbox{min-width:0;overflow:visible}.screen{padding-bottom:20px}.bottomnav{z-index:30}
+
+/* Login spinner */
+@keyframes spin{to{transform:rotate(360deg)}}
