@@ -76,3 +76,50 @@ body{background:#e9e7df;color:var(--ink)}
 
 /* Login spinner */
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Navy theme override (#172554) ───────────────────────────────────────────
+   Keeps the existing light layout but switches the brand/accent colour to the
+   deep navy used by the main web app. Placed last so it wins the cascade. */
+:root{
+  --navy:#172554;
+  --blue:#172554;
+  --teal:#3b5b9e;
+  --ink:#1b2440;
+  --muted:#6b7280;
+  --line:#e3e7ef;
+  --red:#d94a54;
+  --amber:#c98212;
+  --green:#2f855a;
+}
+body{background:#eceff4;color:var(--ink)}
+.shell{background:#f5f7fb}
+.top{background:linear-gradient(135deg,#172554,#273a6b);color:#fff}
+.brand small,.greeting .eyebrow,.greeting p{color:#c3cde4}
+.logo{background:#ffffff20;color:#fff}
+.avatar{border-color:#ffffff66;color:#fff}
+.pill{border-color:#ffffff40;background:#ffffff18;color:#fff}
+.metric,.panel{box-shadow:0 3px 10px #17255410}
+.ico{background:#eaeefa;color:#172554}
+.metric.wide .ico{background:#e9edf8;color:#2a3f6e}
+.metric .trend{color:#2f855a}
+.metric.wide .right{color:#1b2440}
+.bar{background:linear-gradient(90deg,#172554,#3b5b9e)}
+.bar.teal{background:linear-gradient(90deg,#2a3f6e,#4f6fb0)}
+.bar.orange{background:linear-gradient(90deg,#3b5b9e,#7d94c7)}
+.navitem.active{color:#172554}
+.navitem.active .navico{background:#eaeefa}
+.sectionhead button,.detailbtn{color:#172554}
+.detailbtn{background:#f8faff;border-color:#d8dfee}
+.stagechip{background:#eaeefa;color:#172554}
+.stockicon{background:#f7e9e5;color:#b65d54}
+.notice{background:#eef2fb;border-color:#d4ddf1;color:#2a3f6e}
+.green-notice{background:#eaf4ee;border-color:#cfe4d8;color:#2f6b4f}
+.filter select{background:#f8faff;color:#1b2440}
+.bottomnav{background:#f8faff}
+.chartbox{background:#f8faff}
+.donut{background:conic-gradient(#172554 0 71%,#4f6fb0 71% 88%,#a9b6d6 88% 100%)}
+.donut:after{background:#f8faff}
+.legend{color:#4a5368}
+.trendchart{border-bottom:1px solid #d8dfee}
+.trendbar{background:linear-gradient(180deg,#3b5b9e,#172554)}
+.trendbar.highlight{background:linear-gradient(180deg,#4f6fb0,#273a6b)}

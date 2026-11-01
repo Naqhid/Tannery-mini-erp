@@ -172,7 +172,7 @@ const submitStyle = (loading: boolean): React.CSSProperties => ({
   padding: '12px 16px',
   border: 0,
   borderRadius: 10,
-  background: 'linear-gradient(135deg,#8d866b,#b9b19a)',
+  background: 'linear-gradient(135deg,#172554,#3b5b9e)',
   color: '#fff',
   fontSize: 13,
   fontWeight: 700,
@@ -182,7 +182,7 @@ const submitStyle = (loading: boolean): React.CSSProperties => ({
   alignItems: 'center',
   justifyContent: 'center',
   gap: 8,
-  boxShadow: '0 3px 10px #514d3e18',
+  boxShadow: '0 3px 10px #17255422',
 });
 
 const spinnerStyle: React.CSSProperties = {

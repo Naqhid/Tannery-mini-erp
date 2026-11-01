@@ -22,6 +22,7 @@ export default function App() {
  const [orders, setOrders] = useState<any[]>([]);
  const [materials, setMaterials] = useState<any[]>([]);
  const [production, setProduction] = useState<any[]>([]);
+ const [processStages, setProcessStages] = useState<any[]>([]);
  const [dashboard, setDashboard] = useState<any>({});
  const [loading, setLoading] = useState(true);
  const [apiError, setApiError] = useState('');
@@ -32,12 +33,39 @@ export default function App() {
  const orderQty = (o:any) => num(pick(o,'total_quantity','total_qty','order_qty','order_quantity','quantity'));
  const materialValue = (m:any) => num(pick(m,'stock_value','inventory_value','total_value','value','current_value'));
  const lowStock = Array.isArray(dashboard?.lowStock) ? dashboard.lowStock : materials.filter((m:any) => { const q=num(pick(m,'available_qty','current_stock','stock_qty','quantity','qty','current_qty')); const min=num(pick(m,'minimum_stock','min_stock','reorder_level','minimum_qty','min_qty')); return min > 0 && q <= min; });
- const wipStages = useMemo(() => {
-  if (Array.isArray(dashboard?.highestWipStages)) return dashboard.highestWipStages.map((s:any) => ({ stage: String(s.stage || '—'), qty: num(s.wip_qty), count: num(s.order_count) }));
-  const map = new Map<string,{stage:string;qty:number;count:number}>();
-  production.forEach((p:any)=>{ const stage=String(pick(p,'stage_name','process_stage','stage','process_name')); const qty=num(pick(p,'wip_qty','balance_qty')); const prev=map.get(stage)||{stage,qty:0,count:0}; prev.qty+=qty; prev.count+=1; map.set(stage,prev); });
-  return [...map.values()].filter((s)=>s.qty>0).sort((a,b)=>b.qty-a.qty);
- }, [dashboard?.highestWipStages, production]);
+ // WIP quantity per stage name, aggregated from the production-status data.
+ const wipByStage = useMemo(() => {
+  const map = new Map<string,{qty:number;count:number}>();
+  production.forEach((p:any)=>{
+   const stage=String(pick(p,'stage_name','process_stage','stage','process_name')).trim();
+   if (!stage || stage === '—') return;
+   const qty=num(pick(p,'wip_qty','balance_qty'));
+   const prev=map.get(stage.toLowerCase())||{qty:0,count:0};
+   prev.qty+=qty; prev.count+=1; map.set(stage.toLowerCase(),prev);
+  });
+  return map;
+ }, [production]);
+
+ // All stages from the Process Stage master (ordered by seq), each carrying its
+ // current WIP quantity (0 when no work is in progress). This guarantees every
+ // configured stage is listed, not only the ones that happen to have WIP.
+ const allStages = useMemo(() => {
+  const active = processStages.filter((s:any)=>String(pick(s,'status')||'Active').toLowerCase()!=='inactive');
+  if (active.length) {
+   return active
+    .map((s:any)=>{
+     const name=String(pick(s,'name','stage_name','stage')||'—').trim();
+     const hit=wipByStage.get(name.toLowerCase());
+     return { stage:name, seq:num(pick(s,'seq')), qty:hit?hit.qty:0, count:hit?hit.count:0 };
+    })
+    .sort((a,b)=>a.seq-b.seq);
+  }
+  // Fallback: no master available — derive stages from production data.
+  return [...wipByStage.entries()].map(([k,v])=>({ stage:k, seq:0, qty:v.qty, count:v.count })).sort((a,b)=>b.qty-a.qty);
+ }, [processStages, wipByStage]);
+
+ // Descending-by-quantity view used by the "Top WIP stages" card.
+ const wipStages = useMemo(() => [...allStages].sort((a,b)=>b.qty-a.qty), [allStages]);
  const stageCosts = Array.isArray(dashboard?.stageCosts) ? dashboard.stageCosts : [];
  const aggregateCostRows = (items:any[], quantityField:string):CostRow[] => {
   const grouped = new Map<string,{a:string;name:string;s:string;qty:number;cost:number}>();
@@ -60,16 +88,31 @@ export default function App() {
   apiGet<any>('/dashboard/stats').then(r=>setDashboard(r?.data ?? r)).catch(e=>errs.push('Dashboard: '+(e?.message||'failed'))),
   apiGet<any>('/sales-orders?page=1&limit=200').then(r=>setOrders(rows(r))).catch(e=>errs.push('Orders: '+(e?.message||'failed'))),
   apiGet<any>('/materials?page=1&limit=500').then(r=>setMaterials(rows(r))).catch(e=>errs.push('Inventory: '+(e?.message||'failed'))),
-    apiGet<any>('/production-status/orders?page=1&limit=200').then(r=>setProduction(rows(r))).catch(e=>errs.push('Production: '+(e?.message||'failed')))
+    apiGet<any>('/production-status/orders?page=1&limit=200').then(r=>setProduction(rows(r))).catch(e=>errs.push('Production: '+(e?.message||'failed'))),
+    apiGet<any>('/process-stages?page=1&limit=200&sortBy=seq&sortOrder=asc').then(r=>setProcessStages(rows(r))).catch(e=>errs.push('Stages: '+(e?.message||'failed')))
  ]; await Promise.all(tasks); setApiError(errs.join(' · ')); setLastUpdated(new Date()); setLoading(false); }, []);
  useEffect(()=>{ void loadData(); }, [loadData]);
  const totalOrders = orders.length;
  const openOrders = orders.filter((o:any)=>!/complete|closed|cancel|shipped|delivered/i.test(String(pick(o,'status','order_status'))));
  const totalOrderedQty = orders.reduce((s:number,o:any)=>s+orderQty(o),0);
  const totalInventory = dashboard?.inventoryValue?.total != null ? num(dashboard.inventoryValue.total) : materials.reduce((sum:number,m:any)=>sum+materialValue(m),0);
- const inventoryBreakdown = Array.isArray(dashboard?.inventoryValue?.breakdown)
-  ? dashboard.inventoryValue.breakdown.map((item:any) => [item.category, num(item.value)])
-  : Object.entries(materials.reduce((a:any,m:any)=>{const k=String(pick(m,'category_name','material_type','type','category','group_name'));a[k]=(a[k]||0)+materialValue(m);return a;},{})).sort((a:any,b:any)=>Number(b[1])-Number(a[1]));
+ // Show every material category/type, including those that currently value 0.
+ // Seed the map from all materials so zero-value categories still appear, then
+ // overlay the ledger-accurate values from the backend breakdown when present.
+ const inventoryBreakdown = useMemo(() => {
+  const map = new Map<string, number>();
+  materials.forEach((m:any) => {
+   const k = String(pick(m,'category_name','material_type','type','category','group_name') || 'Other').trim() || 'Other';
+   map.set(k, (map.get(k) || 0) + materialValue(m));
+  });
+  if (Array.isArray(dashboard?.inventoryValue?.breakdown)) {
+   dashboard.inventoryValue.breakdown.forEach((item:any) => {
+    const k = String(item.category || 'Other').trim() || 'Other';
+    map.set(k, num(item.value));
+   });
+  }
+  return [...map.entries()].sort((a, b) => b[1] - a[1]);
+ }, [materials, dashboard?.inventoryValue?.breakdown]);
  const productionOutputTrend = Array.isArray(dashboard?.productionOutputTrend) ? dashboard.productionOutputTrend : [];
  const hasProductionOutput = productionOutputTrend.some((point:any) => num(point.value) > 0);
  const configuredMinimums = materials.filter((m:any) => num(m.reorder_level) > 0).length;
@@ -78,10 +121,10 @@ export default function App() {
   : 'No materials are currently at or below minimum stock.';
  const totalWip = wipStages.reduce((s:any,x:any)=>s+x.qty,0);
  const sheetContent: Record<string, { title: string; body: React.ReactNode }> = {
- orders: { title: 'Total sales orders', body: <><div className="big">{orders.length} orders</div><p>{totalOrderedQty.toLocaleString('en-IN')} pcs in the returned sales-order records.</p><p>Counts are based on records returned by the sales-order API.</p><p>Recommended drill-down: customer, order no., article, colour, order quantity, dispatched quantity and balance quantity.</p></> },
+ orders: { title: 'Total sales orders', body: <><div className="big">{orders.length} orders</div><p>{totalOrderedQty.toLocaleString('en-IN')} sqft in the returned sales-order records.</p><p>Counts are based on records returned by the sales-order API.</p><p>Recommended drill-down: customer, order no., article, colour, order quantity, dispatched quantity and balance quantity.</p></> },
  openorders: { title: 'Open orders', body: <><div className="big">{openOrders.length} open orders</div><p>Orders are classified as open using their current sales-order status.</p></> },
  inventory: { title: 'Inventory valuation', body: <><div className="big">{money(totalInventory)}</div><p>Live stock value from the stock ledger.</p></> },
- wip: { title: 'Top WIP stages', body: <><div className="big">{totalWip.toLocaleString('en-IN')} pcs</div><p>Current work in progress by stage.</p>{wipStages.length ? <ul>{wipStages.map((stage:any)=><li key={stage.stage}>{stage.stage}: {stage.qty.toLocaleString('en-IN')} pcs</li>)}</ul> : <p>No active WIP quantities were returned.</p>}</> },
+ wip: { title: 'Top WIP stages', body: <><div className="big">{totalWip.toLocaleString('en-IN')} sqft</div><p>Current work in progress by stage.</p>{wipStages.length ? <ul>{wipStages.map((stage:any)=><li key={stage.stage}>{stage.stage}: {stage.qty.toLocaleString('en-IN')} sqft</li>)}</ul> : <p>No active WIP quantities were returned.</p>}</> },
  stock: { title: 'Stock exceptions', body: <><div className="big" style={{ color: '#d94a54' }}>{lowStock.length} items need attention</div>{lowStock.length ? <ul>{lowStock.map((item:any)=><li key={item.id}>{pick(item,'item','name','material_name')}: {pick(item,'qty','current_qty')} (minimum {pick(item,'threshold','reorder_level')})</li>)}</ul> : <p>{stockEmptyMessage}</p>}</> },
  period: { title: 'Reporting period', body: <><p>Order and stock cards show the current snapshot. The production chart shows the last six months of recorded output.</p></> },
 };
@@ -103,7 +146,7 @@ export default function App() {
 <section className={`screen ${activeScreen === 'home' ? 'active' : ''}`} id={"home"}>
 <div className={"sectionhead"}><h3>Order & inventory summary</h3><button onClick={() => openSheet('period')}>Current snapshot ▾</button></div>
 <div className={"grid"}>
-<div className={"metric"} onClick={() => openSheet('orders')}><div className={"metrichead"}><div className={"ico"}>▤</div><span className={"trend"}>Live</span></div><div className={"value"}>{loading ? '—' : totalOrders.toLocaleString('en-IN')}</div><div className={"label"}>Total sales orders</div><div className={"subvalue"}>{loading ? 'Loading…' : `${totalOrderedQty.toLocaleString('en-IN')} pcs ordered`}</div></div>
+<div className={"metric"} onClick={() => openSheet('orders')}><div className={"metrichead"}><div className={"ico"}>▤</div><span className={"trend"}>Live</span></div><div className={"value"}>{loading ? '—' : totalOrders.toLocaleString('en-IN')}</div><div className={"label"}>Total sales orders</div><div className={"subvalue"}>{loading ? 'Loading…' : `${totalOrderedQty.toLocaleString('en-IN')} sqft ordered`}</div></div>
 <div className={"metric"} onClick={() => openSheet('openorders')}><div className={"metrichead"}><div className={"ico"} style={{background: "#fff4e5", color: "#b9750a"}}>◷</div><span style={{fontSize: "10px", color: "#c98212", fontWeight: "700"}}>Open</span></div><div className={"value"}>{loading ? '—' : openOrders.length.toLocaleString('en-IN')}</div><div className={"label"}>Open orders</div><div className={"subvalue"}>Based on current order status</div></div>
 <div className={"metric wide"} onClick={() => openSheet('inventory')}><div><div className={"metrichead"}><div className={"ico"}>▦</div><span className={"trend"}>Stock value</span></div><div className={"value"}>{loading ? '—' : `₹ ${totalInventory.toLocaleString('en-IN')}`}</div><div className={"label"}>Total inventory valuation</div></div><div className={"right"}><div style={{fontSize: "10px", color: "#718096"}}>Items tracked</div><b style={{fontSize: "17px"}}>{loading ? '—' : materials.length.toLocaleString('en-IN')}</b><div style={{fontSize: "10px", color: "#718096", marginTop: "4px"}}>Materials in stock ledger</div></div></div>
 </div>
@@ -115,9 +158,8 @@ export default function App() {
 </div>
 </div>
 <div className={"panel"}>
-<div className={"paneltitle"}><h3>Top WIP stages</h3><span>Descending · pieces</span></div>
-{wipStages.slice(0,3).map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')} pcs · {totalWip ? Math.round(s.qty/totalWip*100) : 0}%</span></div><div className={"track"}><div className={`bar ${i===1?'teal':i===2?'orange':''}`} style={{width: `${totalWip ? s.qty/Math.max(1,...wipStages.map((x:any)=>x.qty))*100 : 0}%`}}></div></div></div>)}{!wipStages.length && <p>{loading ? 'Loading production stages…' : 'No production-stage quantities returned by the backend.'}</p>}
-<button className={"detailbtn"} style={{width: "100%", marginTop: "5px"}} onClick={() => openSheet('wip')}>View all production stages →</button>
+<div className={"paneltitle"}><h3>Top WIP stages</h3><span>Process sequence · sqft</span></div>
+{allStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')} sqft · {totalWip ? Math.round(s.qty/totalWip*100) : 0}%</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(0, s.qty/Math.max(1,...allStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!allStages.length && <p>{loading ? 'Loading production stages…' : 'No process stages configured in the master.'}</p>}
 </div>
 <div className={"panel"}>
 <div className={"paneltitle"}><h3>Stock-out / below-minimum items</h3><span style={{color: "var(--red)"}}>{loading ? 'Loading…' : `${lowStock.length} need attention`}</span></div>
@@ -128,9 +170,9 @@ export default function App() {
 <div className={"paneltitle"}><h3>Costing snapshot</h3><span>Actual stage costs · ₹</span></div>
 <div className={"filter"}><select id={"articleFilter"} value={articleFilter} onChange={(event) => syncFilter(event.target.value)}><option value={"all"}>All articles</option>{Array.from(new Set(finished.map(x=>x.a))).map(a=><option key={a} value={a}>{a}</option>)}</select></div>
 <div style={{fontSize: "11px", fontWeight: "800", margin: "2px 0 5px"}}>Finished cost by article & stage</div>
-<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/output unit</th><th>Actual cost</th></tr></thead><tbody id={"finishedTable"}>{renderCostRows(filteredFinished)}</tbody></table></div>
+<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"finishedTable"}>{renderCostRows(filteredFinished)}</tbody></table></div>
 <div style={{fontSize: "11px", fontWeight: "800", margin: "17px 0 5px"}}>WIP cost by article & stage</div>
-<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/WIP unit</th><th>Accumulated cost</th></tr></thead><tbody id={"wipTable"}>{renderCostRows(filteredWip)}</tbody></table></div>
+<div style={{overflowX: "auto"}}><table className={"costtable"}><thead><tr><th>Article</th><th>Stage</th><th>₹/pc</th><th>Total value</th></tr></thead><tbody id={"wipTable"}>{renderCostRows(filteredWip)}</tbody></table></div>
 <button className={"detailbtn"} style={{width: "100%", marginTop: "12px"}} onClick={() => showScreen('costing')}>Open detailed costing →</button>
 </div>
 <div className={"notice"}><b>Management watch:</b> {configuredMinimums === 0 ? 'Configure minimum stock levels to enable stock-out and below-minimum alerts.' : 'Review stock exceptions before releasing the next production batches.'} Check WIP ageing and order delivery dates alongside these totals.</div>
@@ -139,9 +181,9 @@ export default function App() {
 <section className={`screen ${activeScreen === 'orders' ? 'active' : ''}`} id={"orders"}>
 <div className={"screenhead"}><h2>Orders</h2><p>Sales order status and outstanding quantity</p></div>
 <main style={{paddingTop: 0}}>
-<div className={"kpi2"}><div className={"metric"}><div className={"label"}>Total orders</div><div className={"value"}>{totalOrders}</div><div className={"subvalue"}>{totalOrderedQty.toLocaleString('en-IN')} pcs</div></div><div className={"metric"}><div className={"label"}>Open orders</div><div className={"value"}>{openOrders.length}</div><div className={"subvalue"}>Calculated from current statuses</div></div></div>
+<div className={"kpi2"}><div className={"metric"}><div className={"label"}>Total orders</div><div className={"value"}>{totalOrders}</div><div className={"subvalue"}>{totalOrderedQty.toLocaleString('en-IN')} sqft</div></div><div className={"metric"}><div className={"label"}>Open orders</div><div className={"value"}>{openOrders.length}</div><div className={"subvalue"}>Calculated from current statuses</div></div></div>
 <div className={"panel"}><div className={"paneltitle"}><h3>Open orders requiring attention</h3><span>Current status</span></div>
-{openOrders.slice(0,10).map((o:any,i:number)=><div className={"costrow"} key={o.id ?? i}><div className={"rowmain"}><b>{pick(o,'order_no','order_number','sales_order_no','code')} · {pick(o,'customer_name','customer','customer_code')}</b><small>{pick(o,'article_name','product_name','article','product')} · {pick(o,'due_date','delivery_date','order_date')}</small></div><div className={"qty"}>{orderQty(o).toLocaleString('en-IN')} pcs<small>{pick(o,'status','order_status')}</small></div></div>)}{!openOrders.length && <p>{loading ? 'Loading open orders…' : 'No open orders returned by the backend.'}</p>}</div>
+{openOrders.slice(0,10).map((o:any,i:number)=><div className={"costrow"} key={o.id ?? i}><div className={"rowmain"}><b>{pick(o,'order_no','order_number','sales_order_no','code')} · {pick(o,'customer_name','customer','customer_code')}</b><small>{pick(o,'article_name','product_name','article','product')} · {pick(o,'due_date','delivery_date','order_date')}</small></div><div className={"qty"}>{orderQty(o).toLocaleString('en-IN')} sqft<small>{pick(o,'status','order_status')}</small></div></div>)}{!openOrders.length && <p>{loading ? 'Loading open orders…' : 'No open orders returned by the backend.'}</p>}</div>
 <div className={"notice"}>Suggested KPI: show <b>overdue open orders</b> and <b>on-time delivery %</b> next to open order quantity.</div>
 </main>
 </section>
@@ -150,7 +192,7 @@ export default function App() {
 <main style={{paddingTop: 0}}>
 <div className={"metric wide"}><div><div className={"label"}>Total inventory value</div><div className={"value"}>{loading ? '—' : `₹ ${totalInventory.toLocaleString('en-IN')}`}</div><div className={"label"}>Live valuation from stock ledger</div></div><div className={"ico"}>▦</div></div>
 <div className={"panel"}><div className={"paneltitle"}><h3>Value by category</h3><span>₹ INR</span></div>
-{inventoryBreakdown.slice(0,8).map(([category,value]:any,i:number)=><div className={"stage"} key={category}><div className={"stageline"}><b>{category}</b><span>{money(num(value))}</span></div><div className={"track"}><div className={`bar ${i===1?'teal':i===2?'orange':''}`} style={{width: `${Math.max(1,num(value)/Math.max(1,...inventoryBreakdown.map((x:any)=>num(x[1])))*100)}%`}}></div></div></div>)}{!inventoryBreakdown.length && <p>{loading ? 'Loading inventory categories…' : 'No valued stock was returned by the stock ledger.'}</p>}</div>
+{inventoryBreakdown.map(([category,value]:any,i:number)=><div className={"stage"} key={category}><div className={"stageline"}><b>{category}</b><span>{money(num(value))}</span></div><div className={"track"}><div className={`bar ${i===1?'teal':i===2?'orange':''}`} style={{width: `${Math.max(0,num(value)/Math.max(1,...inventoryBreakdown.map((x:any)=>num(x[1])))*100)}%`}}></div></div></div>)}{!inventoryBreakdown.length && <p>{loading ? 'Loading inventory categories…' : 'No material categories found.'}</p>}</div>
 <div className={"panel"}><div className={"paneltitle"}><h3>Stock exceptions</h3><span style={{color: "var(--red)"}}>{lowStock.length} items</span></div>
 {lowStock.slice(0,8).map((m:any,i:number)=><div className={"stockrow"} key={m.id ?? i}><div className={"stockicon"}>!</div><div className={"rowmain"}><b>{pick(m,'item','name','material_name','item_name','description')}</b><small>Minimum {pick(m,'threshold','minimum_stock','reorder_level')}</small></div><div className={"qty"}>{m.qty ?? `${pick(m,'available_qty','current_stock','stock_qty','quantity','current_qty')} ${pick(m,'uom','unit','unit_name')}`}<small>{pick(m,'status') !== '—' ? pick(m,'status') : 'LOW'}</small></div></div>)}{!lowStock.length && <p>{loading ? 'Loading stock exceptions…' : stockEmptyMessage}</p>}</div>
 <div className={"notice green-notice"}>Recommended: display stock on hand, allocated quantity, available quantity, reorder level and last receipt date for each exception.</div>
@@ -168,9 +210,9 @@ export default function App() {
 <section className={`screen ${activeScreen === 'production' ? 'active' : ''}`} id={"production"}>
 <div className={"screenhead"}><h2>Production WIP</h2><p>Stage-wise quantity currently in process</p></div>
 <main style={{paddingTop: 0}}>
-<div className={"metric wide"}><div><div className={"label"}>Total WIP quantity</div><div className={"value"}>{loading ? '—' : totalWip.toLocaleString('en-IN')} pcs</div><div className={"label"}>Across {wipStages.length} stages returned by backend</div></div><div className={"ico"}>⇄</div></div>
-<div className={"panel"}><div className={"paneltitle"}><h3>All stages · descending quantity</h3><span>Pieces</span></div>
-{wipStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')}</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(1,s.qty/Math.max(1,...wipStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!wipStages.length && <p>{loading ? 'Loading production WIP…' : 'No stage-wise quantities returned by the production API.'}</p>}</div>
+<div className={"metric wide"}><div><div className={"label"}>Total WIP quantity</div><div className={"value"}>{loading ? '—' : totalWip.toLocaleString('en-IN')} sqft</div><div className={"label"}>Across {allStages.length} process stage{allStages.length === 1 ? '' : 's'}</div></div><div className={"ico"}>⇄</div></div>
+<div className={"panel"}><div className={"paneltitle"}><h3>All stages · process sequence</h3><span>sqft</span></div>
+{allStages.map((s:any,i:number)=><div className={"stage"} key={s.stage}><div className={"stageline"}><b>{s.stage}</b><span>{s.qty.toLocaleString('en-IN')}</span></div><div className={"track"}><div className={`bar ${i%3===1?'teal':i%3===2?'orange':''}`} style={{width: `${Math.max(0,s.qty/Math.max(1,...allStages.map((x:any)=>x.qty))*100)}%`}}></div></div></div>)}{!allStages.length && <p>{loading ? 'Loading production stages…' : 'No process stages configured in the master.'}</p>}</div>
 <div className={"notice"}>Useful addition: WIP ageing buckets (0–3 days, 4–7 days, over 7 days) and stage-wise planned vs actual yield.</div>
 </main>
 </section>

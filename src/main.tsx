@@ -11,8 +11,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e9e7df' }}>
-        <div style={{ width: 32, height: 32, border: '3px solid #d6d2c6', borderTopColor: '#8d866b', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eceff4' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid #d8dfee', borderTopColor: '#172554', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
       </div>
     );
   }
