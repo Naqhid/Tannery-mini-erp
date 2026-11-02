@@ -335,40 +335,40 @@ export default function SalesOrderDetail() {
       toast.error('Delivery Date is required for every item');
       return;
     }
-    // Delivery Date must not be before either the Order Date or the creation date.
-    // For a new order the creation date is today; for an existing one it's the
-    // stored created_at (falling back to the order date).
-    //
-    // Important: order_date / delivery_date are plain calendar dates (YYYY-MM-DD)
-    // while created_at is a timestamp instant. Comparing them via UTC can roll a
-    // same-day value onto the next/previous day due to timezone offsets, which
-    // wrongly rejected valid delivery dates. We therefore normalise every value
-    // to its *local* calendar day before comparing.
-    const toDay = (v?: string | number | null) => {
+    // Delivery Date must not be before the Order Date. For a brand-new order it
+    // also can't be before today (the creation date). We compare plain calendar
+    // dates as YYYY-MM-DD strings so there is no timezone/UTC drift that could
+    // wrongly reject a same-day value (e.g. an order created today with a
+    // same-day delivery date).
+    const toDayStr = (v?: string | number | null): string | null => {
       if (!v) return null;
-      // Date-only strings: parse the components directly so they aren't shifted
-      // by the browser timezone (new Date('2026-10-01') is UTC midnight).
       if (typeof v === 'string') {
         const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (m) return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        if (m) return `${m[1]}-${m[2]}-${m[3]}`;
       }
       const d = new Date(v);
       if (Number.isNaN(d.getTime())) return null;
-      // Timestamp: use the local calendar day the user actually sees.
-      return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     };
-    const orderDay = toDay(order.order_date);
-    const createdDay = isNew ? toDay(new Date()) : toDay((order as any).created_at);
-    const floor = Math.max(orderDay ?? -Infinity, createdDay ?? -Infinity);
-    if (Number.isFinite(floor)) {
-      const headerDay = toDay(order.delivery_date);
-      if (headerDay != null && headerDay < floor) {
+    const todayStr = toDayStr(new Date());
+    const orderStr = toDayStr(order.order_date);
+    // The earliest allowed delivery date: the order date, and (for new orders
+    // only) today. String comparison is valid because the format is zero-padded
+    // ISO (YYYY-MM-DD) which sorts lexicographically the same as by date.
+    const floorStr = [orderStr, isNew ? todayStr : null]
+      .filter((s): s is string => !!s)
+      .sort()
+      .pop() || null;
+    if (floorStr) {
+      const headerStr = toDayStr(order.delivery_date);
+      if (headerStr && headerStr < floorStr) {
         toast.error('Delivery Date must not be before the Order Date or the order creation date');
         return;
       }
       const badItem = order.items.findIndex(i => {
-        const d = toDay(i.delivery_date);
-        return d != null && d < floor;
+        const d = toDayStr(i.delivery_date);
+        return d != null && d < floorStr;
       });
       if (badItem >= 0) {
         toast.error(`Delivery Date for item ${badItem + 1} must not be before the Order Date or the creation date`);
@@ -558,9 +558,9 @@ export default function SalesOrderDetail() {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
-  const createdDateStr = isNew ? toDateStr(new Date()) : toDateStr((order as any).created_at);
+  const todayDateStr = isNew ? toDateStr(new Date()) : '';
   const orderDateStr = toDateStr(order.order_date);
-  const deliveryMinDate = [orderDateStr, createdDateStr].filter(Boolean).sort().pop() || '';
+  const deliveryMinDate = [orderDateStr, todayDateStr].filter(Boolean).sort().pop() || '';
 
 
   return (
