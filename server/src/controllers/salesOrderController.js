@@ -34,31 +34,43 @@ export async function getOne(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// Parse a date-only value (YYYY-MM-DD or ISO) into a UTC day timestamp, so
-// comparisons ignore the time-of-day component. Returns null when empty/invalid.
-function toDay(value) {
+// Normalise any date value to a plain calendar day string (YYYY-MM-DD). Date-only
+// strings are taken verbatim so they are never shifted by the server timezone;
+// timestamps (e.g. created_at) use their LOCAL calendar day. Zero-padded ISO
+// strings sort lexicographically the same as by date, so plain string compares
+// are safe and free of UTC/timezone drift. Returns null when empty/invalid.
+function toDayStr(value) {
   if (!value) return null;
+  if (typeof value === 'string') {
+    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  }
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// Delivery Date must be strictly later than both the Order Date and the order's
-// creation date. Applies to the header delivery_date and every line item's
-// delivery_date. `createdAt` is "now" for new orders, or the stored created_at
-// for updates. Returns an error message string, or null when valid.
-function validateDeliveryDates(data, items, createdAt) {
-  const orderDay = toDay(data.order_date);
-  const createdDay = toDay(createdAt);
-  // The latest of order date / creation date is the floor the delivery must beat.
-  const floor = Math.max(orderDay ?? -Infinity, createdDay ?? -Infinity);
-  if (!Number.isFinite(floor)) return null;
+// Delivery Date must not be before the Order Date. For a brand-new order it also
+// can't be before today (the creation date). Applies to the header delivery_date
+// and every line item's delivery_date. `isNew` adds today as a floor only for
+// creates; updates are bound solely by the order date (the stored created_at is
+// a timezone-sensitive timestamp and must not gate an otherwise-valid date).
+// Returns an error message string, or null when valid.
+function validateDeliveryDates(data, items, isNew) {
+  const orderStr = toDayStr(data.order_date);
+  const todayStr = toDayStr(new Date());
+  const floorStr = [orderStr, isNew ? todayStr : null]
+    .filter((s) => !!s)
+    .sort()
+    .pop() || null;
+  if (!floorStr) return null;
 
   const check = (value, label) => {
-    const day = toDay(value);
+    const day = toDayStr(value);
     if (day == null) return null;
-    if (day <= floor) {
-      return `${label} must be later than both the Order Date and the order creation date.`;
+    if (day < floorStr) {
+      return `${label} must not be before the Order Date or the order creation date.`;
     }
     return null;
   };
@@ -78,8 +90,8 @@ export async function create(req, res, next) {
     const { items = [], ...data } = req.body;
     if (!data.customer_id) return res.status(400).json({ error: 'Customer is required' });
     if (!data.order_date) return res.status(400).json({ error: 'Order date is required' });
-    // New order: creation date is now.
-    const dateErr = validateDeliveryDates(data, items, new Date());
+    // New order: delivery date can't be before the order date or today.
+    const dateErr = validateDeliveryDates(data, items, true);
     if (dateErr) return res.status(400).json({ error: dateErr });
     const createdBy = req.user?.id || null;
     const result = await model.create(data, items, createdBy);
@@ -91,10 +103,12 @@ export async function update(req, res, next) {
   try {
     const { items = [], ...data } = req.body;
     if (!data.customer_id) return res.status(400).json({ error: 'Customer is required' });
-    // Validate against the stored creation date (falls back to order_date).
+    // Existing order: delivery date is bound only by the order date (not the
+    // stored, timezone-sensitive created_at which previously caused false
+    // rejections of valid same-day/next-day delivery dates).
     const existing = await model.getById(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Sales order not found' });
-    const dateErr = validateDeliveryDates(data, items, existing.created_at);
+    const dateErr = validateDeliveryDates(data, items, false);
     if (dateErr) return res.status(400).json({ error: dateErr });
     const updatedBy = req.user?.id || null;
     const ok = await model.update(req.params.id, data, items, updatedBy);
