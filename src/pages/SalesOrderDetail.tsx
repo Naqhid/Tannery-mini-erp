@@ -349,16 +349,16 @@ export default function SalesOrderDetail() {
     const floor = Math.max(orderDay ?? -Infinity, createdDay ?? -Infinity);
     if (Number.isFinite(floor)) {
       const headerDay = toDay(order.delivery_date);
-      if (headerDay != null && headerDay <= floor) {
-        toast.error('Delivery Date must be later than both the Order Date and the order creation date');
+      if (headerDay != null && headerDay < floor) {
+        toast.error('Delivery Date must not be before the Order Date or the order creation date');
         return;
       }
       const badItem = order.items.findIndex(i => {
         const d = toDay(i.delivery_date);
-        return d != null && d <= floor;
+        return d != null && d < floor;
       });
       if (badItem >= 0) {
-        toast.error(`Delivery Date for item ${badItem + 1} must be later than both the Order Date and the creation date`);
+        toast.error(`Delivery Date for item ${badItem + 1} must not be before the Order Date or the creation date`);
         return;
       }
     }
@@ -529,6 +529,19 @@ export default function SalesOrderDetail() {
     { id: 'remarks' as const, label: 'Remarks', icon: MessageSquare },
   ];
 
+  // Earliest allowed delivery date: the later of the Order Date and the order
+  // creation date (today for a new order). Used as the `min` on date pickers so
+  // a delivery date can't be set before the order was placed/created.
+  const toDateStr = (v?: string | number | null) => {
+    if (!v) return '';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toISOString().split('T')[0];
+  };
+  const createdDateStr = isNew ? toDateStr(new Date().toISOString()) : toDateStr((order as any).created_at);
+  const orderDateStr = toDateStr(order.order_date);
+  const deliveryMinDate = [orderDateStr, createdDateStr].filter(Boolean).sort().pop() || '';
+
 
   return (
     <div className="space-y-5">
@@ -612,24 +625,9 @@ export default function SalesOrderDetail() {
           </div>
           {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-3">
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Address</label>
               <textarea rows={3} value={order.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} placeholder="Delivery address" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none bg-white transition-all" />
-            </div>
-            <div className="space-y-3">
-              <Input
-                label="Shipped Qty"
-                type="number"
-                value={order.shipped_qty === '' ? '' : String(order.shipped_qty)}
-                onChange={(e) => updateField('shipped_qty', e.target.value)}
-                placeholder="0.00"
-              />
-              <Input
-                label="Shipped Date"
-                type="date"
-                value={order.shipped_date}
-                onChange={(e) => updateField('shipped_date', e.target.value)}
-              />
             </div>
             <div>
               <Select
@@ -801,7 +799,7 @@ export default function SalesOrderDetail() {
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" />
                           </td>
                           <td className="py-2.5 px-3.5">
-                            <input type="date" value={item.delivery_date} onChange={(e) => {
+                            <input type="date" value={item.delivery_date} min={deliveryMinDate} onChange={(e) => {
                               const newItems = order.items.map(it => it._key === item._key ? { ...it, delivery_date: e.target.value } : it);
                               setOrder(prev => ({ ...prev, items: newItems }));
                             }} className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/30 min-w-[140px]" />
