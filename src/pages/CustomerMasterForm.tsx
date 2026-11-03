@@ -141,7 +141,7 @@ export default function CustomerMasterForm() {
           <Input label="Phone" value={form.phone} onChange={(e) => update('phone', e.target.value)} error={errors.phone} placeholder="+91 9876543210" />
           <Input label="Alt. Phone" value={form.alt_phone} onChange={(e) => update('alt_phone', e.target.value)} placeholder="Alternate phone" />
           <Input label="Email" value={form.email} onChange={(e) => update('email', e.target.value)} error={errors.email} placeholder="email@example.com" />
-          <Select label="Category" options={[{ value: 'domestic', label: 'Domestic' }, { value: 'international', label: 'International' }]} value={form.category} onChange={(e) => update('category', e.target.value)} />
+          <Select label="Category" options={[{ value: 'domestic', label: 'Domestic' }, { value: 'export', label: 'International' }]} value={form.category} onChange={(e) => update('category', e.target.value)} />
           <Select label="Currency" options={[{ value: 'inr', label: 'INR (₹)' }, { value: 'usd', label: 'USD ($)' }, { value: 'eur', label: 'EUR (€)' }]} value={form.currency} onChange={(e) => update('currency', e.target.value)} />
           <div className="sm:col-span-2 lg:col-span-3">
             <label className="block text-xs font-medium text-gray-900 mb-1">Notes</label>
