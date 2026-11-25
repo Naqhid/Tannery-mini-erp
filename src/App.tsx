@@ -105,6 +105,7 @@ import ProductionPlanReports from './pages/reports/ProductionPlanReports';
 import SalesOrderReports from './pages/reports/SalesOrderReports';
 import StageCostingReports from './pages/reports/StageCostingReports';
 import WipCostSummaryReport from './pages/reports/costing/WipCostSummaryReport';
+import RMWarehouse from './pages/RMWarehouse';
 
 const basename = import.meta.env.BASE_URL;
 
@@ -283,6 +284,8 @@ function App() {
             <Route path="business-units" element={<BusinessUnits />} />
             <Route path="database-backups" element={<DatabaseBackups />} />
             <Route path="data-templates" element={<DataTemplates />} />
+            <Route path="rm-warehouse" element={<Navigate to="/rm-warehouse/qr" replace />} />
+            <Route path="rm-warehouse/:step" element={<RMWarehouse />} />
             <Route path="notifications" element={<PlaceholderPage />} />
           </Route>
         </Routes>

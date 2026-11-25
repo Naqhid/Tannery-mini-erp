@@ -46,6 +46,7 @@ import {
   PackageCheck,
   ClipboardCheck,
   CalendarClock,
+  QrCode,
 } from 'lucide-react';
 
 export interface ChildItem {
@@ -105,6 +106,14 @@ export const menuItems: MenuItem[] = [
       { label: 'Monthly Batch Process', icon: <CalendarDays size={16} />, path: '/monthly-batch-process' },
       { label: 'Inventory Reports', icon: <FileBarChart size={16} />, path: '/reports/inventory' },
       { label: 'Physical Stock Entry', icon: <ClipboardCheck size={16} />, path: '/physical-stock-entry' },
+    ],
+  },
+  { label: 'RM Warehouse', icon: <Warehouse size={20} />, children: [
+      { label: '1. QR Generation', icon: <QrCode size={16} />, path: '/rm-warehouse/qr' },
+      { label: '2. Inspection & Grade', icon: <Award size={16} />, path: '/rm-warehouse/grade' },
+      { label: '3. Put-away', icon: <Hash size={16} />, path: '/rm-warehouse/putaway' },
+      { label: '4. Dispatch / Pick List', icon: <ClipboardList size={16} />, path: '/rm-warehouse/dispatch' },
+      { label: '5. Picking & Confirm', icon: <PackageCheck size={16} />, path: '/rm-warehouse/picking' },
     ],
   },
   { label: 'Planning', icon: <CalendarClock size={20} />, children: [

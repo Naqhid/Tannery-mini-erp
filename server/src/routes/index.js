@@ -55,6 +55,7 @@ import costingReportRoutes from './costingReportRoutes.js';
 import reportsRoutes from './reportsRoutes.js';
 import materialRequirementRoutes from './materialRequirementRoutes.js';
 import materialTransferNoteRoutes from './materialTransferNoteRoutes.js';
+import rmWarehouseRoutes from './rmWarehouseRoutes.js';
 
 const router = Router();
 
@@ -158,6 +159,9 @@ router.use('/material-requirement', materialRequirementRoutes);
 
 // Material Transfer Note (Production Plan → BOM norms × planned qty)
 router.use('/material-transfer-notes', materialTransferNoteRoutes);
+
+// RM Warehouse (leather QR, grading, put-away, pick list, dispatch)
+router.use('/rm-warehouse', rmWarehouseRoutes);
 
 // Dashboard routes
 router.use('/dashboard', dashboardRoutes);
