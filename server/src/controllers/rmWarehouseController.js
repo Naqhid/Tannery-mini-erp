@@ -33,6 +33,36 @@ export async function racks(_req, res, next) {
   }
 }
 
+// Existing data used to pre-fill the "New receipt lot" form (all fields still accept free text)
+export async function lotLookups(_req, res, next) {
+  try {
+    const [grns] = await pool.query(
+      `SELECT mr.receipt_no, mr.receipt_date, s.name AS supplier_name
+       FROM material_receipts mr
+       LEFT JOIN suppliers s ON s.id = mr.supplier_id
+       WHERE mr.receipt_no NOT IN (SELECT lot_no FROM rmw_lots)
+       ORDER BY mr.id DESC LIMIT 500`
+    );
+    const [suppliers] = await pool.query(
+      `SELECT name FROM suppliers WHERE status = 'Active' AND deleted_at IS NULL ORDER BY name`
+    );
+    const [products] = await pool.query(
+      `SELECT name FROM products WHERE status = 'Active' AND deleted_at IS NULL ORDER BY name`
+    );
+    res.json({
+      data: {
+        grns: grns.map((g) => ({
+          lot_no: g.receipt_no,
+          supplier_name: g.supplier_name || '',
+          receipt_date: g.receipt_date ? new Date(g.receipt_date).toLocaleDateString('en-CA') : '',
+        })),
+        suppliers: suppliers.map((s) => s.name),
+        articles: products.map((p) => p.name),
+      },
+    });
+  } catch (err) { next(err); }
+}
+
 export async function articles(_req, res, next) {
   try {
     const [rows] = await pool.query(

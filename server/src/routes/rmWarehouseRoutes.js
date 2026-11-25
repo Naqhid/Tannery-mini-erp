@@ -8,6 +8,7 @@ router.use(requireAuth);
 router.get('/stats', c.stats);
 router.get('/racks', c.racks);
 router.get('/articles', c.articles);
+router.get('/lot-lookups', c.lotLookups);
 
 router.get('/lots', c.listLots);
 router.post('/lots', requireWriteAccess, c.createLot);

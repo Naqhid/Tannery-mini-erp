@@ -69,6 +69,45 @@ function ScanInput({ value, onChange, placeholder, onEnter }: { value: string; o
   );
 }
 
+// Searchable dropdown that also accepts free text (value is whatever is typed or picked)
+function ComboInput({ value, onChange, options, placeholder, onPick }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; hint?: string }[];
+  placeholder?: string;
+  onPick?: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const q = value.trim().toLowerCase();
+  const filtered = options.filter((o) => !q || o.value.toLowerCase().includes(q) || (o.hint || '').toLowerCase().includes(q)).slice(0, 50);
+  return (
+    <div className="relative">
+      <input
+        className={inputCls}
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-20 mt-1 w-full max-h-56 overflow-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+          {filtered.map((o) => (
+            <li key={o.value}>
+              <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
+                onMouseDown={(e) => { e.preventDefault(); onChange(o.value); onPick?.(o.value); setOpen(false); }}>
+                <span className="text-slate-800">{o.value}</span>
+                {o.hint && <span className="block text-xs text-slate-500">{o.hint}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function NextBar({ step, canNext, nextHint, onNext }: { step: Step; canNext: boolean; nextHint: string; onNext: () => void }) {
   const navigate = useNavigate();
   const idx = STEPS.findIndex((s) => s.key === step);
@@ -107,6 +146,16 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
     setLotId((cur) => selectId ?? (cur || r.data[0]?.id || ''));
   }, []);
   useEffect(() => { loadLots().catch((e) => toast.error(errMsg(e))); }, [loadLots]);
+
+  const [lookups, setLookups] = useState<{ grns: { lot_no: string; supplier_name: string; receipt_date: string }[]; suppliers: string[]; articles: string[] }>({ grns: [], suppliers: [], articles: [] });
+  const loadLookups = useCallback(() => {
+    api<{ data: typeof lookups }>('/rm-warehouse/lot-lookups').then((r) => setLookups(r.data)).catch(() => {});
+  }, []);
+  useEffect(() => { loadLookups(); }, [loadLookups]);
+  const pickGrn = (no: string) => {
+    const g = lookups.grns.find((x) => x.lot_no === no);
+    if (g) setForm((f) => ({ ...f, lot_no: g.lot_no, supplier_name: g.supplier_name || f.supplier_name, receipt_date: g.receipt_date || f.receipt_date }));
+  };
 
   const lot = lots.find((l) => l.id === lotId);
   useEffect(() => {
@@ -168,9 +217,15 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
 
       {showNew && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 mb-4 rounded-lg border border-blue-200 bg-blue-50/40">
-          <div><label className={labelCls}>Lot / GRN no.</label><input className={inputCls} value={form.lot_no} onChange={(e) => setForm({ ...form, lot_no: e.target.value })} placeholder="GRN-26041" /></div>
-          <div><label className={labelCls}>Supplier</label><input className={inputCls} value={form.supplier_name} onChange={(e) => setForm({ ...form, supplier_name: e.target.value })} /></div>
-          <div><label className={labelCls}>Article</label><input className={inputCls} value={form.article} onChange={(e) => setForm({ ...form, article: e.target.value })} placeholder="Sheep Nappa - Black" /></div>
+          <div><label className={labelCls}>Lot / GRN no.</label>
+            <ComboInput value={form.lot_no} onChange={(v) => setForm({ ...form, lot_no: v })} onPick={pickGrn} placeholder="Search GRN or type new"
+              options={lookups.grns.map((g) => ({ value: g.lot_no, hint: g.supplier_name }))} /></div>
+          <div><label className={labelCls}>Supplier</label>
+            <ComboInput value={form.supplier_name} onChange={(v) => setForm({ ...form, supplier_name: v })} placeholder="Search or type supplier"
+              options={lookups.suppliers.map((s) => ({ value: s }))} /></div>
+          <div><label className={labelCls}>Article</label>
+            <ComboInput value={form.article} onChange={(v) => setForm({ ...form, article: v })} placeholder="Search or type article"
+              options={lookups.articles.map((a) => ({ value: a }))} /></div>
           <div><label className={labelCls}>Receipt date</label><input type="date" className={inputCls} value={form.receipt_date} onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} /></div>
           <div><label className={labelCls}>Qty (pcs)</label><input type="number" min={1} className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} /></div>
           <div className="md:col-span-5"><button className={primaryBtn} disabled={busy} onClick={createLot}>Save lot</button></div>
@@ -362,6 +417,7 @@ function StepDispatch({ reload }: { reload: () => void }) {
 
 // ---------------- Step 5 ----------------
 function StepPicking({ reload }: { reload: () => void }) {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const pickId = params.get('pick') || '';
   const [open, setOpen] = useState<PickListRow[]>([]);
@@ -427,7 +483,16 @@ function StepPicking({ reload }: { reload: () => void }) {
           </button>
         </>
       ) : (
-        <p className="text-sm text-slate-500 mt-3">Choose an open pick list. Generate one in step 4 after put-away stock is available.</p>
+        <div className="mt-3 text-sm text-slate-500">
+          {open.length === 0 ? (
+            <>
+              <p>No open pick lists. Earlier pick lists are already dispatched. Create a new one in step 4 (needs graded and put-away stock).</p>
+              <button className={`${ghostBtn} mt-3`} onClick={() => navigate('/rm-warehouse/dispatch')}>Go to Dispatch / pick list</button>
+            </>
+          ) : (
+            <p>Choose an open pick list from the dropdown above.</p>
+          )}
+        </div>
       )}
       <NextBar step="picking" canNext={false} nextHint="" onNext={() => {}} />
     </>
