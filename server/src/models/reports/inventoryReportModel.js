@@ -223,6 +223,9 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
     group_name: 'g.name',
     warehouse_name: 'w.name',
     uom: 'ws.uom',
+    primary_uom: 'primary_uom',
+    secondary_uom: 'secondary_uom',
+    secondary_qty: 'secondary_qty',
     closing_qty: 'closing_qty',
     avg_rate: 'avg_rate',
     stock_value: 'stock_value',
@@ -234,10 +237,17 @@ export async function stockValuation({ warehouse_id, group_id, origin, search, p
   const [rows] = await pool.query(
     `SELECT ws.id, m.code AS material_code, m.name AS material_name,
        g.name AS group_name, w.name AS warehouse_name, ws.uom,
-       ws.current_qty AS closing_qty, ws.avg_unit_cost AS avg_rate,
+       COALESCE(pu.name, ws.uom) AS primary_uom, su.name AS secondary_uom,
+       ws.current_qty AS closing_qty,
+       CASE WHEN su.id IS NULL THEN NULL ELSE ws.current_qty * COALESCE(
+         (SELECT SUM(r.secondary_uom_qty) / NULLIF(SUM(r.primary_uom_qty), 0)
+            FROM material_receipt_items r WHERE r.material_id = m.id AND r.primary_uom_qty > 0), 0) END AS secondary_qty,
+       ws.avg_unit_cost AS avg_rate,
        (ws.current_qty * ws.avg_unit_cost) AS stock_value
      FROM ${ledgerStock} ws
      JOIN materials m ON ws.material_id = m.id
+     LEFT JOIN uom pu ON m.primary_uom_id = pu.id
+     LEFT JOIN uom su ON m.secondary_uom_id = su.id
      LEFT JOIN group_master g ON m.group_id = g.id
      LEFT JOIN warehouses w ON ws.warehouse_id = w.id
      WHERE ${where}

@@ -37,7 +37,10 @@ export async function racks(_req, res, next) {
 export async function lotLookups(_req, res, next) {
   try {
     const [grns] = await pool.query(
-      `SELECT mr.receipt_no, mr.receipt_date, s.name AS supplier_name
+      `SELECT mr.receipt_no, mr.receipt_date, s.name AS supplier_name,
+         (SELECT m.name FROM material_receipt_items mri JOIN materials m ON m.id = mri.material_id
+          WHERE mri.receipt_id = mr.id ORDER BY mri.id LIMIT 1) AS article,
+         (SELECT COALESCE(SUM(mri.received_qty), 0) FROM material_receipt_items mri WHERE mri.receipt_id = mr.id) AS qty
        FROM material_receipts mr
        LEFT JOIN suppliers s ON s.id = mr.supplier_id
        WHERE mr.receipt_no NOT IN (SELECT lot_no FROM rmw_lots)
@@ -54,6 +57,8 @@ export async function lotLookups(_req, res, next) {
         grns: grns.map((g) => ({
           lot_no: g.receipt_no,
           supplier_name: g.supplier_name || '',
+          article: g.article || '',
+          qty: Math.floor(Number(g.qty) || 0),
           receipt_date: g.receipt_date ? new Date(g.receipt_date).toLocaleDateString('en-CA') : '',
         })),
         suppliers: suppliers.map((s) => s.name),
@@ -66,10 +71,31 @@ export async function lotLookups(_req, res, next) {
 export async function articles(_req, res, next) {
   try {
     const [rows] = await pool.query(
-      `SELECT DISTINCT l.article FROM rmw_pieces p JOIN rmw_lots l ON l.id = p.lot_id
-       WHERE p.status = 'Stored' ORDER BY l.article`
+      `SELECT m.name, su.name AS secondary_uom,
+              SUM(s.bal) AS qty,
+              SUM(s.bal) * COALESCE((SELECT SUM(r.secondary_uom_qty) / NULLIF(SUM(r.primary_uom_qty), 0)
+                FROM material_receipt_items r WHERE r.material_id = m.id AND r.primary_uom_qty > 0), 0) AS secondary_qty
+       FROM (
+         SELECT sl.material_id, sl.balance_qty AS bal
+           FROM stock_ledger sl
+           JOIN (SELECT warehouse_id, material_id, MAX(transaction_date) AS md FROM stock_ledger GROUP BY warehouse_id, material_id) ld
+             ON ld.warehouse_id = sl.warehouse_id AND ld.material_id = sl.material_id AND ld.md = sl.transaction_date
+           JOIN (SELECT warehouse_id, material_id, transaction_date, MAX(id) AS mid FROM stock_ledger GROUP BY warehouse_id, material_id, transaction_date) li
+             ON li.mid = sl.id
+       ) s
+       JOIN materials m ON m.id = s.material_id
+       LEFT JOIN uom su ON su.id = m.secondary_uom_id
+       GROUP BY m.id, m.name, su.name
+       HAVING SUM(s.bal) > 0
+       ORDER BY m.name`
     );
-    res.json({ data: rows.map((r) => r.article) });
+    res.json({
+      data: rows.map((r) => ({
+        name: r.name,
+        secondary_uom: r.secondary_uom || '',
+        secondary_qty: r.secondary_uom ? Math.round(Number(r.secondary_qty) * 100) / 100 : null,
+      })),
+    });
   } catch (err) { next(err); }
 }
 
@@ -221,10 +247,30 @@ export async function getPickList(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// Customers and suppliers from their masters, with address, for the pick list "party" dropdown
+export async function parties(_req, res, next) {
+  try {
+    const [customers] = await pool.query(
+      `SELECT id, name, COALESCE(NULLIF(shipping_address, ''), NULLIF(billing_address, ''), '') AS address
+       FROM customers WHERE status = 'Active' AND deleted_at IS NULL ORDER BY name`
+    );
+    const [suppliers] = await pool.query(
+      `SELECT id, name, COALESCE(address, '') AS address
+       FROM suppliers WHERE status = 'Active' AND deleted_at IS NULL ORDER BY name`
+    );
+    res.json({
+      data: [
+        ...customers.map((c) => ({ type: 'Customer', name: c.name, address: c.address })),
+        ...suppliers.map((s) => ({ type: 'Supplier', name: s.name, address: s.address })),
+      ],
+    });
+  } catch (err) { next(err); }
+}
+
 export async function createPickList(req, res, next) {
   const conn = await pool.getConnection();
   try {
-    const { dispatch_ref, customer_name, article, grade } = req.body;
+    const { dispatch_ref, customer_name, article, grade, party_type, address } = req.body;
     const qty = Number(req.body.qty);
     if (!dispatch_ref || !customer_name || !Number.isInteger(qty) || qty < 1) {
       return fail(res, 400, 'Enter dispatch reference, customer and quantity');
@@ -234,7 +280,11 @@ export async function createPickList(req, res, next) {
     await conn.beginTransaction();
     const where = ["p.status = 'Stored'", 'p.pick_list_id IS NULL'];
     const params = [];
-    if (article) { where.push('l.article = ?'); params.push(article); }
+    // "article" is an item group from group_master; match lots whose material belongs to that group (or exact article name)
+    if (article) {
+      where.push('(l.article = ? OR l.article IN (SELECT m.name FROM materials m JOIN group_master g ON g.id = m.group_id WHERE g.name = ?))');
+      params.push(article, article);
+    }
     if (grade) { where.push('p.grade = ?'); params.push(grade); }
     const [avail] = await conn.query(
       `SELECT p.id FROM rmw_pieces p JOIN rmw_lots l ON l.id = p.lot_id
@@ -250,10 +300,10 @@ export async function createPickList(req, res, next) {
       return fail(res, 400, `Insufficient stock. Available: ${n}`);
     }
     const [ins] = await conn.query(
-      `INSERT INTO rmw_pick_lists (pick_no, dispatch_ref, customer_name, article, grade, qty, created_by)
-       VALUES (?,?,?,?,?,?,?)`,
+      `INSERT INTO rmw_pick_lists (pick_no, dispatch_ref, customer_name, party_type, address, article, grade, qty, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
       [`TMP-${Date.now()}-${Math.round(Math.random() * 1e6)}`, String(dispatch_ref).trim(), String(customer_name).trim(),
-        article || null, grade || null, qty, req.user?.id || null]
+        party_type || null, address ? String(address).trim() : null, article || null, grade || null, qty, req.user?.id || null]
     );
     const pickNo = `PL-${1000 + ins.insertId}`;
     await conn.query('UPDATE rmw_pick_lists SET pick_no = ? WHERE id = ?', [pickNo, ins.insertId]);

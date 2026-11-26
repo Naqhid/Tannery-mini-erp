@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import QRCode from 'qrcode';
-import { ArrowRight, ArrowLeft, Camera, Printer, QrCode, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Printer, QrCode, Plus, Trash2, CheckCircle2 } from 'lucide-react';
 import api from '../lib/api';
-import BarcodeScanner from '../components/BarcodeScanner';
 
 type Step = 'qr' | 'grade' | 'putaway' | 'dispatch' | 'picking';
 
@@ -49,8 +48,7 @@ function QrImg({ value, size = 72 }: { value: string; size?: number }) {
   return src ? <img src={src} alt={value} style={{ width: size, height: size }} className="mx-auto" /> : <div style={{ width: size, height: size }} className="mx-auto bg-slate-100" />;
 }
 
-function ScanInput({ value, onChange, placeholder, onEnter }: { value: string; onChange: (v: string) => void; placeholder: string; onEnter?: () => void }) {
-  const [open, setOpen] = useState(false);
+function ScanInput({ value, onChange, placeholder, onEnter, autoFocus, inputRef }: { value: string; onChange: (v: string) => void; placeholder: string; onEnter?: () => void; autoFocus?: boolean; inputRef?: React.RefObject<HTMLInputElement> }) {
   return (
     <>
       <div className="flex gap-2">
@@ -61,10 +59,10 @@ function ScanInput({ value, onChange, placeholder, onEnter }: { value: string; o
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) onEnter(); }}
           autoComplete="off"
+          autoFocus={autoFocus}
+          ref={inputRef}
         />
-        <button type="button" className={ghostBtn} onClick={() => setOpen(true)} title="Scan with camera"><Camera size={16} /></button>
       </div>
-      <BarcodeScanner isOpen={open} onClose={() => setOpen(false)} onScan={(v) => { onChange(v.trim().toUpperCase()); setOpen(false); }} />
     </>
   );
 }
@@ -73,7 +71,7 @@ function ScanInput({ value, onChange, placeholder, onEnter }: { value: string; o
 function ComboInput({ value, onChange, options, placeholder, onPick }: {
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; hint?: string }[];
+  options: { value: string; hint?: string; label?: string }[];
   placeholder?: string;
   onPick?: (v: string) => void;
 }) {
@@ -97,7 +95,7 @@ function ComboInput({ value, onChange, options, placeholder, onPick }: {
             <li key={o.value}>
               <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
                 onMouseDown={(e) => { e.preventDefault(); onChange(o.value); onPick?.(o.value); setOpen(false); }}>
-                <span className="text-slate-800">{o.value}</span>
+                <span className="text-slate-800">{o.label || o.value}</span>
                 {o.hint && <span className="block text-xs text-slate-500">{o.hint}</span>}
               </button>
             </li>
@@ -138,6 +136,7 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [busy, setBusy] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  const [maxQty, setMaxQty] = useState<number | null>(null);
   const [form, setForm] = useState({ lot_no: '', supplier_name: '', article: '', receipt_date: new Date().toISOString().slice(0, 10), qty: '' });
 
   const loadLots = useCallback(async (selectId?: number) => {
@@ -147,17 +146,26 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
   }, []);
   useEffect(() => { loadLots().catch((e) => toast.error(errMsg(e))); }, [loadLots]);
 
-  const [lookups, setLookups] = useState<{ grns: { lot_no: string; supplier_name: string; receipt_date: string }[]; suppliers: string[]; articles: string[] }>({ grns: [], suppliers: [], articles: [] });
+  const [lookups, setLookups] = useState<{ grns: { lot_no: string; supplier_name: string; article: string; qty: number; receipt_date: string }[]; suppliers: string[]; articles: string[] }>({ grns: [], suppliers: [], articles: [] });
   const loadLookups = useCallback(() => {
     api<{ data: typeof lookups }>('/rm-warehouse/lot-lookups').then((r) => setLookups(r.data)).catch(() => {});
   }, []);
   useEffect(() => { loadLookups(); }, [loadLookups]);
   const pickGrn = (no: string) => {
     const g = lookups.grns.find((x) => x.lot_no === no);
-    if (g) setForm((f) => ({ ...f, lot_no: g.lot_no, supplier_name: g.supplier_name || f.supplier_name, receipt_date: g.receipt_date || f.receipt_date }));
+    if (g) {
+      setMaxQty(g.qty > 0 ? g.qty : null);
+      setForm((f) => ({ ...f, lot_no: g.lot_no, supplier_name: g.supplier_name || f.supplier_name, article: g.article || f.article, qty: g.qty > 0 ? String(g.qty) : f.qty }));
+    }
+  };
+  const onQtyChange = (v: string) => {
+    if (maxQty != null && Number(v) > maxQty) { toast.warn(`Qty cannot exceed receipt qty (${maxQty})`); v = String(maxQty); }
+    setForm((f) => ({ ...f, qty: v }));
   };
 
   const lot = lots.find((l) => l.id === lotId);
+  const [lotText, setLotText] = useState('');
+  useEffect(() => { setLotText(lot?.lot_no || ''); }, [lot?.id, lot?.lot_no]);
   useEffect(() => {
     if (!lot?.qr_generated) { setPieces([]); return; }
     api<{ data: Piece[] }>(`/rm-warehouse/pieces?lot_id=${lot.id}&limit=2000`).then((r) => setPieces(r.data)).catch(() => {});
@@ -166,10 +174,12 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
   const createLot = async () => {
     try {
       setBusy(true);
+      if (maxQty != null && Number(form.qty) > maxQty) { toast.error(`Qty cannot exceed receipt qty (${maxQty})`); return; }
       const r = await api<{ data: { id: number } }>('/rm-warehouse/lots', { method: 'POST', body: JSON.stringify({ ...form, qty: Number(form.qty) }) });
       toast.success('Receipt lot created');
       setShowNew(false);
-      setForm({ ...form, lot_no: '', supplier_name: '', article: '', qty: '' });
+      setForm({ ...form, lot_no: '', supplier_name: '', article: '', qty: '', receipt_date: new Date().toISOString().slice(0, 10) });
+      setMaxQty(null);
       await loadLots(r.data.id);
       reload();
     } catch (e) { toast.error(errMsg(e)); } finally { setBusy(false); }
@@ -218,7 +228,7 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
       {showNew && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 mb-4 rounded-lg border border-blue-200 bg-blue-50/40">
           <div><label className={labelCls}>Lot / GRN no.</label>
-            <ComboInput value={form.lot_no} onChange={(v) => setForm({ ...form, lot_no: v })} onPick={pickGrn} placeholder="Search GRN or type new"
+            <ComboInput value={form.lot_no} onChange={(v) => { setForm({ ...form, lot_no: v }); setMaxQty(null); }} onPick={pickGrn} placeholder="Search GRN or type new"
               options={lookups.grns.map((g) => ({ value: g.lot_no, hint: g.supplier_name }))} /></div>
           <div><label className={labelCls}>Supplier</label>
             <ComboInput value={form.supplier_name} onChange={(v) => setForm({ ...form, supplier_name: v })} placeholder="Search or type supplier"
@@ -226,8 +236,8 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
           <div><label className={labelCls}>Article</label>
             <ComboInput value={form.article} onChange={(v) => setForm({ ...form, article: v })} placeholder="Search or type article"
               options={lookups.articles.map((a) => ({ value: a }))} /></div>
-          <div><label className={labelCls}>Receipt date</label><input type="date" className={inputCls} value={form.receipt_date} onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} /></div>
-          <div><label className={labelCls}>Qty (pcs)</label><input type="number" min={1} className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} /></div>
+          <div><label className={labelCls}>Receipt date</label><input type="date" className={`${inputCls} bg-slate-100`} value={form.receipt_date} disabled readOnly /></div>
+          <div><label className={labelCls}>Qty (pcs){maxQty != null ? ` · max ${maxQty}` : ''}</label><input type="number" min={1} max={maxQty ?? undefined} className={inputCls} value={form.qty} onChange={(e) => onQtyChange(e.target.value)} /></div>
           <div className="md:col-span-5"><button className={primaryBtn} disabled={busy} onClick={createLot}>Save lot</button></div>
         </div>
       )}
@@ -236,16 +246,22 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
         <p className="text-sm text-slate-500 py-6">No receipt lots yet. Click “New receipt lot” to add one.</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div>
               <label className={labelCls}>Receipt lot / GRN</label>
-              <select className={inputCls} value={lotId} onChange={(e) => setLotId(Number(e.target.value))}>
-                {lots.map((l) => <option key={l.id} value={l.id}>{l.lot_no} · {l.supplier_name} · {l.qty} pcs{l.qr_generated ? ' ✓' : ''}</option>)}
-              </select>
+              <ComboInput value={lotText} placeholder="Search or type lot / GRN"
+                onChange={(v) => {
+                  setLotText(v);
+                  const m = lots.find((l) => l.lot_no.toLowerCase() === v.trim().toLowerCase());
+                  if (m) setLotId(m.id);
+                }}
+                onPick={(v) => { const m = lots.find((l) => l.lot_no === v); if (m) setLotId(m.id); }}
+                options={lots.map((l) => ({ value: l.lot_no, hint: `${l.supplier_name} · ${l.qty} pcs${l.qr_generated ? ' ✓' : ''}` }))} />
             </div>
             <div><label className={labelCls}>Supplier</label><input className={inputCls} readOnly value={lot?.supplier_name || ''} /></div>
             <div><label className={labelCls}>Article</label><input className={inputCls} readOnly value={lot?.article || ''} /></div>
-            <div><label className={labelCls}>Receipt date / Qty</label><input className={inputCls} readOnly value={lot ? `${fmtDate(lot.receipt_date)} / ${lot.qty} pcs` : ''} /></div>
+            <div><label className={labelCls}>Receipt date</label><input className={inputCls} readOnly value={lot ? fmtDate(lot.receipt_date) : ''} /></div>
+            <div><label className={labelCls}>Qty (pcs)</label><input className={inputCls} readOnly value={lot ? lot.qty : ''} /></div>
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
             <button className={primaryBtn} disabled={busy || !lot || !!lot.qr_generated} onClick={generate}><QrCode size={16} /> Generate QR codes for selected lot</button>
@@ -272,13 +288,15 @@ function StepQr({ reload, stats }: { reload: () => void; stats: Stats | null }) 
 }
 
 // ---------------- Step 2 ----------------
-function StepGrade({ reload }: { reload: () => void }) {
+function StepGrade({ reload, onTotals }: { reload: () => void; onTotals: (t: { pieces: number; sqft: number }) => void }) {
   const navigate = useNavigate();
   const [pieces, setPieces] = useState<Piece[]>([]);
-  const [grade, setGrade] = useState('A');
+  const [grade, setGrade] = useState('');
   const [code, setCode] = useState('');
   const [sqft, setSqft] = useState('');
   const [busy, setBusy] = useState(false);
+  const sqftRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => api<{ data: Piece[] }>('/rm-warehouse/pieces?stage=grade').then((r) => setPieces(r.data)).catch((e) => toast.error(errMsg(e))), []);
   useEffect(() => { load(); }, [load]);
@@ -290,20 +308,24 @@ function StepGrade({ reload }: { reload: () => void }) {
       toast.success('Grade and sq.ft saved');
       setCode(''); setSqft('');
       await load(); reload();
+      codeRef.current?.focus();
     } catch (e) { toast.error(errMsg(e)); } finally { setBusy(false); }
   };
 
   const graded = pieces.filter((p) => p.grade).length;
+  const totalSqft = pieces.reduce((s, p) => s + (p.grade ? Number(p.sqft) || 0 : 0), 0);
+  useEffect(() => { onTotals({ pieces: graded, sqft: totalSqft }); }, [graded, totalSqft, onTotals]);
   return (
     <>
       <h2 className="text-base font-semibold text-slate-800 mb-3">2. Inspection & grade mapping</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div><label className={labelCls}>Grade master</label>
-          <select className={inputCls} value={grade} onChange={(e) => setGrade(e.target.value)}>{GRADES.map((g) => <option key={g.v} value={g.v}>{g.l}</option>)}</select></div>
-        <div><label className={labelCls}>Scan / enter leather QR ID</label><ScanInput value={code} onChange={(v) => setCode(v.toUpperCase())} placeholder="LEA-26041-001" /></div>
-        <div><label className={labelCls}>Sq.ft per piece</label><input type="number" min="0.01" step="0.01" className={inputCls} value={sqft} onChange={(e) => setSqft(e.target.value)} placeholder="e.g. 5.25" /></div>
+          <select className={inputCls} value={grade} onChange={(e) => setGrade(e.target.value)}><option value="">None</option>{GRADES.map((g) => <option key={g.v} value={g.v}>{g.l}</option>)}</select></div>
+        <div><label className={labelCls}>Scan / enter leather QR ID</label><ScanInput autoFocus inputRef={codeRef} value={code} onChange={(v) => setCode(v.toUpperCase())} onEnter={() => sqftRef.current?.focus()} placeholder="Click here, then scan with USB scanner" /></div>
+        <div><label className={labelCls}>Sq.ft per piece</label><input ref={sqftRef} type="number" min="0.01" step="0.01" className={inputCls} value={sqft} onChange={(e) => setSqft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !busy && grade && code && sqft) save(); }} placeholder="e.g. 5.25" /></div>
       </div>
-      <button className={`${primaryBtn} mt-4`} disabled={busy || !code || !sqft} onClick={save}>Save grade & sq.ft for scanned leather</button>
+      <button className={`${primaryBtn} mt-4`} disabled={busy || !grade || !code || !sqft} onClick={save}>Save grade & sq.ft for scanned leather</button>
+
       <div className="overflow-auto mt-4 max-h-96 border border-slate-200 rounded-lg">
         <table className="w-full min-w-[600px]"><thead><tr><th className={th}>Leather ID</th><th className={th}>GRN</th><th className={th}>Article</th><th className={th}>Grade</th><th className={th}>Sq.ft / piece</th></tr></thead>
           <tbody>{pieces.map((p) => (
@@ -368,7 +390,10 @@ function StepPutaway({ reload, stats }: { reload: () => void; stats: Stats | nul
 // ---------------- Step 4 ----------------
 function StepDispatch({ reload }: { reload: () => void }) {
   const navigate = useNavigate();
-  const [articles, setArticles] = useState<string[]>([]);
+  const [articles, setArticles] = useState<{ name: string; secondary_uom: string; secondary_qty: number | null }[]>([]);
+  const [parties, setParties] = useState<{ type: string; name: string; address: string }[]>([]);
+  const [partyKey, setPartyKey] = useState('');
+  const [address, setAddress] = useState('');
   const [lists, setLists] = useState<PickListRow[]>([]);
   const [f, setF] = useState({ dispatch_ref: '', customer_name: '', article: '', grade: '', qty: '' });
   const [busy, setBusy] = useState(false);
@@ -376,13 +401,30 @@ function StepDispatch({ reload }: { reload: () => void }) {
   const load = useCallback(() => api<{ data: PickListRow[] }>('/rm-warehouse/pick-lists').then((r) => setLists(r.data)).catch((e) => toast.error(errMsg(e))), []);
   useEffect(() => {
     load();
-    api<{ data: string[] }>('/rm-warehouse/articles').then((r) => setArticles(r.data)).catch(() => {});
+    api<{ data: typeof articles }>('/rm-warehouse/articles').then((r) => setArticles(r.data)).catch(() => {});
+    api<{ data: typeof parties }>('/rm-warehouse/parties').then((r) => setParties(r.data || [])).catch(() => {});
   }, [load]);
+
+  const PRODUCTION = 'Production|Production';
+  const [partyText, setPartyText] = useState('');
+  const [articleText, setArticleText] = useState('');
+  const articleInvalid = articleText.trim() !== '' && !f.article;
+  const partyOptions = useMemo(() => [
+    { key: PRODUCTION, value: 'Production', hint: 'Internal' },
+    ...parties.map((p) => ({ key: `${p.type}|${p.name}`, value: `${p.name} (${p.type})`, hint: p.address || p.type })),
+  ], [parties]);
+  const pickParty = (key: string) => {
+    setPartyKey(key);
+    if (key === PRODUCTION) { setF((s) => ({ ...s, customer_name: 'Production' })); setAddress(''); return; }
+    const p = parties.find((x) => `${x.type}|${x.name}` === key);
+    setF((s) => ({ ...s, customer_name: p?.name || '' }));
+    setAddress(p?.address || '');
+  };
 
   const make = async () => {
     try {
       setBusy(true);
-      const r = await api<{ data: { id: number } }>('/rm-warehouse/pick-lists', { method: 'POST', body: JSON.stringify({ ...f, qty: Number(f.qty) }) });
+      const r = await api<{ data: { id: number } }>('/rm-warehouse/pick-lists', { method: 'POST', body: JSON.stringify({ ...f, qty: Number(f.qty), party_type: partyKey.split('|')[0], address }) });
       toast.success('Pick list generated');
       reload();
       navigate(`/rm-warehouse/picking?pick=${r.data.id}`);
@@ -395,14 +437,30 @@ function StepDispatch({ reload }: { reload: () => void }) {
       <h2 className="text-base font-semibold text-slate-800 mb-3">4. Dispatch transaction & pick list</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div><label className={labelCls}>Dispatch reference</label><input className={inputCls} value={f.dispatch_ref} onChange={(e) => setF({ ...f, dispatch_ref: e.target.value })} placeholder="DSP-26091" /></div>
-        <div><label className={labelCls}>Customer</label><input className={inputCls} value={f.customer_name} onChange={(e) => setF({ ...f, customer_name: e.target.value })} placeholder="Customer name" /></div>
+        <div><label className={labelCls}>Customer / Supplier / Production</label>
+          <ComboInput value={partyText} placeholder="Search customer, supplier or production"
+            onChange={(v) => {
+              setPartyText(v);
+              const k = partyOptions.find((o) => o.value.toLowerCase() === v.trim().toLowerCase())?.key;
+              pickParty(k || '');
+            }}
+            onPick={(v) => { const k = partyOptions.find((o) => o.value === v)?.key; if (k) pickParty(k); }}
+            options={partyOptions.map((o) => ({ value: o.value, hint: o.hint }))} /></div>
+        <div className="md:col-span-3"><label className={labelCls}>Address</label>
+          <textarea className={inputCls} rows={2} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Auto-filled from master data" /></div>
         <div><label className={labelCls}>Article</label>
-          <select className={inputCls} value={f.article} onChange={(e) => setF({ ...f, article: e.target.value })}><option value="">All articles</option>{articles.map((a) => <option key={a}>{a}</option>)}</select></div>
+          <ComboInput value={articleText} placeholder="All articles (search to filter)"
+            onChange={(v) => {
+              setArticleText(v);
+              const m = articles.find((a) => a.name.toLowerCase() === v.trim().toLowerCase());
+              setF((s) => ({ ...s, article: m ? m.name : '' }));
+            }}
+            options={articles.map((a) => ({ value: a.name, label: a.secondary_qty != null ? `${a.name} - ${a.secondary_qty} ${a.secondary_uom}` : a.name }))} /></div>
         <div><label className={labelCls}>Grade</label>
           <select className={inputCls} value={f.grade} onChange={(e) => setF({ ...f, grade: e.target.value })}><option value="">Any grade</option>{GRADES.slice(0, 3).map((g) => <option key={g.v} value={g.v}>{g.l}</option>)}</select></div>
         <div><label className={labelCls}>Required quantity</label><input type="number" min={1} className={inputCls} value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} /></div>
       </div>
-      <button className={`${primaryBtn} mt-4`} disabled={busy || !f.dispatch_ref || !f.customer_name || !f.qty} onClick={make}>Generate pick list</button>
+      <button className={`${primaryBtn} mt-4`} disabled={busy || articleInvalid || !f.dispatch_ref || !f.customer_name || !f.qty} onClick={make}>Generate pick list</button>
       <div className="overflow-auto mt-4 border border-slate-200 rounded-lg">
         <table className="w-full min-w-[600px]"><thead><tr><th className={th}>Pick list</th><th className={th}>Dispatch ref</th><th className={th}>Customer</th><th className={th}>Qty</th><th className={th}>Status</th><th className={th}></th></tr></thead>
           <tbody>{lists.map((l) => (
@@ -512,12 +570,18 @@ export default function RMWarehouse() {
   }, []);
   useEffect(() => { reload(); }, [reload, step]);
 
-  const kpis = useMemo(() => [
+  const [gradeTotals, setGradeTotals] = useState({ pieces: 0, sqft: 0 });
+  const onGradeTotals = useCallback((t: { pieces: number; sqft: number }) => setGradeTotals(t), []);
+
+  const allKpis = useMemo(() => [
     { l: 'Receipt lots pending QR', v: stats?.lots_pending ?? 0 },
     { l: 'QR-tagged leathers', v: stats?.qr_count ?? 0 },
     { l: 'Awaiting put-away', v: stats?.awaiting_putaway ?? 0 },
     { l: 'Open pick lists', v: stats?.open_picks ?? 0 },
   ], [stats]);
+  const kpis = step === 'grade'
+    ? [...allKpis, { l: 'Total scanned pieces', v: gradeTotals.pieces }, { l: 'Total sq.ft', v: gradeTotals.sqft.toFixed(2) }]
+    : allKpis;
 
   return (
     <div className="space-y-4">
@@ -535,7 +599,7 @@ export default function RMWarehouse() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-2 gap-3 ${step === 'grade' ? 'lg:grid-cols-6' : 'lg:grid-cols-4'}`}>
         {kpis.map((k) => (
           <div key={k.l} className="bg-white border border-slate-200 rounded-xl p-4">
             <div className="text-xs text-slate-500">{k.l}</div>
@@ -546,7 +610,7 @@ export default function RMWarehouse() {
 
       <section className="bg-white border border-slate-200 rounded-xl p-5">
         {step === 'qr' && <StepQr reload={reload} stats={stats} />}
-        {step === 'grade' && <StepGrade reload={reload} />}
+        {step === 'grade' && <StepGrade reload={reload} onTotals={onGradeTotals} />}
         {step === 'putaway' && <StepPutaway reload={reload} stats={stats} />}
         {step === 'dispatch' && <StepDispatch reload={reload} />}
         {step === 'picking' && <StepPicking reload={reload} />}

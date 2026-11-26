@@ -59,7 +59,7 @@ const empty: MaterialData = {
   description: '', application: '', remarks: '', attachment_path: '', status: 'Active',
 };
 
-const MATERIAL_TYPES = ['Wet-end', 'Finishing'];
+const MATERIAL_TYPES = ['Wet-end', 'Crust', 'Finishing'];
 const CURRENCY_OPTIONS = [
   { value: 'INR', label: 'INR - Indian Rupee' },
   { value: 'USD', label: 'USD - US Dollar' },

@@ -7,7 +7,7 @@ import { fmtNum, fmtQty } from '../../../lib/reportFormat';
 
 interface Row extends Record<string, unknown> {
   id: number; material_code: string; material_name: string; group_name: string;
-  warehouse_name: string; uom: string; closing_qty: number; avg_rate: number; stock_value: number;
+  warehouse_name: string; uom: string; primary_uom: string; secondary_uom: string | null; secondary_qty: number | null; closing_qty: number; avg_rate: number; stock_value: number;
 }
 
 export default function StockValuationReport({ embedded }: { embedded?: boolean }) {
@@ -26,8 +26,10 @@ export default function StockValuationReport({ embedded }: { embedded?: boolean 
     { key: 'material_name', header: 'Item', render: r => <span className="font-medium text-gray-900">{r.material_name}</span> },
     { key: 'group_name', header: 'Item Group' },
     { key: 'warehouse_name', header: 'Warehouse' },
-    { key: 'uom', header: 'UOM' },
-    { key: 'closing_qty', header: 'Closing Qty', align: 'right', render: r => fmtQty(r.closing_qty) },
+    { key: 'primary_uom', header: 'Primary UOM' },
+    { key: 'secondary_uom', header: 'Secondary UOM', render: r => (r.secondary_uom as string) || '—' },
+    { key: 'closing_qty', header: 'Closing Qty (Primary)', align: 'right', render: r => fmtQty(r.closing_qty) },
+    { key: 'secondary_qty', header: 'Closing Qty (Secondary)', align: 'right', render: r => (r.secondary_qty == null ? '—' : fmtQty(r.secondary_qty as number)) },
     { key: 'avg_rate', header: 'Average Rate', align: 'right', render: r => fmtNum(r.avg_rate) },
     { key: 'stock_value', header: 'Stock Value', align: 'right', render: r => <span className="font-semibold">{fmtNum(r.stock_value)}</span> },
   ];
@@ -60,7 +62,7 @@ export default function StockValuationReport({ embedded }: { embedded?: boolean 
       }
       footer={(rows, totals) => totals && (
         <tr>
-          <td className="px-4 py-3 text-sm" colSpan={7}>Total Stock Value</td>
+          <td className="px-4 py-3 text-sm" colSpan={9}>Total Stock Value</td>
           <td className="px-4 py-3 text-sm text-right">{fmtNum(totals.total_value)}</td>
         </tr>
       )}
